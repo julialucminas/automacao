@@ -75,7 +75,7 @@ export function Carregar() {
           arrastando ? 'border-brand bg-brand-tint' : 'border-line-strong bg-white'
         }`}
       >
-        <div className="flex h-14 w-14 items-center justify-center rounded-[14px] bg-brand-soft text-brand">
+        <div className="flex h-14 w-14 items-center justify-center rounded-[14px] bg-noite text-brand">
           <IcUpload tamanho={26} />
         </div>
         <h2 className="text-[22px] font-bold">{lendo ? 'Lendo arquivos…' : 'Arraste aqui a pasta do mês ou o arquivo .zip'}</h2>

@@ -84,7 +84,7 @@ export function Historico() {
             aria-pressed={filtro === f.id}
             onClick={() => setFiltro(f.id)}
             className={`min-h-[40px] rounded-full border px-3.5 text-[13px] font-semibold ${
-              filtro === f.id ? 'border-brand bg-brand-soft text-brand-dark' : 'border-line-strong bg-white text-ink-2 hover:bg-canvas'
+              filtro === f.id ? 'border-ink bg-ink text-white' : 'border-line-strong bg-white text-ink-2 hover:bg-canvas'
             }`}
           >
             {f.rotulo}

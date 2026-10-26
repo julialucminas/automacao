@@ -7,7 +7,7 @@ const TONS: Record<Tom, string> = {
   ok: 'bg-ok-soft text-ok',
   warn: 'bg-warn-soft text-warn',
   bad: 'bg-bad-soft text-bad',
-  info: 'bg-brand-soft text-brand-dark',
+  info: 'bg-info-soft text-info',
   neutro: 'bg-line-soft text-ink-2',
 };
 

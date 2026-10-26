@@ -12,7 +12,7 @@
     line-height: 1.25;
   }
   :focus-visible {
-    @apply outline outline-2 outline-offset-2 outline-brand;
+    @apply outline outline-2 outline-offset-2 outline-ink;
   }
 }
 
@@ -21,7 +21,7 @@
     @apply inline-flex min-h-[44px] items-center justify-center gap-2 rounded-[10px] px-4 font-semibold transition-colors disabled:cursor-not-allowed;
   }
   .btn-primary {
-    @apply btn bg-brand text-white hover:bg-brand-dark disabled:bg-line-strong;
+    @apply btn bg-brand text-ink hover:bg-brand-dark disabled:bg-line-strong disabled:text-ink-3;
   }
   .btn-secondary {
     @apply btn border border-line-strong bg-white text-ink hover:bg-canvas;

@@ -126,7 +126,7 @@ export function Conferencia() {
         <Cartao rotulo="Faturas encontradas" valor={itens.filter((i) => i.fatura).length} />
         <Cartao rotulo="Prontas para envio" valor={prontos.length} cor="text-ok" />
         <Cartao rotulo="Precisam de atenção" valor={itens.filter(temAviso).length} cor="text-warn" />
-        <Cartao rotulo="Enviadas neste lote" valor={itens.filter((i) => i.enviado).length} cor="text-brand-dark" />
+        <Cartao rotulo="Enviadas neste lote" valor={itens.filter((i) => i.enviado).length} cor="text-info" />
       </div>
 
       {lote.naoReconhecidos.length > 0 && (
@@ -161,7 +161,7 @@ export function Conferencia() {
             aria-pressed={filtro === f.id}
             onClick={() => setFiltro(f.id)}
             className={`min-h-[40px] rounded-full border px-3.5 text-[13px] font-semibold ${
-              filtro === f.id ? 'border-brand bg-brand-soft text-brand-dark' : 'border-line-strong bg-white text-ink-2 hover:bg-canvas'
+              filtro === f.id ? 'border-ink bg-ink text-white' : 'border-line-strong bg-white text-ink-2 hover:bg-canvas'
             }`}
           >
             {f.rotulo} ({f.n})
@@ -331,7 +331,7 @@ function Linha({
   else info = `Vinculado a ${cliente.nome}`;
 
   return (
-    <div className={`${COLUNAS} border-b border-line-soft px-4 py-1.5 ${selecionada ? 'bg-brand-tint shadow-[inset_3px_0_0_#1D4ED8]' : 'hover:bg-[#FAFBFC]'}`}>
+    <div className={`${COLUNAS} border-b border-line-soft px-4 py-1.5 ${selecionada ? 'bg-brand-tint shadow-[inset_4px_0_0_#FFC400]' : 'hover:bg-[#FAFBFC]'}`}>
       <div className="flex min-h-[44px] items-center justify-center">
         <input
           type="checkbox"
@@ -366,7 +366,7 @@ function Linha({
       </div>
       <div className="flex flex-col items-start gap-1">
         <Chip tom={meta.tom}>{meta.rotulo}</Chip>
-        {jaEnviada && <span className="text-[11.5px] font-medium text-brand-dark">Já enviada antes</span>}
+        {jaEnviada && <span className="text-[11.5px] font-medium text-info">Já enviada antes</span>}
         {item.observacao.trim() && (
           <span className="inline-flex items-center gap-1 text-[11.5px] text-ink-3">
             <IcNota tamanho={12} /> com observação

@@ -24,23 +24,23 @@ export function Layout() {
 
   return (
     <div className="min-h-screen">
-      <header className="border-b border-line bg-white">
+      <header className="bg-noite text-white">
         <div className="mx-auto flex max-w-[1280px] flex-wrap items-center justify-between gap-x-6 gap-y-3 px-4 pt-3.5 sm:px-6">
           <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-[9px] bg-brand text-white">
+            <div className="flex h-9 w-9 items-center justify-center rounded-[9px] bg-brand text-ink">
               <IcEmail tamanho={18} />
             </div>
             <div>
               <div className="text-base font-bold">Envio de Faturas</div>
-              <div className="text-xs text-ink-3">{EMPRESA} · Financeiro</div>
+              <div className="text-xs text-white/65">{EMPRESA} · Financeiro</div>
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <span className="flex items-center gap-2 rounded-full bg-line-soft px-3 py-1.5 text-xs text-ink-2">
-              <span className="h-2 w-2 rounded-full bg-warn" aria-hidden="true" />
+            <span className="flex items-center gap-2 rounded-full bg-white/10 px-3 py-1.5 text-xs text-white/80">
+              <span className="h-2 w-2 rounded-full bg-brand" aria-hidden="true" />
               {REMETENTE} · modo de teste (nenhum e-mail sai)
             </span>
-            <button type="button" onClick={sair} className="btn-secondary btn-sm" title={usuario?.email}>
+            <button type="button" onClick={sair} className="btn btn-sm border border-white/25 text-white hover:bg-white/10" title={usuario?.email}>
               <IcSair tamanho={14} /> Sair
             </button>
           </div>
@@ -51,7 +51,7 @@ export function Layout() {
                 to={a.para}
                 className={({ isActive }) =>
                   `inline-flex min-h-[44px] items-center gap-2 border-b-[3px] px-3.5 font-semibold ${
-                    isActive ? 'border-brand text-ink' : 'border-transparent text-ink-3 hover:text-ink'
+                    isActive ? 'border-brand text-white' : 'border-transparent text-white/60 hover:text-white'
                   }`
                 }
               >
@@ -59,7 +59,7 @@ export function Layout() {
                 {a.badge > 0 && (
                   <span
                     className={`inline-flex min-w-[20px] justify-center rounded-full px-1.5 py-px text-[11.5px] font-bold ${
-                      a.alerta ? 'bg-warn-soft text-warn' : 'bg-line-soft text-ink-2'
+                      a.alerta ? 'bg-brand text-ink' : 'bg-white/15 text-white'
                     }`}
                   >
                     {a.badge}

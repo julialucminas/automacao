@@ -27,7 +27,7 @@ export function Login() {
     <div className="flex min-h-screen items-center justify-center p-4">
       <form onSubmit={enviar} className="card flex w-full max-w-[400px] flex-col gap-4 p-7">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-[10px] bg-brand text-white">
+          <div className="flex h-10 w-10 items-center justify-center rounded-[10px] bg-brand text-ink">
             <IcEmail tamanho={20} />
           </div>
           <div>

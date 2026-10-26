@@ -50,7 +50,7 @@ export function PainelFatura({
       </div>
 
       {envioAnterior && (
-        <div className="rounded-[10px] bg-brand-soft px-3.5 py-3 text-[13px] text-brand-dark">
+        <div className="rounded-[10px] bg-info-soft px-3.5 py-3 text-[13px] text-info">
           Esta fatura já foi enviada em <b>{dataHora(envioAnterior.enviadoEm)}</b> para {envioAnterior.clienteNome}. Ela ficou desmarcada para não sair em dobro. Marque se quiser enviar de novo.
         </div>
       )}
@@ -110,7 +110,7 @@ export function PainelFatura({
                 <dt className="w-[52px] shrink-0 pt-0.5 text-ink-3">Para</dt>
                 <dd className="flex flex-wrap gap-1">
                   {cliente.para.map((e) => (
-                    <span key={e} className="rounded-md bg-brand-soft px-2 py-0.5 text-[12.5px] text-brand-dark">
+                    <span key={e} className="rounded-md bg-brand-soft px-2 py-0.5 text-[12.5px] text-brand-text">
                       {e}
                     </span>
                   ))}

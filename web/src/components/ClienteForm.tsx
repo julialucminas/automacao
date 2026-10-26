@@ -66,7 +66,7 @@ function ListaEmails({
     setPendente('');
     erro('');
   };
-  const cor = tom === 'para' ? 'bg-brand-soft text-brand-dark' : 'bg-line-soft text-ink-2';
+  const cor = tom === 'para' ? 'bg-brand-soft text-brand-text' : 'bg-line-soft text-ink-2';
   return (
     <div className="flex flex-col gap-2 rounded-xl border border-line bg-[#F8F9FB] p-3.5">
       <label htmlFor={id} className="label">
