@@ -1,0 +1,90 @@
+// Tipos compartilhados. Quando a API existir, estes formatos são o contrato entre front e back.
+
+export type Cliente = {
+  id: string;
+  /** Nome como aparece no arquivo da fatura (MAIÚSCULO). */
+  nome: string;
+  /** Outros nomes que podem aparecer nos arquivos. */
+  apelidos: string[];
+  cnpj: string;
+  para: string[];
+  cc: string[];
+  observacoes: string;
+  ativo: boolean;
+  atualizadoEm: string; // ISO
+};
+
+export type ClienteInput = Omit<Cliente, 'id' | 'atualizadoEm' | 'ativo'> & { id?: string };
+
+/** Um arquivo lido da pasta ou do zip. */
+export type ArquivoLido = {
+  /** Nome do arquivo, sem pastas. */
+  nome: string;
+  /** Caminho dentro da pasta/zip, só para exibição. */
+  caminho: string;
+  blob: Blob;
+};
+
+export type StatusItem =
+  | 'pronto'
+  | 'sem_boleto'
+  | 'sem_cadastro'
+  | 'boleto_sem_fatura'
+  | 'numero_duplicado'
+  | 'enviado';
+
+export type ItemLote = {
+  numero: string;
+  /** Nome da empresa como veio no arquivo da fatura. */
+  empresaNoArquivo: string;
+  fatura: ArquivoLido | null;
+  boleto: ArquivoLido | null;
+  clienteId: string | null;
+  /** Como o cliente foi encontrado: pelo nome, por apelido, ou vinculado à mão. */
+  vinculo: 'nome' | 'apelido' | 'manual' | null;
+  duplicado: boolean;
+  marcado: boolean;
+  enviado: boolean;
+  observacao: string;
+};
+
+export type Lote = {
+  id: string;
+  /** Mês de referência, formato AAAA-MM. */
+  referencia: string;
+  origem: string;
+  criadoEm: string;
+  itens: ItemLote[];
+  /** Arquivos que não seguem nenhum padrão de nome conhecido. */
+  naoReconhecidos: ArquivoLido[];
+};
+
+/**
+ * enviado:   o UOL aceitou a mensagem e a cópia foi salva em Enviados (é o máximo que o SMTP garante)
+ * lido:      chegou confirmação de leitura do cliente
+ * devolvido: chegou aviso de devolução (endereço inexistente, caixa cheia…)
+ * falhou:    o UOL recusou o envio; nada saiu
+ */
+export type StatusEnvio = 'enviado' | 'lido' | 'devolvido' | 'falhou';
+
+export type Envio = {
+  id: string;
+  enviadoEm: string; // ISO
+  referencia: string;
+  numero: string;
+  clienteId: string | null;
+  /** Foto do cliente e dos e-mails no momento do envio: não muda se o cadastro mudar depois. */
+  clienteNome: string;
+  para: string[];
+  cc: string[];
+  assunto: string;
+  anexos: string[];
+  messageId: string;
+  copiaEmEnviados: boolean;
+  pediuLeitura: boolean;
+  status: StatusEnvio;
+  detalhe: string;
+  observacao: string;
+};
+
+export type Usuario = { nome: string; email: string };
