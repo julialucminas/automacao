@@ -5,7 +5,7 @@ import { data } from '../lib/email';
 import { ClienteForm, rascunhoDe, rascunhoVazio, type Rascunho } from '../components/ClienteForm';
 import { Chip } from '../components/ui';
 import { IcBusca, IcMais } from '../components/Icones';
-import { baixarModelo, useImportacao } from '../components/ImportarClientes';
+import { baixarModelo, exportarClientes, useImportacao } from '../components/ImportarClientes';
 import { apagarExemplos, temExemplos } from '../api/mock';
 
 const COLUNAS = 'grid grid-cols-[minmax(220px,1.3fr)_minmax(200px,1.2fr)_minmax(200px,1.2fr)_minmax(200px,1.3fr)_96px_88px] gap-3';
@@ -44,6 +44,11 @@ export function Clientes() {
           <button type="button" onClick={baixarModelo} className="mt-1 min-h-[32px] text-xs font-semibold text-ink-2 underline underline-offset-2 hover:text-ink">
             Baixar planilha modelo
           </button>
+          {clientes.length > 0 && (
+            <button type="button" onClick={() => exportarClientes(clientes)} className="ml-4 mt-1 min-h-[32px] text-xs font-semibold text-ink-2 underline underline-offset-2 hover:text-ink">
+              Exportar cadastro (backup)
+            </button>
+          )}
         </div>
         <div className="flex flex-wrap items-center gap-2.5">
           <label className="flex min-h-[44px] items-center gap-2 rounded-[10px] border border-line-strong bg-white px-3 text-ink-3">

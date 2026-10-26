@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from 'react';
+import type { Cliente } from '../types';
 import { useEstado } from '../state';
-import { lerCsv, lerPlanilha, modeloCsv, proporImportacao, type Celula, type Distribuicao, type Leitura } from '../lib/importacao';
+import { exportarCsv, lerCsv, lerPlanilha, modeloCsv, proporImportacao, type Celula, type Distribuicao, type Leitura } from '../lib/importacao';
 import { Cartao, Chip, type Tom } from './ui';
 import { IcAlerta, IcUpload } from './Icones';
 
@@ -18,14 +19,21 @@ async function lerArquivo(f: File): Promise<Celula[][]> {
   return (await readXlsxFile(f)) as Celula[][];
 }
 
-export function baixarModelo() {
-  const blob = new Blob([modeloCsv()], { type: 'text/csv;charset=utf-8' });
+function baixar(conteudo: string, nome: string) {
+  const blob = new Blob([conteudo], { type: 'text/csv;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = 'modelo-clientes.csv';
+  a.download = nome;
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 10_000);
+}
+
+export const baixarModelo = () => baixar(modeloCsv(), 'modelo-clientes.csv');
+
+export function exportarClientes(clientes: Cliente[]) {
+  const hoje = new Date().toISOString().slice(0, 10);
+  baixar(exportarCsv(clientes), `clientes-lucminas-${hoje}.csv`);
 }
 
 /** Botão + prévia da importação. A prévia aparece no lugar da lista enquanto estiver aberta. */

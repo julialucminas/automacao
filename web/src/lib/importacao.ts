@@ -229,13 +229,26 @@ export function proporImportacao(leitura: Leitura, clientes: Cliente[], dist: Di
   });
 }
 
+const CABECALHO = ['Nome no arquivo', 'Outros nomes', 'CNPJ', 'Para', 'Cópia', 'Observações'];
+
+function paraCsv(linhas: string[][]): string {
+  return '\ufeff' + linhas.map((l) => l.map((c) => (/[;"\n]/.test(c) ? `"${c.replace(/"/g, '""')}"` : c)).join(';')).join('\r\n');
+}
+
+/** Exporta o cadastro no formato do modelo: serve de backup e pode ser importado de volta. */
+export function exportarCsv(clientes: Cliente[]): string {
+  return paraCsv([
+    CABECALHO,
+    ...clientes.map((c) => [c.nome, c.apelidos.join('; '), c.cnpj, c.para.join('; '), c.cc.join('; '), c.observacoes]),
+  ]);
+}
+
 /** Modelo para baixar (CSV com ";" e BOM, abre direto no Excel em português). */
 export function modeloCsv(): string {
-  const linhas = [
-    ['Nome no arquivo', 'Outros nomes', 'CNPJ', 'Para', 'Cópia', 'Observações'],
+  return paraCsv([
+    CABECALHO,
     ['EMPRESA EXEMPLO', 'EXEMPLO; EMPRESA EXEMPLO LTDA', '00.000.000/0000-00', 'financeiro@exemplo.com.br; contas@exemplo.com.br', 'contador@escritorio.com.br', 'Falar com a Ana'],
-  ];
-  return '\ufeff' + linhas.map((l) => l.map((c) => (/[;"\n]/.test(c) ? `"${c.replace(/"/g, '""')}"` : c)).join(';')).join('\r\n');
+  ]);
 }
 
 /** Lê CSV com ";" ou "," (detecta pelo cabeçalho), respeitando aspas. */

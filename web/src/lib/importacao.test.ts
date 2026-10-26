@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Cliente } from '../types';
-import { avisosDeDominio, lerCsv, lerPlanilha, modeloCsv, proporImportacao } from './importacao';
+import { avisosDeDominio, exportarCsv, lerCsv, lerPlanilha, modeloCsv, proporImportacao } from './importacao';
 
 // Dados fictícios no mesmo formato da planilha do financeiro
 const SIMPLES = [
@@ -98,5 +98,13 @@ describe('CSV', () => {
     const r = lerPlanilha(linhas);
     expect(r.clientes[0].para).toEqual(['financeiro@exemplo.com.br', 'contas@exemplo.com.br']);
     expect(r.clientes[0].apelidos).toEqual(['EXEMPLO', 'EMPRESA EXEMPLO LTDA']);
+  });
+});
+
+describe('exportarCsv', () => {
+  it('o que é exportado volta igual na importação', () => {
+    const c: Cliente = { id: '1', nome: 'ALFA; BETA', apelidos: ['A'], cnpj: '1', para: ['a@a.com', 'b@a.com'], cc: ['c@c.com'], observacoes: 'diz "oi"', ativo: true, atualizadoEm: '' };
+    const r = lerPlanilha(lerCsv(exportarCsv([c])));
+    expect(r.clientes[0]).toMatchObject({ nome: 'ALFA; BETA', apelidos: ['A'], para: ['a@a.com', 'b@a.com'], cc: ['c@c.com'], observacoes: 'diz "oi"' });
   });
 });
