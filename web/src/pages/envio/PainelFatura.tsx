@@ -3,7 +3,8 @@ import { chaveItem, useEstado } from '../../state';
 import { STATUS_ITEM, statusDoItem } from '../../lib/pareamento';
 import { dataHora, montarEmail, REMETENTE } from '../../lib/email';
 import { Chip } from '../../components/ui';
-import { IcClipe, IcExterno, IcMais } from '../../components/Icones';
+import { IcClipe, IcExterno } from '../../components/Icones';
+import { VincularCliente } from './VincularCliente';
 
 export function abrirPdf(blob: Blob) {
   const url = URL.createObjectURL(blob);
@@ -26,7 +27,7 @@ export function PainelFatura({
   envioAnterior: Envio | undefined;
   cadastrarNovo: (item: ItemLote) => void;
 }) {
-  const { clientes, atualizarItem, vincularCliente, avisar } = useEstado();
+  const { clientes, atualizarItem } = useEstado();
 
   if (!item) {
     return (
@@ -70,33 +71,7 @@ export function PainelFatura({
           Existe mais de um arquivo com o número <b>{item.numero}</b>. Corrija os nomes na pasta e carregue de novo, para não mandar o boleto errado.
         </div>
       )}
-      {st === 'sem_cadastro' && (
-        <div className="flex flex-col gap-2.5 rounded-[10px] bg-warn-soft p-3.5 text-[13px] text-warn-strong">
-          <div>
-            <b>{item.empresaNoArquivo}</b> não está no cadastro de clientes. Se for um cliente que já existe com outro nome, escolha abaixo: o sistema passa a reconhecer esse nome nas próximas vezes.
-          </div>
-          <div className="flex flex-wrap gap-1.5">
-            {clientes
-              .filter((c) => c.ativo)
-              .map((c) => (
-                <button
-                  key={c.id}
-                  type="button"
-                  onClick={async () => {
-                    await vincularCliente(chaveItem(item), c.id);
-                    avisar(`Fatura ${item.numero} vinculada a ${c.nome}. O nome "${item.empresaNoArquivo}" será reconhecido automaticamente.`);
-                  }}
-                  className="min-h-[36px] rounded-lg border border-warn-line bg-white px-2.5 text-xs text-ink hover:bg-canvas"
-                >
-                  {c.nome}
-                </button>
-              ))}
-          </div>
-          <button type="button" className="btn-primary self-start" onClick={() => cadastrarNovo(item)}>
-            <IcMais /> Cadastrar novo cliente
-          </button>
-        </div>
-      )}
+      {st === 'sem_cadastro' && <VincularCliente key={chaveItem(item)} item={item} cadastrarNovo={cadastrarNovo} />}
 
       {email && cliente && (
         <>

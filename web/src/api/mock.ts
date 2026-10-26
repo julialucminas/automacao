@@ -122,7 +122,7 @@ export const mockApi: Api = {
     return [...carregar().clientes].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
   },
   async salvarCliente(input) {
-    await espera(250);
+    await espera(40);
     const b = carregar();
     const agora = new Date().toISOString();
     let salvo: Cliente;
@@ -205,6 +205,19 @@ export const mockApi: Api = {
     return novo;
   },
 };
+
+/** Apaga os clientes e envios fictícios (e-mails @*.exemplo.br), mantendo o que foi importado. */
+export function apagarExemplos() {
+  const b = carregar();
+  const ficticio = (e: string) => /\.exemplo\.br$/.test(e);
+  const clientes = b.clientes.filter((c) => ![...c.para, ...c.cc].every(ficticio));
+  const ids = new Set(clientes.map((c) => c.id));
+  salvar({ ...b, clientes, envios: b.envios.filter((e) => e.clienteId && ids.has(e.clienteId)) });
+}
+
+export function temExemplos(): boolean {
+  return carregar().clientes.some((c) => [...c.para, ...c.cc].every((e) => /\.exemplo\.br$/.test(e)));
+}
 
 /** Volta os dados de demonstração ao estado inicial. */
 export function resetarDemo() {

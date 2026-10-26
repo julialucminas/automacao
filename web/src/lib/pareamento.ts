@@ -128,3 +128,35 @@ export function temAviso(i: ItemLote): boolean {
   const s = statusDoItem(i);
   return s !== 'pronto' && s !== 'enviado';
 }
+
+/**
+ * Sugere clientes prováveis quando o nome do arquivo não bate exatamente com o cadastro.
+ * Ex.: arquivo "MINASBEV INDUSTRIA DE BEBIDAS" e cadastro "MINASBEV".
+ * É só sugestão: quem confirma é o financeiro (e o sistema aprende o nome).
+ */
+export function sugerirClientes(empresa: string, clientes: Cliente[], limite = 3): Cliente[] {
+  const alvo = chaveEmpresa(empresa).split(' ').filter(Boolean);
+  if (!alvo.length) return [];
+  const pontuar = (nome: string): number => {
+    const t = chaveEmpresa(nome).split(' ').filter(Boolean);
+    if (!t.length) return 0;
+    const curto = t.join('').length <= 3;
+    // o nome cadastrado inteiro aparece no começo do nome do arquivo
+    if (t.every((x, i) => alvo[i] === x)) return 4;
+    // o nome do arquivo inteiro aparece no começo do nome cadastrado
+    if (alvo.every((x, i) => t[i] === x)) return 3;
+    if (curto) return 0; // siglas (AD, WF, GES) só valem no começo
+    // todas as palavras do cadastro aparecem no arquivo, em qualquer posição
+    if (t.every((x) => alvo.includes(x))) return 2;
+    // a primeira palavra (relevante) coincide
+    if (t[0].length >= 4 && alvo.includes(t[0])) return 1;
+    return 0;
+  };
+  return clientes
+    .filter((c) => c.ativo)
+    .map((c) => ({ c, p: Math.max(pontuar(c.nome), ...c.apelidos.map(pontuar)) }))
+    .filter((x) => x.p > 0)
+    .sort((a, b) => b.p - a.p || a.c.nome.localeCompare(b.c.nome))
+    .slice(0, limite)
+    .map((x) => x.c);
+}

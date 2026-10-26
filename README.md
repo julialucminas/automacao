@@ -45,12 +45,20 @@ web/src/
 | Fatura | `1234 NOME DA EMPRESA.PDF` | minúsculas, `1234 - NOME`, `1234_NOME`, zeros à esquerda |
 | Boleto | `BOLETO 1234.PDF` | `BOLETO-1234`, `BOLETO1234`, zeros à esquerda |
 
+## Importar clientes
+
+Aba Clientes → **Importar planilha** (.xlsx ou .csv). Aceita o formato simples
+(`Cliente | Email`, com várias linhas por cliente e o nome só na primeira) ou o modelo completo
+(`Nome no arquivo | Outros nomes | CNPJ | Para | Cópia | Observações`). Mostra prévia antes de gravar,
+aponta e-mails inválidos e domínios com provável erro de digitação, e nunca apaga e-mails já cadastrados.
+
+**Não coloque a planilha real de clientes neste repositório** (ele é público).
+
 Situações na conferência: pronto · fatura sem boleto · empresa sem cadastro ·
 boleto sem fatura · número repetido · já enviada antes (fica desmarcada).
 
 ## Próximos passos
 
-1. Importação da planilha de clientes
 2. Backend: API (Fastify + SQLite), login real, upload dos PDFs
 3. Envio real pelo UOL (SMTP) + cópia em Enviados (IMAP)
 4. Leitura da caixa: devoluções e confirmações de leitura

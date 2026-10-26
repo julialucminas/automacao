@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ArquivoLido, Cliente } from '../types';
 import { chaveEmpresa } from './normalizar';
-import { classificar, encontrarCliente, parear, statusDoItem } from './pareamento';
+import { classificar, encontrarCliente, parear, statusDoItem, sugerirClientes } from './pareamento';
 import { decodificarNomeZip } from './leitura';
 
 const arq = (nome: string): ArquivoLido => ({ nome, caminho: nome, blob: new Blob() });
@@ -114,5 +114,22 @@ describe('decodificarNomeZip', () => {
     // "CERÂMICA" em CP850: Â = 0xB6
     const cp850 = Uint8Array.from([0x43, 0x45, 0x52, 0xb6, 0x4d, 0x49, 0x43, 0x41]);
     expect(decodificarNomeZip(cp850)).toBe('CERÂMICA');
+  });
+});
+
+describe('sugerirClientes', () => {
+  const clientes = [cli('m', 'MINASBEV'), cli('s', 'SETE LAGOS'), cli('a', 'AD'), cli('t', 'TOP ANDAIMES'), cli('x', 'ADAMANTINA')];
+  const nomes = (e: string) => sugerirClientes(e, clientes).map((c) => c.nome);
+  it('acha o nome curto dentro da razão social', () => {
+    expect(nomes('MINASBEV INDUSTRIA DE BEBIDAS LTDA')).toEqual(['MINASBEV']);
+    expect(nomes('MINERACAO SETE LAGOS')).toEqual(['SETE LAGOS']);
+    expect(nomes('TOP ANDAIMES E ESCORAMENTOS')[0]).toBe('TOP ANDAIMES');
+  });
+  it('siglas só contam no começo', () => {
+    expect(nomes('AD CIMENTOS')).toEqual(['AD']);
+    expect(nomes('MATERIAIS AD')).toEqual([]);
+  });
+  it('não sugere nada sem relação', () => {
+    expect(nomes('EMPRESA DESCONHECIDA')).toEqual([]);
   });
 });

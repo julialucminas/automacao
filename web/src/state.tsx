@@ -13,6 +13,7 @@ type Estado = {
 
   clientes: Cliente[];
   salvarCliente(input: ClienteInput): Promise<Cliente>;
+  importarClientes(inputs: ClienteInput[], progresso?: (feitos: number) => void): Promise<number>;
   definirAtivo(id: string, ativo: boolean): Promise<void>;
 
   envios: Envio[];
@@ -94,6 +95,17 @@ export function EstadoProvider({ children }: { children: ReactNode }) {
         setClientes(lista);
         reconciliarLote(lista);
         return salvo;
+      },
+      async importarClientes(inputs, progresso) {
+        let feitos = 0;
+        for (const input of inputs) {
+          await api.salvarCliente(input);
+          progresso?.(++feitos);
+        }
+        const lista = await api.listarClientes();
+        setClientes(lista);
+        reconciliarLote(lista);
+        return feitos;
       },
       async definirAtivo(cid, ativo) {
         await api.definirAtivo(cid, ativo);
