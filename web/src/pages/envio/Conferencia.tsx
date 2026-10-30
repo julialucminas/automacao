@@ -1,15 +1,16 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState, type DragEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../../api';
 import type { Cliente, ItemLote } from '../../types';
 import { chaveItem, useEstado } from '../../state';
-import { STATUS_ITEM, statusDoItem, temAviso } from '../../lib/pareamento';
+import { STATUS_ITEM, acrescentarAoLote, anexarNoItem, statusDoItem, temAviso } from '../../lib/pareamento';
+import { lerArquivos, lerSoltura, type ResultadoLeitura } from '../../lib/leitura';
 import { montarEmail, referenciaTitulo } from '../../lib/email';
 import { dataFaturamentoNoMes } from '../../lib/calendario';
 import { chaveEmpresa } from '../../lib/normalizar';
 import { Cartao, Chip, Modal } from '../../components/ui';
 import { ClienteForm, rascunhoVazio, type Rascunho } from '../../components/ClienteForm';
-import { IcAlerta, IcCheck, IcEnviar, IcNota, IcPasta } from '../../components/Icones';
+import { IcAlerta, IcCheck, IcEnviar, IcMais, IcNota, IcPasta } from '../../components/Icones';
 import { PainelFatura, abrirPdf } from './PainelFatura';
 
 type Filtro = 'todos' | 'prontos' | 'avisos' | 'enviados';
@@ -23,7 +24,11 @@ type Progresso = {
 const COLUNAS = 'grid grid-cols-[48px_60px_minmax(200px,1.4fr)_minmax(170px,1.1fr)_minmax(150px,1fr)_156px] items-center gap-3';
 
 export function Conferencia() {
-  const { lote, definirLote, atualizarItem, clientes, envios, recarregarEnvios, vincularCliente, config } = useEstado();
+  const { lote, definirLote, atualizarItem, clientes, envios, recarregarEnvios, vincularCliente, config, avisar } = useEstado();
+  const inputMais = useRef<HTMLInputElement>(null);
+  const inputAnexo = useRef<HTMLInputElement>(null);
+  const [anexando, setAnexando] = useState<{ numero: string; tipo: 'boleto' | 'fatura' } | null>(null);
+  const [arrastando, setArrastando] = useState(false);
   const navegar = useNavigate();
   const [sel, setSel] = useState<string | null>(lote?.itens[0] ? chaveItem(lote.itens[0]) : null);
   const [filtro, setFiltro] = useState<Filtro>('todos');
@@ -61,6 +66,41 @@ export function Conferencia() {
   }, 0);
   const clientesUnicos = new Set(aEnviar.map((i) => i.clienteId)).size;
   const todosProntosMarcados = prontos.length > 0 && prontos.every((i) => i.marcado);
+  const enviadosAqui = itens.filter((i) => i.enviado);
+  const ficaramDeFora = itens.filter((i) => !i.enviado && temAviso(i, clientes));
+  const loteConcluido = enviadosAqui.length > 0 && prontos.length === 0;
+
+  // + arquivos: junta ao lote aberto sem perder o que já foi feito
+  const acrescentar = async (ler: () => Promise<ResultadoLeitura>) => {
+    try {
+      const r = await ler();
+      if (!r.arquivos.length) return avisar('Nenhum PDF encontrado nessa seleção.', 'bad');
+      const jaEnviados = new Set(envios.filter((e) => e.referencia === lote.referencia && e.status !== 'falhou').map((e) => e.numero));
+      const res = acrescentarAoLote(lote, r.arquivos, clientes, jaEnviados);
+      definirLote(res.lote);
+      avisar(
+        `${res.adicionados} arquivo${res.adicionados === 1 ? '' : 's'} adicionado${res.adicionados === 1 ? '' : 's'} ao lote` +
+          (res.completados.length ? `. Agora prontas: ${res.completados.join(', ')}.` : '.'),
+      );
+    } catch {
+      avisar('Não foi possível ler os arquivos.', 'bad');
+    }
+  };
+  const anexar = async (files: FileList) => {
+    if (!anexando || !files.length) return;
+    const r = await lerArquivos(files);
+    const arq = r.arquivos[0];
+    if (!arq) return avisar('Escolha um arquivo PDF.', 'bad');
+    definirLote(anexarNoItem(lote, anexando.numero, anexando.tipo, arq, clientes));
+    avisar(`${anexando.tipo === 'boleto' ? 'Boleto' : 'Fatura'} anexad${anexando.tipo === 'boleto' ? 'o' : 'a'} à ${anexando.numero}: ${arq.nome}`);
+    setAnexando(null);
+  };
+  const soltar = (e: DragEvent) => {
+    e.preventDefault();
+    setArrastando(false);
+    const dt = e.dataTransfer;
+    void acrescentar(() => lerSoltura(dt));
+  };
 
   const enviar = async () => {
     setConfirmar(false);
@@ -103,7 +143,63 @@ export function Conferencia() {
   ];
 
   return (
-    <div>
+    <div
+      onDragOver={(e) => {
+        e.preventDefault();
+        setArrastando(true);
+      }}
+      onDragLeave={(e) => e.currentTarget === e.target && setArrastando(false)}
+      onDrop={soltar}
+      className={arrastando ? 'rounded-2xl outline-dashed outline-2 outline-offset-8 outline-brand' : ''}
+    >
+      <input
+        ref={inputMais}
+        type="file"
+        className="hidden"
+        accept=".zip,.pdf,application/zip,application/pdf"
+        multiple
+        onChange={(e) => {
+          if (e.target.files) void acrescentar(() => lerArquivos(e.target.files!));
+          e.target.value = '';
+        }}
+      />
+      <input
+        ref={inputAnexo}
+        type="file"
+        className="hidden"
+        accept=".pdf,application/pdf"
+        onChange={(e) => {
+          if (e.target.files) void anexar(e.target.files);
+          e.target.value = '';
+        }}
+      />
+      {loteConcluido && (
+        <div role="status" className="mb-5 flex flex-wrap items-center justify-between gap-4 rounded-2xl border-2 border-ok/30 bg-ok-soft px-5 py-4">
+          <div className="flex items-start gap-3">
+            <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-ok text-white">
+              <IcCheck tamanho={18} />
+            </span>
+            <div>
+              <div className="text-[17px] font-bold">
+                {enviadosAqui.length} fatura{enviadosAqui.length > 1 ? 's' : ''} de {referenciaTitulo(lote.referencia)} enviada{enviadosAqui.length > 1 ? 's' : ''}
+              </div>
+              <div className="text-[13px] text-ink-2">
+                {ficaramDeFora.length
+                  ? `${ficaramDeFora.length} ficou${ficaramDeFora.length > 1 ? 'ram' : ''} de fora por falta de arquivo ou cadastro: ${ficaramDeFora.map((i) => i.numero).join(', ')}. Dá para completar com “Adicionar arquivos”.`
+                  : 'Tudo que estava no lote foi enviado. Acompanhe leitura e devoluções no Histórico.'}
+              </div>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" className="btn-secondary" onClick={() => definirLote(null)}>
+              Enviar outra pasta
+            </button>
+            <button type="button" className="btn-primary" onClick={() => navegar('/historico')}>
+              Ver no Histórico
+            </button>
+          </div>
+        </div>
+      )}
       <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
         <div>
           <div className="eyebrow">Conferência do lote</div>
@@ -115,6 +211,9 @@ export function Conferencia() {
           </div>
         </div>
         <div className="flex flex-wrap gap-2.5">
+          <button type="button" className="btn-secondary" onClick={() => inputMais.current?.click()} title="Junta mais faturas e boletos a este lote (ou arraste os arquivos para a tela)">
+            <IcMais tamanho={15} /> Adicionar arquivos
+          </button>
           <button
             type="button"
             className="btn-secondary"
@@ -219,6 +318,10 @@ export function Conferencia() {
           setPediuLeitura={setPediuLeitura}
           envioAnterior={selecionado && !selecionado.enviado ? anteriores.get(selecionado.numero) : undefined}
           cadastrarNovo={(item) => setCadastro({ rascunho: rascunhoVazio(item.empresaNoArquivo), chave: chaveItem(item), empresa: item.empresaNoArquivo })}
+          anexar={(item, tipo) => {
+            setAnexando({ numero: item.numero, tipo });
+            inputAnexo.current?.click();
+          }}
         />
       </div>
 
@@ -274,11 +377,24 @@ export function Conferencia() {
             </ul>
             {progresso.terminou && (
               <div className="flex flex-wrap justify-end gap-2.5">
-                <button type="button" className="btn-secondary" onClick={() => setProgresso(null)}>
-                  Continuar na conferência
-                </button>
+                {progresso.feitos.some((f) => !f.ok) || ficaramDeFora.length ? (
+                  <button type="button" className="btn-secondary" onClick={() => setProgresso(null)}>
+                    Voltar e resolver pendências
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    onClick={() => {
+                      setProgresso(null);
+                      definirLote(null);
+                    }}
+                  >
+                    Enviar outra pasta
+                  </button>
+                )}
                 <button type="button" className="btn-primary" onClick={() => navegar('/historico')}>
-                  Ver no histórico
+                  Ver no Histórico
                 </button>
               </div>
             )}

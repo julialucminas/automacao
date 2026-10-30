@@ -5,7 +5,7 @@ import { chaveItem, useEstado } from '../../state';
 import { STATUS_ITEM, statusDoItem } from '../../lib/pareamento';
 import { dataHora, montarEmail, REMETENTE } from '../../lib/email';
 import { Chip } from '../../components/ui';
-import { IcClipe, IcExterno } from '../../components/Icones';
+import { IcClipe, IcExterno, IcMais } from '../../components/Icones';
 import { VincularCliente } from './VincularCliente';
 
 export function abrirPdf(blob: Blob) {
@@ -21,6 +21,7 @@ export function PainelFatura({
   setPediuLeitura,
   envioAnterior,
   cadastrarNovo,
+  anexar,
 }: {
   item: ItemLote | null;
   referencia: string;
@@ -28,6 +29,7 @@ export function PainelFatura({
   setPediuLeitura: (v: boolean) => void;
   envioAnterior: Envio | undefined;
   cadastrarNovo: (item: ItemLote) => void;
+  anexar?: (item: ItemLote, tipo: 'boleto' | 'fatura') => void;
 }) {
   const { clientes, atualizarItem, config, usuario, envioAtivo, avisar } = useEstado();
   const [testando, setTestando] = useState(false);
@@ -62,11 +64,21 @@ export function PainelFatura({
       {st === 'sem_boleto' && (
         <div className="rounded-[10px] bg-warn-soft px-3.5 py-3 text-[13px] text-warn-strong">
           Não encontrei o arquivo <b className="font-mono">BOLETO {item.numero}.PDF</b> na pasta. Confira se o boleto foi gerado e salvo com esse nome. Esta fatura fica fora do envio até o boleto aparecer.
+          {anexar && (
+            <button type="button" className="btn-primary btn-sm mt-2.5" onClick={() => anexar(item, 'boleto')}>
+              <IcMais tamanho={14} /> Anexar o boleto
+            </button>
+          )}
         </div>
       )}
       {st === 'boleto_sem_fatura' && (
         <div className="rounded-[10px] bg-bad-soft px-3.5 py-3 text-[13px] text-bad-strong">
           O arquivo <b className="font-mono">{item.boleto?.nome}</b> não tem uma fatura com o mesmo número na pasta. Pode ser erro de digitação no nome ou uma fatura que faltou salvar.
+          {anexar && (
+            <button type="button" className="btn-primary btn-sm mt-2.5" onClick={() => anexar(item, 'fatura')}>
+              <IcMais tamanho={14} /> Anexar a fatura
+            </button>
+          )}
         </div>
       )}
       {st === 'numero_duplicado' && (

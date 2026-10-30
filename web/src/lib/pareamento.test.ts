@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import type { ArquivoLido, Cliente } from '../types';
+import type { ArquivoLido, Cliente, Lote } from '../types';
 import { chaveEmpresa } from './normalizar';
-import { classificar, encontrarCliente, parear, statusDoItem, sugerirClientes } from './pareamento';
+import { acrescentarAoLote, anexarNoItem, classificar, encontrarCliente, parear, statusDoItem, sugerirClientes } from './pareamento';
 import { decodificarNomeZip } from './leitura';
 
 const arq = (nome: string): ArquivoLido => ({ nome, caminho: nome, blob: new Blob() });
@@ -136,5 +136,34 @@ describe('sugerirClientes', () => {
   });
   it('não sugere nada sem relação', () => {
     expect(nomes('EMPRESA DESCONHECIDA')).toEqual([]);
+  });
+});
+
+describe('acrescentar arquivos a um lote aberto', () => {
+  const arq = (nome: string): ArquivoLido => ({ nome, caminho: nome, blob: new Blob(['%PDF']) });
+  const cli = [{ id: 'm', nome: 'MINASBEV', apelidos: [], cnpj: '', para: ['a@m.com'], cc: [], observacoes: '', regra: 'dia', diaEmissao: 5, inicioLocacao: null, periodoDias: null, frotas: [], ativo: true, atualizadoEm: '' }] as unknown as Cliente[];
+  const base = (): Lote => {
+    const { itens, naoReconhecidos } = parear([arq('1234 MINASBEV.pdf'), arq('BOLETO 1234.pdf'), arq('1235 MINASBEV.pdf')], cli);
+    return { id: '1', referencia: '2026-10', origem: 'x', criadoEm: '', itens, naoReconhecidos };
+  };
+
+  it('completa a fatura que estava sem boleto e mantém o que já foi feito', () => {
+    const l = base();
+    l.itens[0] = { ...l.itens[0], enviado: true, marcado: false, observacao: 'ok' };
+    const r = acrescentarAoLote(l, [arq('BOLETO 1235.pdf'), arq('1236 MINASBEV.pdf'), arq('BOLETO 1236.pdf')], cli);
+    expect(r.adicionados).toBe(3);
+    expect(r.completados).toEqual(['1235']); // a 1236 é nova, não "completada"
+    const por = Object.fromEntries(r.lote.itens.map((i) => [i.numero, i]));
+    expect(por['1234']).toMatchObject({ enviado: true, observacao: 'ok', marcado: false });
+    expect(por['1235']).toMatchObject({ marcado: true, boleto: { nome: 'BOLETO 1235.pdf' } });
+    expect(por['1236'].marcado).toBe(true);
+  });
+
+  it('anexa boleto com nome fora do padrão direto no item, e ele continua lá ao acrescentar mais', () => {
+    const l = anexarNoItem(base(), '1235', 'boleto', arq('scan_0001.pdf'), cli);
+    expect(l.itens.find((i) => i.numero === '1235')).toMatchObject({ marcado: true, boleto: { nome: 'BOLETO 1235.pdf', caminho: 'scan_0001.pdf' } });
+    const r = acrescentarAoLote(l, [arq('1237 MINASBEV.pdf')], cli);
+    expect(r.lote.itens.find((i) => i.numero === '1235')?.boleto?.nome).toBe('BOLETO 1235.pdf');
+    expect(r.lote.naoReconhecidos).toEqual([]);
   });
 });

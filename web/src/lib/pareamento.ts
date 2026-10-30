@@ -1,4 +1,4 @@
-import type { ArquivoLido, Cliente, ItemLote, StatusItem } from '../types';
+import type { ArquivoLido, Cliente, ItemLote, Lote, StatusItem } from '../types';
 import { chaveEmpresa, normalizarNumero } from './normalizar';
 
 /*
@@ -162,4 +162,79 @@ export function sugerirClientes(empresa: string, clientes: Cliente[], limite = 3
     .sort((a, b) => b.p - a.p || a.c.nome.localeCompare(b.c.nome))
     .slice(0, limite)
     .map((x) => x.c);
+}
+
+/**
+ * Junta arquivos novos a um lote já aberto, sem perder o que foi feito nele
+ * (enviados, observações, vínculos feitos à mão, marcações).
+ * Arquivo com o mesmo nome de um que já está no lote substitui o anterior.
+ */
+export function acrescentarAoLote(lote: Lote, novos: ArquivoLido[], clientes: Cliente[], jaEnviados: Set<string> = new Set()): { lote: Lote; adicionados: number; completados: string[] } {
+  const chaveArq = (a: ArquivoLido) => a.nome.trim().toUpperCase();
+  const todos = new Map<string, ArquivoLido>();
+  for (const i of lote.itens) for (const a of [i.fatura, i.boleto]) if (a) todos.set(chaveArq(a), a);
+  for (const a of lote.naoReconhecidos) todos.set(chaveArq(a), a);
+  let adicionados = 0;
+  for (const a of novos) {
+    if (!todos.has(chaveArq(a))) adicionados++;
+    todos.set(chaveArq(a), a);
+  }
+  // boletos anexados à mão (nome fora do padrão) continuam no item certo
+  const manuais = lote.itens.filter((i) => i.boleto && classificar(i.boleto.nome).tipo !== 'boleto').map((i) => ({ numero: i.numero, boleto: i.boleto! }));
+  for (const m of manuais) todos.delete(chaveArq(m.boleto));
+  const { itens, naoReconhecidos } = parear([...todos.values()], clientes);
+  const antigos = new Map(lote.itens.map((i) => [`${i.numero}|${i.fatura?.nome ?? ''}`, i]));
+  const completados: string[] = [];
+  const resultado = itens.map((n) => {
+    const manual = manuais.find((m) => m.numero === n.numero);
+    if (manual && !n.boleto) n.boleto = manual.boleto;
+    const a = antigos.get(`${n.numero}|${n.fatura?.nome ?? ''}`) ?? (n.fatura ? undefined : antigos.get(`${n.numero}|`));
+    if (!a) {
+      // fatura que só agora ganhou o boleto (ou o contrário) também conta como "completada"
+      const parcial = lote.itens.find((x) => x.numero === n.numero);
+      if (parcial && !parcial.enviado && statusDoItem(n, clientes) === 'pronto') completados.push(n.numero);
+      if (parcial) {
+        n.observacao = parcial.observacao;
+        if (parcial.vinculo === 'manual' && parcial.clienteId) {
+          n.clienteId = parcial.clienteId;
+          n.vinculo = 'manual';
+        }
+      }
+      n.marcado = statusDoItem(n, clientes) === 'pronto' && !jaEnviados.has(n.numero);
+      return n;
+    }
+    const estavaPronto = statusDoItem(a, clientes) === 'pronto';
+    const item: ItemLote = {
+      ...n,
+      enviado: a.enviado,
+      observacao: a.observacao,
+      clienteId: a.vinculo === 'manual' ? a.clienteId : n.clienteId,
+      vinculo: a.vinculo === 'manual' ? 'manual' : n.vinculo,
+    };
+    const prontoAgora = statusDoItem(item, clientes) === 'pronto';
+    if (!estavaPronto && prontoAgora) completados.push(item.numero);
+    item.marcado = item.enviado ? false : estavaPronto ? a.marcado && prontoAgora : prontoAgora && !jaEnviados.has(item.numero);
+    return item;
+  });
+  return { lote: { ...lote, itens: resultado, naoReconhecidos }, adicionados, completados };
+}
+
+/** Anexa um PDF escolhido à mão como boleto (ou fatura) de um item, mesmo com nome fora do padrão. */
+export function anexarNoItem(lote: Lote, numero: string, tipo: 'boleto' | 'fatura', arquivo: ArquivoLido, clientes: Cliente[]): Lote {
+  const itens = lote.itens.map((i) => {
+    if (i.numero !== numero || i.enviado) return i;
+    // o boleto sai para o cliente sempre com o nome padrão, mesmo que o arquivo tenha outro nome
+    const arq = tipo === 'boleto' ? { ...arquivo, nome: `BOLETO ${numero}.pdf` } : arquivo;
+    let n: ItemLote = { ...i, [tipo]: arq };
+    if (tipo === 'fatura') {
+      const c = classificar(arquivo.nome);
+      const empresa = c.tipo === 'fatura' ? c.empresa : i.empresaNoArquivo;
+      const achado = empresa ? encontrarCliente(empresa, clientes) : null;
+      n = { ...n, empresaNoArquivo: empresa, clienteId: i.vinculo === 'manual' ? i.clienteId : (achado?.clienteId ?? null), vinculo: i.vinculo === 'manual' ? 'manual' : (achado?.vinculo ?? null) };
+    }
+    n.marcado = statusDoItem(n, clientes) === 'pronto';
+    return n;
+  });
+  // o arquivo deixa de ser "fora do padrão" se estava nessa lista
+  return { ...lote, itens, naoReconhecidos: lote.naoReconhecidos.filter((a) => a.nome !== arquivo.nome) };
 }
