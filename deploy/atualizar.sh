@@ -32,6 +32,6 @@ rm -rf "$DIR/web/dist-anterior"
 mv "$DIR/web/dist-nova" "$DIR/web/dist"
 
 docker compose -f "$DIR/deploy/docker-compose.yml" up -d --remove-orphans
-docker compose -f "$DIR/deploy/docker-compose.yml" exec -T caddy caddy reload --config /etc/caddy/Caddyfile >/dev/null 2>&1 || true
+docker compose -f "$DIR/deploy/docker-compose.yml" exec -T caddy caddy reload --config /etc/caddy/Caddyfile </dev/null >/dev/null 2>&1 || true
 
 echo "Publicado."

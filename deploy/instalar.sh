@@ -5,6 +5,9 @@
 # Pode ser rodado de novo sem problema (não apaga nada).
 set -euo pipefail
 
+# Tudo dentro de uma função: com "curl | bash", o bash só executa depois de ler o script inteiro
+# (senão um comando que lê a entrada pode "engolir" o resto do script).
+principal() {
 REPO="https://github.com/julialucminas/automacao.git"
 DIR="/opt/faturas"
 DOMINIO="faturas.lucminas.com.br"
@@ -82,3 +85,6 @@ echo " Endereço: https://$DOMINIO"
 echo " (o certificado HTTPS sai sozinho assim que o DNS propagar;"
 echo "  se ainda não abrir, espere alguns minutos)"
 echo "============================================================"
+}
+
+principal "$@" </dev/null
