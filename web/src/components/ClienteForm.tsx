@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import type { Cliente, ClienteInput } from '../types';
+import type { Cliente, ClienteInput, Frota } from '../types';
+import { formatarReais, lerReais, reaisParaCampo } from '../lib/dinheiro';
 import { emailValido } from '../lib/normalizar';
 import { useEstado } from '../state';
-import { IcFechar } from './Icones';
+import { IcFechar, IcMais } from './Icones';
 import { Gaveta } from './ui';
 
 export type Rascunho = {
@@ -14,9 +15,13 @@ export type Rascunho = {
   cc: string[];
   observacoes: string;
   ativo?: boolean;
+  /** dia de emissão como texto do campo ('' = não informado) */
+  dia: string;
+  /** frotas com o valor como texto do campo, para permitir digitar à vontade */
+  frotas: { numero: string; valor: string; descricao: string }[];
 };
 
-export const rascunhoVazio = (nome = ''): Rascunho => ({ nome, apelidos: '', cnpj: '', para: [], cc: [], observacoes: '' });
+export const rascunhoVazio = (nome = ''): Rascunho => ({ nome, apelidos: '', cnpj: '', para: [], cc: [], observacoes: '', dia: '', frotas: [] });
 
 export const rascunhoDe = (c: Cliente): Rascunho => ({
   id: c.id,
@@ -27,6 +32,8 @@ export const rascunhoDe = (c: Cliente): Rascunho => ({
   cc: [...c.cc],
   observacoes: c.observacoes,
   ativo: c.ativo,
+  dia: c.diaEmissao ? String(c.diaEmissao) : '',
+  frotas: c.frotas.map((f) => ({ numero: f.numero, valor: f.valor ? reaisParaCampo(f.valor) : '', descricao: f.descricao })),
 });
 
 function ListaEmails({
@@ -148,8 +155,27 @@ function Formulario({ inicial, fechar, aoSalvar }: { inicial: Rascunho; fechar: 
     const repetido = clientes.find((c) => c.id !== d.id && c.nome === nome);
     if (repetido) return setErro(`Já existe um cliente chamado ${nome}.`);
 
+    let diaEmissao: number | null = null;
+    if (d.dia.trim()) {
+      const n = Number(d.dia);
+      if (!Number.isInteger(n) || n < 1 || n > 31) return setErro('O dia de emissão precisa ser um número de 1 a 31.');
+      diaEmissao = n;
+    }
+    const frotas: Frota[] = [];
+    for (const f of d.frotas) {
+      const numero = f.numero.trim().toUpperCase();
+      if (!numero && !f.valor.trim() && !f.descricao.trim()) continue; // linha vazia
+      if (!numero) return setErro('Preencha o número de todas as frotas (ou remova a linha vazia).');
+      if (frotas.some((x) => x.numero === numero)) return setErro(`A frota ${numero} está repetida.`);
+      const valor = f.valor.trim() ? lerReais(f.valor) : 0;
+      if (valor === null) return setErro(`Não entendi o valor "${f.valor}" da frota ${numero}. Use, por exemplo, 1.500,00`);
+      frotas.push({ numero, valor, descricao: f.descricao.trim() });
+    }
+
     const input: ClienteInput = {
       id: d.id,
+      diaEmissao,
+      frotas,
       nome,
       apelidos: d.apelidos.split(',').map((a) => a.trim().toUpperCase()).filter(Boolean),
       cnpj: d.cnpj.trim(),
@@ -196,6 +222,8 @@ function Formulario({ inicial, fechar, aoSalvar }: { inicial: Rascunho; fechar: 
 
       <ListaEmails id="cad-para" rotulo="Para" dica="quem recebe a fatura" emails={d.para} mudar={(para) => setD({ ...d, para })} pendente={paraIn} setPendente={setParaIn} tom="para" erro={setErro} />
       <ListaEmails id="cad-cc" rotulo="Cópia (Cc)" dica="contador, compras, diretoria…" emails={d.cc} mudar={(cc) => setD({ ...d, cc })} pendente={ccIn} setPendente={setCcIn} tom="cc" erro={setErro} />
+
+      <Faturamento d={d} setD={setD} />
 
       <div className="flex flex-col gap-1.5">
         <label htmlFor="cad-obs" className="label">
@@ -244,5 +272,95 @@ function Formulario({ inicial, fechar, aoSalvar }: { inicial: Rascunho; fechar: 
         </div>
       </div>
     </>
+  );
+}
+
+function Faturamento({ d, setD }: { d: Rascunho; setD: (r: Rascunho) => void }) {
+  const mudarFrota = (i: number, campo: 'numero' | 'valor' | 'descricao', v: string) =>
+    setD({ ...d, frotas: d.frotas.map((f, k) => (k === i ? { ...f, [campo]: v } : f)) });
+  const total = d.frotas.reduce((s, f) => s + (lerReais(f.valor) ?? 0), 0);
+
+  return (
+    <fieldset className="flex flex-col gap-3 rounded-xl border border-line bg-[#F8F7F3] p-3.5">
+      <legend className="sr-only">Faturamento</legend>
+      <div className="label">Faturamento</div>
+
+      <div className="flex flex-wrap items-end gap-3">
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="cad-dia" className="text-[13px] font-medium">
+            Dia de emissão da fatura
+          </label>
+          <div className="flex items-center gap-2">
+            <span className="text-ink-3">Todo dia</span>
+            <input
+              id="cad-dia"
+              type="number"
+              inputMode="numeric"
+              min={1}
+              max={31}
+              value={d.dia}
+              onChange={(e) => setD({ ...d, dia: e.target.value })}
+              placeholder="—"
+              className="input w-[84px] bg-white text-center"
+            />
+            <span className="text-ink-3">do mês</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <div className="text-[13px] font-medium">Frotas de referência</div>
+        {d.frotas.length > 0 && (
+          <div className="hidden grid-cols-[110px_120px_1fr_44px] gap-2 text-xs text-ink-3 sm:grid">
+            <span>Nº da frota</span>
+            <span>Valor (R$)</span>
+            <span>Descrição (opcional)</span>
+            <span />
+          </div>
+        )}
+        {d.frotas.map((f, i) => (
+          <div key={i} className="grid grid-cols-[1fr_1fr_44px] gap-2 sm:grid-cols-[110px_120px_1fr_44px]">
+            <input aria-label={`Número da frota ${i + 1}`} value={f.numero} onChange={(e) => mudarFrota(i, 'numero', e.target.value)} placeholder="F-101" className="input bg-white uppercase" />
+            <input
+              aria-label={`Valor da frota ${i + 1}`}
+              inputMode="decimal"
+              value={f.valor}
+              onChange={(e) => mudarFrota(i, 'valor', e.target.value)}
+              onBlur={() => {
+                const v = lerReais(f.valor);
+                if (v !== null) mudarFrota(i, 'valor', reaisParaCampo(v));
+              }}
+              placeholder="1.500,00"
+              className={`input bg-white text-right ${f.valor.trim() && lerReais(f.valor) === null ? 'border-bad' : ''}`}
+            />
+            <input
+              aria-label={`Descrição da frota ${i + 1}`}
+              value={f.descricao}
+              onChange={(e) => mudarFrota(i, 'descricao', e.target.value)}
+              placeholder="Ex.: Empilhadeira 2,5t"
+              className="input col-span-2 bg-white sm:col-span-1"
+            />
+            <button
+              type="button"
+              aria-label={`Remover frota ${f.numero || i + 1}`}
+              onClick={() => setD({ ...d, frotas: d.frotas.filter((_, k) => k !== i) })}
+              className="col-start-3 row-start-1 flex h-11 w-11 items-center justify-center rounded-lg text-ink-3 hover:bg-white hover:text-bad sm:col-start-4"
+            >
+              <IcFechar tamanho={14} />
+            </button>
+          </div>
+        ))}
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <button type="button" className="btn-secondary btn-sm" onClick={() => setD({ ...d, frotas: [...d.frotas, { numero: '', valor: '', descricao: '' }] })}>
+            <IcMais tamanho={14} /> Adicionar frota
+          </button>
+          {d.frotas.length > 0 && (
+            <span className="text-[13px]">
+              {d.frotas.length} frota{d.frotas.length > 1 ? 's' : ''} · total <b>{formatarReais(total)}</b>
+            </span>
+          )}
+        </div>
+      </div>
+    </fieldset>
   );
 }

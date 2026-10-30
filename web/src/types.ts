@@ -1,7 +1,13 @@
 // Tipos compartilhados. Quando a API existir, estes formatos são o contrato entre front e back.
 
+/** Equipamento (frota) alugado. valor em centavos. */
+export type Frota = { numero: string; valor: number; descricao: string };
+
 export type Cliente = {
   id: string;
+  /** Dia do mês em que a fatura é emitida (1 a 31). */
+  diaEmissao: number | null;
+  frotas: Frota[];
   /** Nome como aparece no arquivo da fatura (MAIÚSCULO). */
   nome: string;
   /** Outros nomes que podem aparecer nos arquivos. */
@@ -14,7 +20,12 @@ export type Cliente = {
   atualizadoEm: string; // ISO
 };
 
-export type ClienteInput = Omit<Cliente, 'id' | 'atualizadoEm' | 'ativo'> & { id?: string };
+/** diaEmissao/frotas ausentes = manter como está. */
+export type ClienteInput = Omit<Cliente, 'id' | 'atualizadoEm' | 'ativo' | 'diaEmissao' | 'frotas'> & {
+  id?: string;
+  diaEmissao?: number | null;
+  frotas?: Frota[];
+};
 
 /** Um arquivo lido da pasta ou do zip. */
 export type ArquivoLido = {

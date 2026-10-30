@@ -1,8 +1,14 @@
 import Database from 'better-sqlite3';
 import { randomUUID } from 'node:crypto';
 
+/** Equipamento (frota) alugado pelo cliente. valor em centavos, para não ter erro de arredondamento. */
+export type Frota = { numero: string; valor: number; descricao: string };
+
 export type Cliente = {
   id: string;
+  /** Dia do mês em que a fatura é emitida (1 a 31), ou null se não informado. */
+  diaEmissao: number | null;
+  frotas: Frota[];
   nome: string;
   apelidos: string[];
   cnpj: string;
@@ -13,7 +19,12 @@ export type Cliente = {
   atualizadoEm: string;
 };
 
-export type ClienteInput = Omit<Cliente, 'id' | 'ativo' | 'atualizadoEm'> & { id?: string };
+/** diaEmissao/frotas ausentes = manter como está (ou vazio, se for cliente novo). */
+export type ClienteInput = Omit<Cliente, 'id' | 'ativo' | 'atualizadoEm' | 'diaEmissao' | 'frotas'> & {
+  id?: string;
+  diaEmissao?: number | null;
+  frotas?: Frota[];
+};
 
 export type Envio = {
   id: string;
@@ -97,6 +108,9 @@ const MIGRACOES = [
    );`,
   // como a pessoa é chamada na saudação do topo (ex.: "Angeli")
   `ALTER TABLE usuarios ADD COLUMN chamar TEXT NOT NULL DEFAULT '';`,
+  // faturamento: dia de emissão e frotas (número + valor) de cada cliente
+  `ALTER TABLE clientes ADD COLUMN dia_emissao INTEGER;
+   ALTER TABLE clientes ADD COLUMN frotas TEXT NOT NULL DEFAULT '[]';`,
 ];
 
 export function abrirBanco(caminho: string) {
@@ -123,6 +137,8 @@ const lista = (s: string): string[] => JSON.parse(s);
 
 type LinhaCliente = {
   id: string;
+  dia_emissao: number | null;
+  frotas: string;
   nome: string;
   apelidos: string;
   cnpj: string;
@@ -135,6 +151,8 @@ type LinhaCliente = {
 
 const deLinhaCliente = (r: LinhaCliente): Cliente => ({
   id: r.id,
+  diaEmissao: r.dia_emissao ?? null,
+  frotas: JSON.parse(r.frotas),
   nome: r.nome,
   apelidos: lista(r.apelidos),
   cnpj: r.cnpj,
@@ -232,18 +250,44 @@ export function repositorio(db: Banco) {
         if (input.id) {
           const antes = buscarCliente(input.id);
           db.prepare(
-            `UPDATE clientes SET nome = ?, apelidos = ?, cnpj = ?, para = ?, cc = ?, observacoes = ?, atualizado_em = ?, atualizado_por = ?
+            `UPDATE clientes SET nome = ?, apelidos = ?, cnpj = ?, para = ?, cc = ?, observacoes = ?, dia_emissao = ?, frotas = ?,
+               atualizado_em = ?, atualizado_por = ?
              WHERE id = ?`,
-          ).run(input.nome, json(input.apelidos), input.cnpj, json(input.para), json(input.cc), input.observacoes, t, usuarioId, input.id);
+          ).run(
+            input.nome,
+            json(input.apelidos),
+            input.cnpj,
+            json(input.para),
+            json(input.cc),
+            input.observacoes,
+            input.diaEmissao === undefined ? antes.diaEmissao : input.diaEmissao,
+            json(input.frotas ?? antes.frotas),
+            t,
+            usuarioId,
+            input.id,
+          );
           const depois = buscarCliente(input.id);
           registrar(input.id, usuarioId, 'editou', antes, depois);
           return depois;
         }
         const id = randomUUID();
         db.prepare(
-          `INSERT INTO clientes (id, nome, apelidos, cnpj, para, cc, observacoes, criado_em, atualizado_em, atualizado_por)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        ).run(id, input.nome, json(input.apelidos), input.cnpj, json(input.para), json(input.cc), input.observacoes, t, t, usuarioId);
+          `INSERT INTO clientes (id, nome, apelidos, cnpj, para, cc, observacoes, dia_emissao, frotas, criado_em, atualizado_em, atualizado_por)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ).run(
+          id,
+          input.nome,
+          json(input.apelidos),
+          input.cnpj,
+          json(input.para),
+          json(input.cc),
+          input.observacoes,
+          input.diaEmissao ?? null,
+          json(input.frotas ?? []),
+          t,
+          t,
+          usuarioId,
+        );
         const criado = buscarCliente(id);
         registrar(id, usuarioId, 'criou', null, criado);
         return criado;

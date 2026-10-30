@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { useEstado } from '../state';
 import { chaveEmpresa, semAcento } from '../lib/normalizar';
 import { data } from '../lib/email';
+import { formatarReais } from '../lib/dinheiro';
 import { ClienteForm, rascunhoDe, rascunhoVazio, type Rascunho } from '../components/ClienteForm';
 import { Chip } from '../components/ui';
 import { IcBusca, IcMais } from '../components/Icones';
@@ -9,7 +10,7 @@ import { baixarModelo, exportarClientes, useImportacao } from '../components/Imp
 import { apagarExemplos, temExemplos } from '../api/mock';
 import { MODO_DEMO } from '../api';
 
-const COLUNAS = 'grid grid-cols-[minmax(220px,1.3fr)_minmax(200px,1.2fr)_minmax(200px,1.2fr)_minmax(200px,1.3fr)_96px_88px] gap-3';
+const COLUNAS = 'grid grid-cols-[minmax(200px,1.2fr)_minmax(190px,1.1fr)_minmax(170px,1fr)_minmax(170px,1fr)_minmax(180px,1.1fr)_90px_80px] gap-3';
 
 export function Clientes() {
   const { clientes } = useEstado();
@@ -100,11 +101,12 @@ export function Clientes() {
 
       <section aria-label="Lista de clientes" className="card overflow-hidden">
         <div className="overflow-x-auto">
-          <div className="min-w-[920px]">
+          <div className="min-w-[1080px]">
             <div className={`${COLUNAS} border-b border-line bg-[#F8F9FB] px-4 py-2.5 text-xs font-semibold text-ink-3`}>
               <span>Cliente</span>
               <span>Para</span>
               <span>Cópia</span>
+              <span>Faturamento</span>
               <span>Observações</span>
               <span>Atualizado</span>
               <span className="sr-only">Ações</span>
@@ -126,6 +128,20 @@ export function Clientes() {
                 </div>
                 <div className="flex min-w-0 flex-col gap-0.5 [overflow-wrap:anywhere] text-ink-2">
                   {c.cc.length ? c.cc.map((e) => <span key={e}>{e}</span>) : <span className="text-ink-3">—</span>}
+                </div>
+                <div className="text-ink-2">
+                  {c.diaEmissao || c.frotas.length ? (
+                    <>
+                      {c.diaEmissao && <div>Emissão todo dia {c.diaEmissao}</div>}
+                      {c.frotas.length > 0 && (
+                        <div title={c.frotas.map((f) => `${f.numero}: ${formatarReais(f.valor)}${f.descricao ? ` (${f.descricao})` : ''}`).join('\n')}>
+                          {c.frotas.length === 1 ? `Frota ${c.frotas[0].numero}` : `${c.frotas.length} frotas`} · <b>{formatarReais(c.frotas.reduce((s, f) => s + f.valor, 0))}</b>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <span className="text-ink-3">—</span>
+                  )}
                 </div>
                 <div className="text-ink-2">{c.observacoes || '—'}</div>
                 <div className="text-xs text-ink-3">{data(c.atualizadoEm)}</div>

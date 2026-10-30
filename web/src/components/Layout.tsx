@@ -3,7 +3,7 @@ import { NavLink, Outlet } from 'react-router-dom';
 import { useEstado } from '../state';
 import { temAviso } from '../lib/pareamento';
 import { EMPRESA, REMETENTE } from '../lib/email';
-import { IcEmail, IcFechar, IcSair } from './Icones';
+import { IcFechar, IcSair } from './Icones';
 import { MODO_DEMO } from '../api';
 import { TrocarSenha } from './TrocarSenha';
 
@@ -31,9 +31,7 @@ export function Layout() {
       <header className="bg-noite text-white">
         <div className="mx-auto flex max-w-[1280px] flex-wrap items-center justify-between gap-x-6 gap-y-3 px-4 pt-3.5 sm:px-6">
           <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-[9px] bg-brand text-ink">
-              <IcEmail tamanho={18} />
-            </div>
+            <img src="./logo-icone.png" alt="Lucminas" width={40} height={40} className="h-10 w-10" />
             <div>
               <div className="text-base font-bold">Envio de Faturas</div>
               <div className="text-xs text-white/65">{EMPRESA} · Financeiro</div>

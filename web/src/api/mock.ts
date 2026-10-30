@@ -28,7 +28,7 @@ function semente(): Banco {
     observacoes = '',
     apelidos: string[] = [],
     atualizado = 30,
-  ): Cliente => ({ id: id(), nome, apelidos, cnpj: '', para, cc, observacoes, ativo: true, atualizadoEm: dias(atualizado) });
+  ): Cliente => ({ id: id(), nome, apelidos, cnpj: '', para, cc, observacoes, diaEmissao: null, frotas: [], ativo: true, atualizadoEm: dias(atualizado) });
 
   const clientes = [
     c('METALURGICA SERRA AZUL', ['financeiro@serraazul.exemplo.br'], ['compras@serraazul.exemplo.br', 'contabil@moura.exemplo.br'], 'Sempre com cópia para o contador.', ['SERRA AZUL'], 40),
@@ -133,10 +133,10 @@ export const mockApi: Api = {
     if (input.id) {
       const atual = b.clientes.find((c) => c.id === input.id);
       if (!atual) throw new Error('Cliente não encontrado.');
-      salvo = { ...atual, ...input, id: atual.id, atualizadoEm: agora };
+      salvo = { ...atual, ...input, diaEmissao: input.diaEmissao === undefined ? atual.diaEmissao : input.diaEmissao, frotas: input.frotas ?? atual.frotas, id: atual.id, atualizadoEm: agora };
       salvar({ ...b, clientes: b.clientes.map((c) => (c.id === salvo.id ? salvo : c)) });
     } else {
-      salvo = { ...input, id: id(), ativo: true, atualizadoEm: agora };
+      salvo = { ...input, diaEmissao: input.diaEmissao ?? null, frotas: input.frotas ?? [], id: id(), ativo: true, atualizadoEm: agora };
       salvar({ ...b, clientes: [...b.clientes, salvo] });
     }
     return salvo;

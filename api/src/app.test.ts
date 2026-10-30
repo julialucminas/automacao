@@ -99,3 +99,22 @@ describe('trocar senha', () => {
     expect((await req('GET', '/api/sessao')).json()).toHaveProperty('chamar', '');
   });
 });
+
+describe('faturamento do cliente', () => {
+  const base = { nome: 'Fitlog', para: ['fin@fitlog.com.br'] };
+  it('salva dia de emissão e frotas; edição sem esses campos mantém o que havia', async () => {
+    const c = (await req('POST', '/api/clientes', { ...base, diaEmissao: 5, frotas: [{ numero: 'f-101', valor: 150000, descricao: 'Empilhadeira 2,5t' }, { numero: 'F-102', valor: 98050 }] })).json();
+    expect(c.diaEmissao).toBe(5);
+    expect(c.frotas).toEqual([{ numero: 'F-101', valor: 150000, descricao: 'Empilhadeira 2,5t' }, { numero: 'F-102', valor: 98050, descricao: '' }]);
+    const e = (await req('PUT', `/api/clientes/${c.id}`, { ...base, observacoes: 'x' })).json();
+    expect(e.frotas).toHaveLength(2);
+    expect(e.diaEmissao).toBe(5);
+    const limpo = (await req('PUT', `/api/clientes/${c.id}`, { ...base, diaEmissao: null, frotas: [] })).json();
+    expect(limpo).toMatchObject({ diaEmissao: null, frotas: [] });
+  });
+  it('valida dia e valores', async () => {
+    expect((await req('POST', '/api/clientes', { ...base, diaEmissao: 32 })).statusCode).toBe(400);
+    expect((await req('POST', '/api/clientes', { ...base, frotas: [{ numero: '', valor: 1 }] })).statusCode).toBe(400);
+    expect((await req('POST', '/api/clientes', { ...base, frotas: [{ numero: 'F1', valor: 10.5 }] })).statusCode).toBe(400);
+  });
+});

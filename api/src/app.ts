@@ -1,6 +1,6 @@
 import Fastify, { type FastifyReply, type FastifyRequest } from 'fastify';
 import cookie from '@fastify/cookie';
-import { Conflito, NaoEncontrado, repositorio, type Banco, type ClienteInput, type Usuario } from './db.js';
+import { Conflito, NaoEncontrado, repositorio, type Banco, type ClienteInput, type Frota, type Usuario } from './db.js';
 import { conferirSenha, gerarHash, hashToken, novoToken, problemaSenha } from './senha.js';
 
 const COOKIE = 'sessao';
@@ -37,6 +37,27 @@ const listaEmails = (v: unknown, campo: string): string[] => {
   return l;
 };
 
+function lerDiaEmissao(v: unknown): number | null | undefined {
+  if (v === undefined) return undefined;
+  if (v === null || v === '') return null;
+  const n = Number(v);
+  if (!Number.isInteger(n) || n < 1 || n > 31) throw new Invalido('Dia de emissão deve ser entre 1 e 31.');
+  return n;
+}
+
+function lerFrotas(v: unknown): Frota[] | undefined {
+  if (v === undefined) return undefined;
+  if (!Array.isArray(v) || v.length > 200) throw new Invalido('Lista de frotas inválida.');
+  return v.map((f, i) => {
+    const o = (f ?? {}) as Record<string, unknown>;
+    const numero = texto(o.numero, 'número da frota', 50).toUpperCase();
+    if (!numero) throw new Invalido(`Informe o número da frota (linha ${i + 1}).`);
+    const valor = Number(o.valor ?? 0);
+    if (!Number.isInteger(valor) || valor < 0 || valor > 100_000_000_00) throw new Invalido(`Valor inválido na frota ${numero}.`);
+    return { numero, valor, descricao: texto(o.descricao, 'descrição', 200) };
+  });
+}
+
 export function lerCliente(corpo: unknown, id?: string): ClienteInput {
   const b = (corpo ?? {}) as Record<string, unknown>;
   const nome = texto(b.nome, 'nome', 200).toUpperCase().replace(/\s+/g, ' ');
@@ -51,6 +72,8 @@ export function lerCliente(corpo: unknown, id?: string): ClienteInput {
     para,
     cc: listaEmails(b.cc, 'cc').filter((e) => !para.includes(e)),
     observacoes: texto(b.observacoes, 'observacoes', 2000),
+    diaEmissao: lerDiaEmissao(b.diaEmissao),
+    frotas: lerFrotas(b.frotas),
   };
 }
 

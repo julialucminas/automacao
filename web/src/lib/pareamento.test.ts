@@ -13,6 +13,8 @@ const cli = (id: string, nome: string, apelidos: string[] = []): Cliente => ({
   para: [`${id}@x.com`],
   cc: [],
   observacoes: '',
+  diaEmissao: null,
+  frotas: [],
   ativo: true,
   atualizadoEm: '',
 });

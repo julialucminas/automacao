@@ -68,6 +68,8 @@ describe('proporImportacao', () => {
     para: ['joao@alfa.com.br'],
     cc: [],
     observacoes: '',
+    diaEmissao: null,
+    frotas: [],
     ativo: true,
     atualizadoEm: '',
   };
@@ -103,8 +105,30 @@ describe('CSV', () => {
 
 describe('exportarCsv', () => {
   it('o que é exportado volta igual na importação', () => {
-    const c: Cliente = { id: '1', nome: 'ALFA; BETA', apelidos: ['A'], cnpj: '1', para: ['a@a.com', 'b@a.com'], cc: ['c@c.com'], observacoes: 'diz "oi"', ativo: true, atualizadoEm: '' };
+    const c: Cliente = { id: '1', nome: 'ALFA; BETA', apelidos: ['A'], cnpj: '1', para: ['a@a.com', 'b@a.com'], cc: ['c@c.com'], observacoes: 'diz "oi"', diaEmissao: 5, frotas: [{ numero: 'F-1', valor: 150000, descricao: '' }], ativo: true, atualizadoEm: '' };
     const r = lerPlanilha(lerCsv(exportarCsv([c])));
     expect(r.clientes[0]).toMatchObject({ nome: 'ALFA; BETA', apelidos: ['A'], para: ['a@a.com', 'b@a.com'], cc: ['c@c.com'], observacoes: 'diz "oi"' });
+  });
+});
+
+describe('faturamento na planilha', () => {
+  it('lê dia de emissão e frotas e o modelo volta igual', () => {
+    const r = lerPlanilha(lerCsv(modeloCsv()));
+    expect(r.clientes[0].diaEmissao).toBe(5);
+    expect(r.clientes[0].frotas).toEqual([
+      { numero: 'F-101', valor: 150000, descricao: 'Empilhadeira 2,5t' },
+      { numero: 'F-102', valor: 98050, descricao: '' },
+    ]);
+  });
+  it('planilha sem essas colunas não mexe no cadastro', () => {
+    const r = lerPlanilha([['Cliente', 'Email'], ['Alfa', 'a@alfa.com']]);
+    expect(r.clientes[0].diaEmissao).toBeUndefined();
+    expect(r.clientes[0].frotas).toBeUndefined();
+  });
+  it('avisa dia inválido e valor não entendido', () => {
+    const r = lerPlanilha([['Cliente', 'Email', 'Dia de emissão', 'Frotas'], ['Alfa', 'a@alfa.com', '40', 'F1 = abc']]);
+    expect(r.clientes[0].avisos.join(' ')).toMatch(/dia de emissão "40" inválido/);
+    expect(r.clientes[0].avisos.join(' ')).toMatch(/não entendido/);
+    expect(r.clientes[0].frotas).toEqual([{ numero: 'F1', valor: 0, descricao: '' }]);
   });
 });

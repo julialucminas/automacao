@@ -1,7 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { useEstado } from '../state';
 import { EMPRESA } from '../lib/email';
-import { IcEmail } from '../components/Icones';
 import { MODO_DEMO } from '../api';
 
 export function Login() {
@@ -27,14 +26,9 @@ export function Login() {
   return (
     <div className="flex min-h-screen items-center justify-center p-4">
       <form onSubmit={enviar} className="card flex w-full max-w-[400px] flex-col gap-4 p-7">
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-[10px] bg-brand text-ink">
-            <IcEmail tamanho={20} />
-          </div>
-          <div>
-            <h1 className="text-lg font-bold">Envio de Faturas</h1>
-            <div className="text-xs text-ink-3">{EMPRESA}</div>
-          </div>
+        <div className="flex flex-col items-center gap-3 pb-1 text-center">
+          <img src="./logo-lucminas.png" alt={EMPRESA} width={900} height={181} className="h-auto w-[240px]" />
+          <h1 className="text-lg font-bold">Envio de Faturas</h1>
         </div>
         <div className="flex flex-col gap-1.5">
           <label htmlFor="login-email" className="label">

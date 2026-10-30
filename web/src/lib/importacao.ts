@@ -1,4 +1,5 @@
-import type { Cliente, ClienteInput } from '../types';
+import type { Cliente, ClienteInput, Frota } from '../types';
+import { formatarReais, lerReais } from './dinheiro';
 import { chaveEmpresa, emailValido } from './normalizar';
 
 /*
@@ -23,6 +24,9 @@ export type ClienteLido = {
   para: string[];
   cc: string[];
   observacoes: string;
+  /** undefined = a planilha não informa (não mexe no que está cadastrado) */
+  diaEmissao?: number | null;
+  frotas?: Frota[];
   avisos: string[];
 };
 
@@ -34,13 +38,15 @@ export type Leitura = {
   temColunaCopia: boolean;
 };
 
-type Coluna = 'nome' | 'apelidos' | 'cnpj' | 'para' | 'cc' | 'obs';
+type Coluna = 'nome' | 'apelidos' | 'cnpj' | 'para' | 'cc' | 'obs' | 'dia' | 'frotas';
 
 const PADROES: [Coluna, RegExp][] = [
   ['cc', /^(c[oó]pia|cc|com c[oó]pia)/],
   ['apelidos', /(outros nomes|apelido|tamb[eé]m aparece)/],
   ['cnpj', /cnpj/],
   ['obs', /observ|^obs/],
+  ['dia', /(dia d[ae] emiss|emiss[aã]o|dia da fatura)/],
+  ['frotas', /frota/],
   ['para', /(e-?mails?|para|destinat)/],
   ['nome', /(cliente|nome|empresa|raz[aã]o)/],
 ];
@@ -124,7 +130,9 @@ export function lerPlanilha(linhas: Celula[][]): Leitura {
     const apelidos = cel(l, 'apelidos').split(/[;,]/).map((a) => a.trim().toUpperCase()).filter(Boolean);
     const cnpj = cel(l, 'cnpj');
     const obs = cel(l, 'obs');
-    if (!nome && !para.length && !cc.length && !apelidos.length && !obs) continue;
+    const dia = cel(l, 'dia');
+    const frotasTxt = cel(l, 'frotas');
+    if (!nome && !para.length && !cc.length && !apelidos.length && !obs && !dia && !frotasTxt) continue;
 
     if (nome) {
       const k = chaveEmpresa(nome);
@@ -154,6 +162,16 @@ export function lerPlanilha(linhas: Celula[][]): Leitura {
     }
     for (const a of apelidos) if (!c.apelidos.includes(a)) c.apelidos.push(a);
     if (cnpj && !c.cnpj) c.cnpj = cnpj;
+    if (dia) {
+      const n = Number(dia);
+      if (Number.isInteger(n) && n >= 1 && n <= 31) c.diaEmissao = n;
+      else c.avisos.push(`Linha ${numLinha}: dia de emissão "${dia}" inválido (use 1 a 31). Ignorado.`);
+    }
+    if (frotasTxt) {
+      const { frotas, problemas } = lerFrotasTexto(frotasTxt);
+      c.frotas = [...(c.frotas ?? []), ...frotas.filter((f) => !(c.frotas ?? []).some((x) => x.numero === f.numero))];
+      c.avisos.push(...problemas.map((pr) => `Linha ${numLinha}: ${pr}`));
+    }
     if (obs) c.observacoes = c.observacoes ? `${c.observacoes} ${obs}` : obs;
   }
 
@@ -164,6 +182,30 @@ export function lerPlanilha(linhas: Celula[][]): Leitura {
 
   return { clientes: ordem, avisosGerais, temColunaCopia: m.cc !== undefined };
 }
+
+/** "F-101 = 1.500,00 (Empilhadeira 2,5t); F-102 = 980,50" → frotas */
+export function lerFrotasTexto(texto: string): { frotas: Frota[]; problemas: string[] } {
+  const frotas: Frota[] = [];
+  const problemas: string[] = [];
+  for (const parte of texto.split(/[;\n]+/).map((x) => x.trim()).filter(Boolean)) {
+    const m = /^(.+?)\s*(?:=\s*([^()]+?))?\s*(?:\((.*)\))?$/.exec(parte);
+    const numero = (m?.[1] ?? '').trim().toUpperCase();
+    if (!numero) continue;
+    let valor = 0;
+    if (m?.[2]) {
+      const v = lerReais(m[2]);
+      if (v === null) problemas.push(`valor "${m[2]}" da frota ${numero} não entendido; ficou sem valor.`);
+      else valor = v;
+    }
+    frotas.push({ numero, valor, descricao: (m?.[3] ?? '').trim() });
+  }
+  return { frotas, problemas };
+}
+
+export const frotasParaTexto = (frotas: Frota[]) =>
+  frotas
+    .map((f) => `${f.numero} = ${formatarReais(f.valor).replace(/^R\$\s*/, '')}${f.descricao ? ` (${f.descricao})` : ''}`)
+    .join('; ');
 
 export type Distribuicao = 'todos_para' | 'primeiro_para';
 
@@ -201,7 +243,13 @@ export function proporImportacao(leitura: Leitura, clientes: Cliente[], dist: Di
     }
 
     if (!existente) {
-      return { lido, acao: 'novo', existente: null, novosEmails: [], input: { nome: lido.nome, apelidos: lido.apelidos, cnpj: lido.cnpj, para, cc, observacoes: lido.observacoes } };
+      return {
+        lido,
+        acao: 'novo',
+        existente: null,
+        novosEmails: [],
+        input: { nome: lido.nome, apelidos: lido.apelidos, cnpj: lido.cnpj, para, cc, observacoes: lido.observacoes, diaEmissao: lido.diaEmissao, frotas: lido.frotas },
+      };
     }
 
     const jaTem = new Set([...existente.para, ...existente.cc]);
@@ -209,7 +257,9 @@ export function proporImportacao(leitura: Leitura, clientes: Cliente[], dist: Di
     const novosCc = cc.filter((e) => !jaTem.has(e) && !novosPara.includes(e));
     const novosApelidos = lido.apelidos.filter((a) => !existente.apelidos.includes(a) && chaveEmpresa(a) !== chaveEmpresa(existente.nome));
     const obsNova = lido.observacoes && !existente.observacoes.includes(lido.observacoes);
-    const muda = novosPara.length || novosCc.length || novosApelidos.length || obsNova || (lido.cnpj && !existente.cnpj);
+    const diaMuda = lido.diaEmissao !== undefined && lido.diaEmissao !== existente.diaEmissao;
+    const frotasMudam = lido.frotas !== undefined && JSON.stringify(lido.frotas) !== JSON.stringify(existente.frotas);
+    const muda = novosPara.length || novosCc.length || novosApelidos.length || obsNova || (lido.cnpj && !existente.cnpj) || diaMuda || frotasMudam;
 
     return {
       lido,
@@ -224,12 +274,15 @@ export function proporImportacao(leitura: Leitura, clientes: Cliente[], dist: Di
         para: [...existente.para, ...novosPara],
         cc: [...existente.cc, ...novosCc],
         observacoes: obsNova ? [existente.observacoes, lido.observacoes].filter(Boolean).join(' ') : existente.observacoes,
+        // a planilha manda no faturamento quando informa; se não informa, fica o que está cadastrado
+        diaEmissao: lido.diaEmissao,
+        frotas: lido.frotas,
       },
     };
   });
 }
 
-const CABECALHO = ['Nome no arquivo', 'Outros nomes', 'CNPJ', 'Para', 'Cópia', 'Observações'];
+const CABECALHO = ['Nome no arquivo', 'Outros nomes', 'CNPJ', 'Para', 'Cópia', 'Observações', 'Dia de emissão', 'Frotas'];
 
 function paraCsv(linhas: string[][]): string {
   return '\ufeff' + linhas.map((l) => l.map((c) => (/[;"\n]/.test(c) ? `"${c.replace(/"/g, '""')}"` : c)).join(';')).join('\r\n');
@@ -239,7 +292,7 @@ function paraCsv(linhas: string[][]): string {
 export function exportarCsv(clientes: Cliente[]): string {
   return paraCsv([
     CABECALHO,
-    ...clientes.map((c) => [c.nome, c.apelidos.join('; '), c.cnpj, c.para.join('; '), c.cc.join('; '), c.observacoes]),
+    ...clientes.map((c) => [c.nome, c.apelidos.join('; '), c.cnpj, c.para.join('; '), c.cc.join('; '), c.observacoes, c.diaEmissao ? String(c.diaEmissao) : '', frotasParaTexto(c.frotas)]),
   ]);
 }
 
@@ -247,7 +300,7 @@ export function exportarCsv(clientes: Cliente[]): string {
 export function modeloCsv(): string {
   return paraCsv([
     CABECALHO,
-    ['EMPRESA EXEMPLO', 'EXEMPLO; EMPRESA EXEMPLO LTDA', '00.000.000/0000-00', 'financeiro@exemplo.com.br; contas@exemplo.com.br', 'contador@escritorio.com.br', 'Falar com a Ana'],
+    ['EMPRESA EXEMPLO', 'EXEMPLO; EMPRESA EXEMPLO LTDA', '00.000.000/0000-00', 'financeiro@exemplo.com.br; contas@exemplo.com.br', 'contador@escritorio.com.br', 'Falar com a Ana', '5', 'F-101 = 1.500,00 (Empilhadeira 2,5t); F-102 = 980,50'],
   ]);
 }
 
