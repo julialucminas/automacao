@@ -7,6 +7,7 @@ import { EMPRESA, REMETENTE } from '../lib/email';
 import { IcFechar, IcSair } from './Icones';
 import { MODO_DEMO } from '../api';
 import { TrocarSenha } from './TrocarSenha';
+import { useVersaoNova } from '../lib/versao';
 
 export function Layout() {
   const { usuario, sair, lote, clientes, envios, aviso, fecharAviso, pendentesParaMim, naoLidas, solicitacoes, ehFinanceiro, aguardandoAprovacao, propostas, movimentacoes } =
@@ -14,6 +15,7 @@ export function Layout() {
   const local = useLocation();
   const avisosLote = lote ? lote.itens.filter((i) => temAviso(i, clientes)).length : 0;
   const [trocandoSenha, setTrocandoSenha] = useState(false);
+  const versaoNova = useVersaoNova();
   const comoChamar = usuario?.chamar?.trim() || usuario?.nome.trim().split(/\s+/)[0] || '';
   const devolvidos = envios.filter((e) => e.status === 'devolvido').length;
 
@@ -111,6 +113,14 @@ export function Layout() {
       </header>
 
       <main className="mx-auto max-w-[1280px] px-4 py-6 sm:px-6">
+        {versaoNova && (
+          <div role="status" className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border-2 border-brand bg-brand-soft px-4 py-3 text-[14px]">
+            <b>O sistema foi atualizado.</b>
+            <button type="button" className="btn-primary btn-sm" onClick={() => window.location.reload()}>
+              Carregar a versão nova
+            </button>
+          </div>
+        )}
         {pendentesParaMim.length > 0 && !local.pathname.startsWith('/solicitacoes') && (
           <div role="status" className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border-2 border-brand bg-brand-soft px-4 py-3">
             <div className="text-[14px]">
