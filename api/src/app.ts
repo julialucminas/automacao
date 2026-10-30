@@ -14,6 +14,9 @@ declare module 'fastify' {
 }
 
 class Invalido extends Error {}
+const invalido = (m: string): never => {
+  throw new Invalido(m);
+};
 
 // ---------- validação dos dados que chegam ----------
 const texto = (v: unknown, campo: string, max = 500): string => {
@@ -42,6 +45,24 @@ function lerDiaEmissao(v: unknown): number | null | undefined {
   if (v === null || v === '') return null;
   const n = Number(v);
   if (!Number.isInteger(n) || n < 1 || n > 31) throw new Invalido('Dia de emissão deve ser entre 1 e 31.');
+  return n;
+}
+
+const DATA_ISO = /^\d{4}-\d{2}-\d{2}$/;
+function lerDataIso(v: unknown, campo: string): string | null | undefined {
+  if (v === undefined) return undefined;
+  if (v === null || v === '') return null;
+  const s = String(v);
+  const d = new Date(s + 'T00:00:00Z');
+  if (!DATA_ISO.test(s) || isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== s) throw new Invalido(`${campo} inválida.`);
+  return s;
+}
+
+function lerPeriodo(v: unknown): number | null | undefined {
+  if (v === undefined) return undefined;
+  if (v === null || v === '') return null;
+  const n = Number(v);
+  if (!Number.isInteger(n) || n < 1 || n > 366) throw new Invalido('O período deve ser de 1 a 366 dias.');
   return n;
 }
 
@@ -74,6 +95,9 @@ export function lerCliente(corpo: unknown, id?: string): ClienteInput {
     observacoes: texto(b.observacoes, 'observacoes', 2000),
     diaEmissao: lerDiaEmissao(b.diaEmissao),
     frotas: lerFrotas(b.frotas),
+    regra: b.regra === undefined ? undefined : b.regra === 'periodo' ? 'periodo' : b.regra === 'dia' ? 'dia' : invalido('Regra de faturamento inválida.'),
+    inicioLocacao: lerDataIso(b.inicioLocacao, 'Data de início da locação'),
+    periodoDias: lerPeriodo(b.periodoDias),
   };
 }
 
@@ -184,6 +208,29 @@ export function criarApp(db: Banco, opcoes: { cookieSeguro: boolean; logger?: bo
     const apelido = texto((req.body as Record<string, unknown> | undefined)?.apelido, 'apelido', 200).toUpperCase();
     if (!apelido) throw new Invalido('Informe o nome.');
     return repo.adicionarApelido(req.params.id, apelido, req.usuario.id);
+  });
+
+  // ---------- faturamentos (calendário) ----------
+  app.get<{ Querystring: { de?: string; ate?: string } }>('/api/faturamentos', { preHandler: exigirLogin }, async (req) => {
+    const de = lerDataIso(req.query.de, 'Data inicial');
+    const ate = lerDataIso(req.query.ate, 'Data final');
+    if (!de || !ate) throw new Invalido('Informe o período.');
+    return repo.listarFaturamentos(de, ate);
+  });
+
+  app.post('/api/faturamentos', { preHandler: exigirLogin }, async (req, reply) => {
+    const b = (req.body ?? {}) as Record<string, unknown>;
+    const data = lerDataIso(b.data, 'Data');
+    if (!data || typeof b.clienteId !== 'string') throw new Invalido('Informe cliente e data.');
+    repo.marcarFaturado(b.clienteId, data, req.usuario.id);
+    return reply.code(201).send({ ok: true });
+  });
+
+  app.delete<{ Params: { clienteId: string; data: string } }>('/api/faturamentos/:clienteId/:data', { preHandler: exigirLogin }, async (req) => {
+    const data = lerDataIso(req.params.data, 'Data');
+    if (!data) throw new Invalido('Data inválida.');
+    repo.desmarcarFaturado(req.params.clienteId, data, req.usuario.id);
+    return { ok: true };
   });
 
   // ---------- envios ----------

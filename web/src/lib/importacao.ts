@@ -1,5 +1,6 @@
 import type { Cliente, ClienteInput, Frota } from '../types';
 import { formatarReais, lerReais } from './dinheiro';
+import { dataBr, lerData } from './calendario';
 import { chaveEmpresa, emailValido } from './normalizar';
 
 /*
@@ -27,6 +28,9 @@ export type ClienteLido = {
   /** undefined = a planilha não informa (não mexe no que está cadastrado) */
   diaEmissao?: number | null;
   frotas?: Frota[];
+  regra?: 'dia' | 'periodo';
+  inicioLocacao?: string | null;
+  periodoDias?: number | null;
   avisos: string[];
 };
 
@@ -38,7 +42,7 @@ export type Leitura = {
   temColunaCopia: boolean;
 };
 
-type Coluna = 'nome' | 'apelidos' | 'cnpj' | 'para' | 'cc' | 'obs' | 'dia' | 'frotas';
+type Coluna = 'nome' | 'apelidos' | 'cnpj' | 'para' | 'cc' | 'obs' | 'dia' | 'frotas' | 'inicio' | 'periodo';
 
 const PADROES: [Coluna, RegExp][] = [
   ['cc', /^(c[oó]pia|cc|com c[oó]pia)/],
@@ -47,6 +51,8 @@ const PADROES: [Coluna, RegExp][] = [
   ['obs', /observ|^obs/],
   ['dia', /(dia d[ae] emiss|emiss[aã]o|dia da fatura)/],
   ['frotas', /frota/],
+  ['inicio', /in[ií]cio/],
+  ['periodo', /per[ií]odo|a cada/],
   ['para', /(e-?mails?|para|destinat)/],
   ['nome', /(cliente|nome|empresa|raz[aã]o)/],
 ];
@@ -132,7 +138,9 @@ export function lerPlanilha(linhas: Celula[][]): Leitura {
     const obs = cel(l, 'obs');
     const dia = cel(l, 'dia');
     const frotasTxt = cel(l, 'frotas');
-    if (!nome && !para.length && !cc.length && !apelidos.length && !obs && !dia && !frotasTxt) continue;
+    const inicioBruto = m.inicio === undefined ? '' : l[m.inicio];
+    const periodoTxt = cel(l, 'periodo');
+    if (!nome && !para.length && !cc.length && !apelidos.length && !obs && !dia && !frotasTxt && !texto(inicioBruto) && !periodoTxt) continue;
 
     if (nome) {
       const k = chaveEmpresa(nome);
@@ -167,6 +175,16 @@ export function lerPlanilha(linhas: Celula[][]): Leitura {
       if (Number.isInteger(n) && n >= 1 && n <= 31) c.diaEmissao = n;
       else c.avisos.push(`Linha ${numLinha}: dia de emissão "${dia}" inválido (use 1 a 31). Ignorado.`);
     }
+    if (texto(inicioBruto)) {
+      const d = lerData(inicioBruto);
+      if (d) c.inicioLocacao = d;
+      else c.avisos.push(`Linha ${numLinha}: data de início "${texto(inicioBruto)}" não entendida (use dd/mm/aaaa). Ignorada.`);
+    }
+    if (periodoTxt) {
+      const n = Number(periodoTxt.replace(/\D+$/, '').trim());
+      if (Number.isInteger(n) && n >= 1 && n <= 366) c.periodoDias = n;
+      else c.avisos.push(`Linha ${numLinha}: período "${periodoTxt}" inválido (use o número de dias). Ignorado.`);
+    }
     if (frotasTxt) {
       const { frotas, problemas } = lerFrotasTexto(frotasTxt);
       c.frotas = [...(c.frotas ?? []), ...frotas.filter((f) => !(c.frotas ?? []).some((x) => x.numero === f.numero))];
@@ -176,6 +194,9 @@ export function lerPlanilha(linhas: Celula[][]): Leitura {
   }
 
   for (const c of ordem) {
+    if (c.inicioLocacao && c.periodoDias) c.regra = 'periodo';
+    else if (c.inicioLocacao || c.periodoDias) c.avisos.push('Para faturar por período, informe a data de início E o período em dias.');
+    else if (c.diaEmissao) c.regra = 'dia';
     if (!c.para.length && !c.cc.length) c.avisos.push('Nenhum e-mail válido.');
     c.avisos.push(...avisosDeDominio([...c.para, ...c.cc]));
   }
@@ -248,7 +269,19 @@ export function proporImportacao(leitura: Leitura, clientes: Cliente[], dist: Di
         acao: 'novo',
         existente: null,
         novosEmails: [],
-        input: { nome: lido.nome, apelidos: lido.apelidos, cnpj: lido.cnpj, para, cc, observacoes: lido.observacoes, diaEmissao: lido.diaEmissao, frotas: lido.frotas },
+        input: {
+          nome: lido.nome,
+          apelidos: lido.apelidos,
+          cnpj: lido.cnpj,
+          para,
+          cc,
+          observacoes: lido.observacoes,
+          diaEmissao: lido.diaEmissao,
+          frotas: lido.frotas,
+          regra: lido.regra,
+          inicioLocacao: lido.regra === 'periodo' ? lido.inicioLocacao : undefined,
+          periodoDias: lido.regra === 'periodo' ? lido.periodoDias : undefined,
+        },
       };
     }
 
@@ -259,7 +292,11 @@ export function proporImportacao(leitura: Leitura, clientes: Cliente[], dist: Di
     const obsNova = lido.observacoes && !existente.observacoes.includes(lido.observacoes);
     const diaMuda = lido.diaEmissao !== undefined && lido.diaEmissao !== existente.diaEmissao;
     const frotasMudam = lido.frotas !== undefined && JSON.stringify(lido.frotas) !== JSON.stringify(existente.frotas);
-    const muda = novosPara.length || novosCc.length || novosApelidos.length || obsNova || (lido.cnpj && !existente.cnpj) || diaMuda || frotasMudam;
+    const regraMuda =
+      lido.regra !== undefined &&
+      (lido.regra !== existente.regra ||
+        (lido.regra === 'periodo' && (lido.inicioLocacao !== existente.inicioLocacao || lido.periodoDias !== existente.periodoDias)));
+    const muda = novosPara.length || novosCc.length || novosApelidos.length || obsNova || (lido.cnpj && !existente.cnpj) || diaMuda || frotasMudam || regraMuda;
 
     return {
       lido,
@@ -277,12 +314,15 @@ export function proporImportacao(leitura: Leitura, clientes: Cliente[], dist: Di
         // a planilha manda no faturamento quando informa; se não informa, fica o que está cadastrado
         diaEmissao: lido.diaEmissao,
         frotas: lido.frotas,
+        regra: lido.regra,
+        inicioLocacao: lido.regra === 'periodo' ? lido.inicioLocacao : undefined,
+        periodoDias: lido.regra === 'periodo' ? lido.periodoDias : undefined,
       },
     };
   });
 }
 
-const CABECALHO = ['Nome no arquivo', 'Outros nomes', 'CNPJ', 'Para', 'Cópia', 'Observações', 'Dia de emissão', 'Frotas'];
+const CABECALHO = ['Nome no arquivo', 'Outros nomes', 'CNPJ', 'Para', 'Cópia', 'Observações', 'Dia de emissão', 'Início da locação', 'Período (dias)', 'Frotas'];
 
 function paraCsv(linhas: string[][]): string {
   return '\ufeff' + linhas.map((l) => l.map((c) => (/[;"\n]/.test(c) ? `"${c.replace(/"/g, '""')}"` : c)).join(';')).join('\r\n');
@@ -292,7 +332,12 @@ function paraCsv(linhas: string[][]): string {
 export function exportarCsv(clientes: Cliente[]): string {
   return paraCsv([
     CABECALHO,
-    ...clientes.map((c) => [c.nome, c.apelidos.join('; '), c.cnpj, c.para.join('; '), c.cc.join('; '), c.observacoes, c.diaEmissao ? String(c.diaEmissao) : '', frotasParaTexto(c.frotas)]),
+    ...clientes.map((c) => [c.nome, c.apelidos.join('; '), c.cnpj, c.para.join('; '), c.cc.join('; '), c.observacoes,
+      c.regra === 'dia' && c.diaEmissao ? String(c.diaEmissao) : '',
+      c.regra === 'periodo' && c.inicioLocacao ? dataBr(c.inicioLocacao) : '',
+      c.regra === 'periodo' && c.periodoDias ? String(c.periodoDias) : '',
+      frotasParaTexto(c.frotas),
+    ]),
   ]);
 }
 
@@ -300,7 +345,7 @@ export function exportarCsv(clientes: Cliente[]): string {
 export function modeloCsv(): string {
   return paraCsv([
     CABECALHO,
-    ['EMPRESA EXEMPLO', 'EXEMPLO; EMPRESA EXEMPLO LTDA', '00.000.000/0000-00', 'financeiro@exemplo.com.br; contas@exemplo.com.br', 'contador@escritorio.com.br', 'Falar com a Ana', '5', 'F-101 = 1.500,00 (Empilhadeira 2,5t); F-102 = 980,50'],
+    ['EMPRESA EXEMPLO', 'EXEMPLO; EMPRESA EXEMPLO LTDA', '00.000.000/0000-00', 'financeiro@exemplo.com.br; contas@exemplo.com.br', 'contador@escritorio.com.br', 'Falar com a Ana', '5', '', '', 'F-101 = 1.500,00 (Empilhadeira 2,5t); F-102 = 980,50'],
   ]);
 }
 

@@ -68,7 +68,10 @@ describe('proporImportacao', () => {
     para: ['joao@alfa.com.br'],
     cc: [],
     observacoes: '',
+    regra: 'dia',
     diaEmissao: null,
+    inicioLocacao: null,
+    periodoDias: null,
     frotas: [],
     ativo: true,
     atualizadoEm: '',
@@ -105,7 +108,7 @@ describe('CSV', () => {
 
 describe('exportarCsv', () => {
   it('o que é exportado volta igual na importação', () => {
-    const c: Cliente = { id: '1', nome: 'ALFA; BETA', apelidos: ['A'], cnpj: '1', para: ['a@a.com', 'b@a.com'], cc: ['c@c.com'], observacoes: 'diz "oi"', diaEmissao: 5, frotas: [{ numero: 'F-1', valor: 150000, descricao: '' }], ativo: true, atualizadoEm: '' };
+    const c: Cliente = { id: '1', nome: 'ALFA; BETA', apelidos: ['A'], cnpj: '1', para: ['a@a.com', 'b@a.com'], cc: ['c@c.com'], observacoes: 'diz "oi"', regra: 'dia', inicioLocacao: null, periodoDias: null, diaEmissao: 5, frotas: [{ numero: 'F-1', valor: 150000, descricao: '' }], ativo: true, atualizadoEm: '' };
     const r = lerPlanilha(lerCsv(exportarCsv([c])));
     expect(r.clientes[0]).toMatchObject({ nome: 'ALFA; BETA', apelidos: ['A'], para: ['a@a.com', 'b@a.com'], cc: ['c@c.com'], observacoes: 'diz "oi"' });
   });
@@ -130,5 +133,25 @@ describe('faturamento na planilha', () => {
     expect(r.clientes[0].avisos.join(' ')).toMatch(/dia de emissão "40" inválido/);
     expect(r.clientes[0].avisos.join(' ')).toMatch(/não entendido/);
     expect(r.clientes[0].frotas).toEqual([{ numero: 'F1', valor: 0, descricao: '' }]);
+  });
+});
+
+describe('regra por período na planilha', () => {
+  it('lê início e período (inclusive data do Excel) e exporta de volta', () => {
+    const r = lerPlanilha([
+      ['Cliente', 'Email', 'Início da locação', 'Período (dias)'],
+      ['Alfa', 'a@alfa.com', '10/10/2026', '30 dias'],
+      ['Beta', 'b@beta.com', new Date(Date.UTC(2026, 10, 1)), '15'],
+      ['Gama', 'g@gama.com', '10/10/2026', ''],
+    ]);
+    expect(r.clientes[0]).toMatchObject({ regra: 'periodo', inicioLocacao: '2026-10-10', periodoDias: 30 });
+    expect(r.clientes[1]).toMatchObject({ regra: 'periodo', inicioLocacao: '2026-11-01', periodoDias: 15 });
+    expect(r.clientes[2].regra).toBeUndefined();
+    expect(r.clientes[2].avisos.join(' ')).toMatch(/data de início E o período/);
+
+    const c: Cliente = { id: '1', nome: 'ALFA', apelidos: [], cnpj: '', para: ['a@alfa.com'], cc: [], observacoes: '', regra: 'periodo', diaEmissao: null, inicioLocacao: '2026-10-10', periodoDias: 30, frotas: [], ativo: true, atualizadoEm: '' };
+    const volta = lerPlanilha(lerCsv(exportarCsv([c])));
+    expect(volta.clientes[0]).toMatchObject({ regra: 'periodo', inicioLocacao: '2026-10-10', periodoDias: 30 });
+    expect(proporImportacao(volta, [c], 'todos_para')[0].acao).toBe('igual');
   });
 });

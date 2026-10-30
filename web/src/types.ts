@@ -5,8 +5,12 @@ export type Frota = { numero: string; valor: number; descricao: string };
 
 export type Cliente = {
   id: string;
+  /** 'dia' = todo mês no diaEmissao; 'periodo' = a cada periodoDias a partir de inicioLocacao */
+  regra: 'dia' | 'periodo';
   /** Dia do mês em que a fatura é emitida (1 a 31). */
   diaEmissao: number | null;
+  inicioLocacao: string | null; // AAAA-MM-DD
+  periodoDias: number | null;
   frotas: Frota[];
   /** Nome como aparece no arquivo da fatura (MAIÚSCULO). */
   nome: string;
@@ -17,15 +21,23 @@ export type Cliente = {
   cc: string[];
   observacoes: string;
   ativo: boolean;
+  /** quando entrou no sistema; o calendário só considera faturas a partir daí */
+  criadoEm?: string; // ISO
   atualizadoEm: string; // ISO
 };
 
 /** diaEmissao/frotas ausentes = manter como está. */
-export type ClienteInput = Omit<Cliente, 'id' | 'atualizadoEm' | 'ativo' | 'diaEmissao' | 'frotas'> & {
+export type ClienteInput = Omit<Cliente, 'id' | 'atualizadoEm' | 'ativo' | 'diaEmissao' | 'frotas' | 'regra' | 'inicioLocacao' | 'periodoDias'> & {
   id?: string;
   diaEmissao?: number | null;
   frotas?: Frota[];
+  regra?: 'dia' | 'periodo';
+  inicioLocacao?: string | null;
+  periodoDias?: number | null;
 };
+
+/** Faturamento marcado no calendário (cliente + data prevista). */
+export type Faturamento = { clienteId: string; data: string; marcadoEm: string; marcadoPor: string; origem: 'manual' | 'envio' };
 
 /** Um arquivo lido da pasta ou do zip. */
 export type ArquivoLido = {

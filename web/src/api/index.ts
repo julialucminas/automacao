@@ -5,7 +5,7 @@
  */
 import { mockApi } from './mock';
 import { httpApi } from './http';
-import type { Cliente, ClienteInput, Envio, Usuario } from '../types';
+import type { Cliente, ClienteInput, Envio, Faturamento, Usuario } from '../types';
 
 export type EnvioPedido = {
   referencia: string;
@@ -28,6 +28,10 @@ export interface Api {
   salvarCliente(input: ClienteInput): Promise<Cliente>;
   definirAtivo(id: string, ativo: boolean): Promise<void>;
   adicionarApelido(id: string, apelido: string): Promise<Cliente>;
+
+  listarFaturamentos(de: string, ate: string): Promise<Faturamento[]>;
+  marcarFaturado(clienteId: string, data: string): Promise<void>;
+  desmarcarFaturado(clienteId: string, data: string): Promise<void>;
 
   listarEnvios(): Promise<Envio[]>;
   /** Envia um e-mail (SMTP) e salva a cópia em Enviados (IMAP). */

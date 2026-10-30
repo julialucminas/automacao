@@ -6,8 +6,12 @@ export type Frota = { numero: string; valor: number; descricao: string };
 
 export type Cliente = {
   id: string;
+  /** 'dia' = todo mês no diaEmissao; 'periodo' = a cada periodoDias a partir de inicioLocacao */
+  regra: 'dia' | 'periodo';
   /** Dia do mês em que a fatura é emitida (1 a 31), ou null se não informado. */
   diaEmissao: number | null;
+  inicioLocacao: string | null; // AAAA-MM-DD
+  periodoDias: number | null;
   frotas: Frota[];
   nome: string;
   apelidos: string[];
@@ -16,15 +20,21 @@ export type Cliente = {
   cc: string[];
   observacoes: string;
   ativo: boolean;
+  criadoEm: string;
   atualizadoEm: string;
 };
 
 /** diaEmissao/frotas ausentes = manter como está (ou vazio, se for cliente novo). */
-export type ClienteInput = Omit<Cliente, 'id' | 'ativo' | 'atualizadoEm' | 'diaEmissao' | 'frotas'> & {
+export type ClienteInput = Omit<Cliente, 'id' | 'ativo' | 'criadoEm' | 'atualizadoEm' | 'diaEmissao' | 'frotas' | 'regra' | 'inicioLocacao' | 'periodoDias'> & {
   id?: string;
   diaEmissao?: number | null;
   frotas?: Frota[];
+  regra?: 'dia' | 'periodo';
+  inicioLocacao?: string | null;
+  periodoDias?: number | null;
 };
+
+export type Faturamento = { clienteId: string; data: string; marcadoEm: string; marcadoPor: string; origem: 'manual' | 'envio' };
 
 export type Envio = {
   id: string;
@@ -111,6 +121,18 @@ const MIGRACOES = [
   // faturamento: dia de emissão e frotas (número + valor) de cada cliente
   `ALTER TABLE clientes ADD COLUMN dia_emissao INTEGER;
    ALTER TABLE clientes ADD COLUMN frotas TEXT NOT NULL DEFAULT '[]';`,
+  // regra por período + faturamentos marcados (calendário)
+  `ALTER TABLE clientes ADD COLUMN regra TEXT NOT NULL DEFAULT 'dia';
+   ALTER TABLE clientes ADD COLUMN inicio_locacao TEXT;
+   ALTER TABLE clientes ADD COLUMN periodo_dias INTEGER;
+   CREATE TABLE faturamentos (
+     cliente_id TEXT NOT NULL REFERENCES clientes(id) ON DELETE CASCADE,
+     data TEXT NOT NULL,
+     marcado_em TEXT NOT NULL,
+     usuario_id INTEGER REFERENCES usuarios(id),
+     origem TEXT NOT NULL DEFAULT 'manual',
+     PRIMARY KEY (cliente_id, data)
+   );`,
 ];
 
 export function abrirBanco(caminho: string) {
@@ -139,6 +161,9 @@ type LinhaCliente = {
   id: string;
   dia_emissao: number | null;
   frotas: string;
+  regra: string;
+  inicio_locacao: string | null;
+  periodo_dias: number | null;
   nome: string;
   apelidos: string;
   cnpj: string;
@@ -146,12 +171,16 @@ type LinhaCliente = {
   cc: string;
   observacoes: string;
   ativo: number;
+  criado_em: string;
   atualizado_em: string;
 };
 
 const deLinhaCliente = (r: LinhaCliente): Cliente => ({
   id: r.id,
+  regra: r.regra === 'periodo' ? 'periodo' : 'dia',
   diaEmissao: r.dia_emissao ?? null,
+  inicioLocacao: r.inicio_locacao ?? null,
+  periodoDias: r.periodo_dias ?? null,
   frotas: JSON.parse(r.frotas),
   nome: r.nome,
   apelidos: lista(r.apelidos),
@@ -160,6 +189,7 @@ const deLinhaCliente = (r: LinhaCliente): Cliente => ({
   cc: lista(r.cc),
   observacoes: r.observacoes,
   ativo: !!r.ativo,
+  criadoEm: r.criado_em,
   atualizadoEm: r.atualizado_em,
 });
 
@@ -251,7 +281,7 @@ export function repositorio(db: Banco) {
           const antes = buscarCliente(input.id);
           db.prepare(
             `UPDATE clientes SET nome = ?, apelidos = ?, cnpj = ?, para = ?, cc = ?, observacoes = ?, dia_emissao = ?, frotas = ?,
-               atualizado_em = ?, atualizado_por = ?
+               regra = ?, inicio_locacao = ?, periodo_dias = ?, atualizado_em = ?, atualizado_por = ?
              WHERE id = ?`,
           ).run(
             input.nome,
@@ -262,6 +292,9 @@ export function repositorio(db: Banco) {
             input.observacoes,
             input.diaEmissao === undefined ? antes.diaEmissao : input.diaEmissao,
             json(input.frotas ?? antes.frotas),
+            input.regra ?? antes.regra,
+            input.inicioLocacao === undefined ? antes.inicioLocacao : input.inicioLocacao,
+            input.periodoDias === undefined ? antes.periodoDias : input.periodoDias,
             t,
             usuarioId,
             input.id,
@@ -272,8 +305,9 @@ export function repositorio(db: Banco) {
         }
         const id = randomUUID();
         db.prepare(
-          `INSERT INTO clientes (id, nome, apelidos, cnpj, para, cc, observacoes, dia_emissao, frotas, criado_em, atualizado_em, atualizado_por)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO clientes (id, nome, apelidos, cnpj, para, cc, observacoes, dia_emissao, frotas, regra, inicio_locacao, periodo_dias,
+             criado_em, atualizado_em, atualizado_por)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         ).run(
           id,
           input.nome,
@@ -284,6 +318,9 @@ export function repositorio(db: Banco) {
           input.observacoes,
           input.diaEmissao ?? null,
           json(input.frotas ?? []),
+          input.regra ?? 'dia',
+          input.inicioLocacao ?? null,
+          input.periodoDias ?? null,
           t,
           t,
           usuarioId,
@@ -310,6 +347,31 @@ export function repositorio(db: Banco) {
         registrar(id, usuarioId, `vinculou o nome "${apelido}"`, null, null);
       }
       return buscarCliente(id);
+    },
+
+    // ---------- faturamentos (calendário) ----------
+    listarFaturamentos(de: string, ate: string): Faturamento[] {
+      return (
+        db
+          .prepare(
+            `SELECT f.cliente_id, f.data, f.marcado_em, f.origem, COALESCE(u.nome, '') AS nome
+             FROM faturamentos f LEFT JOIN usuarios u ON u.id = f.usuario_id
+             WHERE f.data BETWEEN ? AND ? ORDER BY f.data`,
+          )
+          .all(de, ate) as { cliente_id: string; data: string; marcado_em: string; origem: string; nome: string }[]
+      ).map((r) => ({ clienteId: r.cliente_id, data: r.data, marcadoEm: r.marcado_em, marcadoPor: r.nome, origem: r.origem === 'envio' ? 'envio' : 'manual' }));
+    },
+    marcarFaturado(clienteId: string, data: string, usuarioId: number, origem: 'manual' | 'envio' = 'manual') {
+      buscarCliente(clienteId);
+      db.prepare(
+        `INSERT INTO faturamentos (cliente_id, data, marcado_em, usuario_id, origem) VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT (cliente_id, data) DO NOTHING`,
+      ).run(clienteId, data, agora(), usuarioId, origem);
+      registrar(clienteId, usuarioId, `marcou faturado em ${data}`, null, null);
+    },
+    desmarcarFaturado(clienteId: string, data: string, usuarioId: number) {
+      const r = db.prepare('DELETE FROM faturamentos WHERE cliente_id = ? AND data = ?').run(clienteId, data);
+      if (r.changes) registrar(clienteId, usuarioId, `desmarcou faturado em ${data}`, null, null);
     },
 
     // ---------- envios ----------

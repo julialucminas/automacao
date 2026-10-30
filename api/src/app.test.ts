@@ -118,3 +118,29 @@ describe('faturamento do cliente', () => {
     expect((await req('POST', '/api/clientes', { ...base, frotas: [{ numero: 'F1', valor: 10.5 }] })).statusCode).toBe(400);
   });
 });
+
+describe('regra por período e calendário', () => {
+  const base = { nome: 'Tumi', para: ['adm@tumi.com.br'] };
+  it('salva regra por período e valida', async () => {
+    const c = (await req('POST', '/api/clientes', { ...base, regra: 'periodo', inicioLocacao: '2026-10-10', periodoDias: 30 })).json();
+    expect(c).toMatchObject({ regra: 'periodo', inicioLocacao: '2026-10-10', periodoDias: 30 });
+    expect((await req('PUT', `/api/clientes/${c.id}`, { ...base, inicioLocacao: '2026-02-30' })).statusCode).toBe(400);
+    expect((await req('PUT', `/api/clientes/${c.id}`, { ...base, periodoDias: 0 })).statusCode).toBe(400);
+    expect((await req('PUT', `/api/clientes/${c.id}`, { ...base, regra: 'outra' })).statusCode).toBe(400);
+    // edição sem os campos mantém
+    expect((await req('PUT', `/api/clientes/${c.id}`, base)).json()).toMatchObject({ regra: 'periodo', periodoDias: 30 });
+  });
+
+  it('marca, lista por período e desmarca faturado', async () => {
+    const c = (await req('POST', '/api/clientes', base)).json();
+    expect((await req('POST', '/api/faturamentos', { clienteId: c.id, data: '2026-11-09' })).statusCode).toBe(201);
+    await req('POST', '/api/faturamentos', { clienteId: c.id, data: '2026-11-09' }); // repetido não duplica
+    const l = (await req('GET', '/api/faturamentos?de=2026-11-01&ate=2026-11-30')).json();
+    expect(l).toHaveLength(1);
+    expect(l[0]).toMatchObject({ clienteId: c.id, data: '2026-11-09', marcadoPor: 'Júlia', origem: 'manual' });
+    expect((await req('GET', '/api/faturamentos?de=2026-12-01&ate=2026-12-31')).json()).toHaveLength(0);
+    await req('DELETE', `/api/faturamentos/${c.id}/2026-11-09`);
+    expect((await req('GET', '/api/faturamentos?de=2026-11-01&ate=2026-11-30')).json()).toHaveLength(0);
+    expect((await req('POST', '/api/faturamentos', { clienteId: 'nao-existe', data: '2026-11-09' })).statusCode).toBe(404);
+  });
+});

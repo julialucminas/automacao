@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { Cliente, ClienteInput, Frota } from '../types';
 import { formatarReais, lerReais, reaisParaCampo } from '../lib/dinheiro';
+import { dataCurta, dataValida, descreverRegra, proximasDatas, regraDoCliente } from '../lib/calendario';
 import { emailValido } from '../lib/normalizar';
 import { useEstado } from '../state';
 import { IcFechar, IcMais } from './Icones';
@@ -15,13 +16,16 @@ export type Rascunho = {
   cc: string[];
   observacoes: string;
   ativo?: boolean;
+  regra: 'dia' | 'periodo';
   /** dia de emissão como texto do campo ('' = não informado) */
   dia: string;
+  inicio: string; // AAAA-MM-DD do campo de data
+  periodo: string;
   /** frotas com o valor como texto do campo, para permitir digitar à vontade */
   frotas: { numero: string; valor: string; descricao: string }[];
 };
 
-export const rascunhoVazio = (nome = ''): Rascunho => ({ nome, apelidos: '', cnpj: '', para: [], cc: [], observacoes: '', dia: '', frotas: [] });
+export const rascunhoVazio = (nome = ''): Rascunho => ({ nome, apelidos: '', cnpj: '', para: [], cc: [], observacoes: '', regra: 'dia', dia: '', inicio: '', periodo: '', frotas: [] });
 
 export const rascunhoDe = (c: Cliente): Rascunho => ({
   id: c.id,
@@ -32,7 +36,10 @@ export const rascunhoDe = (c: Cliente): Rascunho => ({
   cc: [...c.cc],
   observacoes: c.observacoes,
   ativo: c.ativo,
+  regra: c.regra,
   dia: c.diaEmissao ? String(c.diaEmissao) : '',
+  inicio: c.inicioLocacao ?? '',
+  periodo: c.periodoDias ? String(c.periodoDias) : '',
   frotas: c.frotas.map((f) => ({ numero: f.numero, valor: f.valor ? reaisParaCampo(f.valor) : '', descricao: f.descricao })),
 });
 
@@ -161,6 +168,14 @@ function Formulario({ inicial, fechar, aoSalvar }: { inicial: Rascunho; fechar: 
       if (!Number.isInteger(n) || n < 1 || n > 31) return setErro('O dia de emissão precisa ser um número de 1 a 31.');
       diaEmissao = n;
     }
+    let periodoDias: number | null = null;
+    if (d.periodo.trim()) {
+      const n = Number(d.periodo);
+      if (!Number.isInteger(n) || n < 1 || n > 366) return setErro('O período precisa ser um número de dias entre 1 e 366.');
+      periodoDias = n;
+    }
+    if (d.inicio && !dataValida(d.inicio)) return setErro('A data de início da locação não é válida.');
+    if (d.regra === 'periodo' && (!d.inicio) !== (!periodoDias)) return setErro('Para faturar por período, preencha a data de início e a quantidade de dias (ou deixe os dois vazios).');
     const frotas: Frota[] = [];
     for (const f of d.frotas) {
       const numero = f.numero.trim().toUpperCase();
@@ -174,7 +189,10 @@ function Formulario({ inicial, fechar, aoSalvar }: { inicial: Rascunho; fechar: 
 
     const input: ClienteInput = {
       id: d.id,
+      regra: d.regra,
       diaEmissao,
+      inicioLocacao: d.inicio || null,
+      periodoDias,
       frotas,
       nome,
       apelidos: d.apelidos.split(',').map((a) => a.trim().toUpperCase()).filter(Boolean),
@@ -285,28 +303,7 @@ function Faturamento({ d, setD }: { d: Rascunho; setD: (r: Rascunho) => void }) 
       <legend className="sr-only">Faturamento</legend>
       <div className="label">Faturamento</div>
 
-      <div className="flex flex-wrap items-end gap-3">
-        <div className="flex flex-col gap-1.5">
-          <label htmlFor="cad-dia" className="text-[13px] font-medium">
-            Dia de emissão da fatura
-          </label>
-          <div className="flex items-center gap-2">
-            <span className="text-ink-3">Todo dia</span>
-            <input
-              id="cad-dia"
-              type="number"
-              inputMode="numeric"
-              min={1}
-              max={31}
-              value={d.dia}
-              onChange={(e) => setD({ ...d, dia: e.target.value })}
-              placeholder="—"
-              className="input w-[84px] bg-white text-center"
-            />
-            <span className="text-ink-3">do mês</span>
-          </div>
-        </div>
-      </div>
+      <RegraCampos d={d} setD={setD} />
 
       <div className="flex flex-col gap-2">
         <div className="text-[13px] font-medium">Frotas de referência</div>
@@ -362,5 +359,65 @@ function Faturamento({ d, setD }: { d: Rascunho; setD: (r: Rascunho) => void }) 
         </div>
       </div>
     </fieldset>
+  );
+}
+
+function RegraCampos({ d, setD }: { d: Rascunho; setD: (r: Rascunho) => void }) {
+  const regra = regraDoCliente({
+    regra: d.regra,
+    diaEmissao: Number(d.dia) || null,
+    inicioLocacao: dataValida(d.inicio) ? d.inicio : null,
+    periodoDias: Number(d.periodo) || null,
+  });
+  const proximas = regra ? proximasDatas(regra, 3) : [];
+  const opcao = (valor: 'dia' | 'periodo', rotulo: string) => (
+    <label className={`flex min-h-[44px] flex-1 cursor-pointer items-center gap-2 rounded-[10px] border px-3 text-[13px] ${d.regra === valor ? 'border-ink bg-white font-semibold' : 'border-line-strong bg-white/60'}`}>
+      <input type="radio" name="regra" checked={d.regra === valor} onChange={() => setD({ ...d, regra: valor })} className="h-[18px] w-[18px] accent-ink" />
+      {rotulo}
+    </label>
+  );
+  return (
+    <div className="flex flex-col gap-2.5">
+      <div className="text-[13px] font-medium">Quando a fatura é emitida</div>
+      <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Regra de faturamento">
+        {opcao('dia', 'Dia fixo do mês')}
+        {opcao('periodo', 'Por período da locação')}
+      </div>
+
+      {d.regra === 'dia' ? (
+        <div className="flex items-center gap-2">
+          <label htmlFor="cad-dia" className="text-ink-3">
+            Todo dia
+          </label>
+          <input id="cad-dia" type="number" inputMode="numeric" min={1} max={31} value={d.dia} onChange={(e) => setD({ ...d, dia: e.target.value })} placeholder="—" className="input w-[84px] bg-white text-center" />
+          <span className="text-ink-3">do mês</span>
+        </div>
+      ) : (
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="cad-inicio" className="text-xs text-ink-3">
+              Início da locação
+            </label>
+            <input id="cad-inicio" type="date" value={d.inicio} onChange={(e) => setD({ ...d, inicio: e.target.value })} className="input w-auto bg-white" />
+          </div>
+          <div className="flex items-center gap-2">
+            <label htmlFor="cad-periodo" className="text-ink-3">
+              Fatura a cada
+            </label>
+            <input id="cad-periodo" type="number" inputMode="numeric" min={1} max={366} value={d.periodo} onChange={(e) => setD({ ...d, periodo: e.target.value })} placeholder="30" className="input w-[84px] bg-white text-center" />
+            <span className="text-ink-3">dias</span>
+          </div>
+        </div>
+      )}
+      <p className="text-xs text-ink-3">
+        {regra ? (
+          <>
+            {descreverRegra(regra)} · próximas: <b className="text-ink-2">{proximas.map(dataCurta).join(', ')}</b>
+          </>
+        ) : (
+          'Preencha para o cliente aparecer no Calendário.'
+        )}
+      </p>
+    </div>
   );
 }

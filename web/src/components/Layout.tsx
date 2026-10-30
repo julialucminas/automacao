@@ -22,6 +22,7 @@ export function Layout() {
 
   const abas = [
     { para: '/envio', rotulo: 'Envio do mês', badge: avisosLote, alerta: true },
+    { para: '/calendario', rotulo: 'Calendário', badge: 0, alerta: false },
     { para: '/clientes', rotulo: 'Clientes', badge: clientes.filter((c) => c.ativo).length, alerta: false },
     { para: '/historico', rotulo: 'Histórico', badge: devolvidos, alerta: true },
   ];

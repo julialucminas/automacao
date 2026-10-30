@@ -56,6 +56,14 @@ export const httpApi: Api = {
   },
   adicionarApelido: (id, apelido) => chamar('POST', `/api/clientes/${id}/apelidos`, { apelido }),
 
+  listarFaturamentos: (de, ate) => chamar('GET', `/api/faturamentos?de=${de}&ate=${ate}`),
+  marcarFaturado: async (clienteId, data) => {
+    await chamar('POST', '/api/faturamentos', { clienteId, data });
+  },
+  desmarcarFaturado: async (clienteId, data) => {
+    await chamar('DELETE', `/api/faturamentos/${encodeURIComponent(clienteId)}/${data}`);
+  },
+
   listarEnvios: () => chamar('GET', '/api/envios'),
   // o envio real (SMTP + cópia em Enviados) entra na próxima etapa; o servidor responde com a explicação
   enviar: (pedido) => chamar('POST', '/api/envios', { referencia: pedido.referencia, numero: pedido.numero, clienteId: pedido.clienteId }),

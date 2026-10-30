@@ -3,6 +3,7 @@ import { useEstado } from '../state';
 import { chaveEmpresa, semAcento } from '../lib/normalizar';
 import { data } from '../lib/email';
 import { formatarReais } from '../lib/dinheiro';
+import { descreverRegra, regraDoCliente } from '../lib/calendario';
 import { ClienteForm, rascunhoDe, rascunhoVazio, type Rascunho } from '../components/ClienteForm';
 import { Chip } from '../components/ui';
 import { IcBusca, IcMais } from '../components/Icones';
@@ -130,9 +131,9 @@ export function Clientes() {
                   {c.cc.length ? c.cc.map((e) => <span key={e}>{e}</span>) : <span className="text-ink-3">—</span>}
                 </div>
                 <div className="text-ink-2">
-                  {c.diaEmissao || c.frotas.length ? (
+                  {regraDoCliente(c) || c.frotas.length ? (
                     <>
-                      {c.diaEmissao && <div>Emissão todo dia {c.diaEmissao}</div>}
+                      {regraDoCliente(c) && <div>{descreverRegra(regraDoCliente(c))}</div>}
                       {c.frotas.length > 0 && (
                         <div title={c.frotas.map((f) => `${f.numero}: ${formatarReais(f.valor)}${f.descricao ? ` (${f.descricao})` : ''}`).join('\n')}>
                           {c.frotas.length === 1 ? `Frota ${c.frotas[0].numero}` : `${c.frotas.length} frotas`} · <b>{formatarReais(c.frotas.reduce((s, f) => s + f.valor, 0))}</b>

@@ -1,5 +1,5 @@
 import type { Api } from './index';
-import type { Cliente, Envio, Usuario } from '../types';
+import type { Cliente, Envio, Faturamento, Usuario } from '../types';
 import { REMETENTE } from '../lib/email';
 
 /*
@@ -11,7 +11,7 @@ const CHAVE = 'lucminas-faturas:v1';
 const espera = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const id = () => Math.random().toString(36).slice(2, 10);
 
-type Banco = { clientes: Cliente[]; envios: Envio[]; usuario: Usuario | null };
+type Banco = { clientes: Cliente[]; envios: Envio[]; usuario: Usuario | null; faturamentos?: Faturamento[] };
 
 function dias(n: number, h = 9, m = 0): string {
   const d = new Date();
@@ -28,7 +28,7 @@ function semente(): Banco {
     observacoes = '',
     apelidos: string[] = [],
     atualizado = 30,
-  ): Cliente => ({ id: id(), nome, apelidos, cnpj: '', para, cc, observacoes, diaEmissao: null, frotas: [], ativo: true, atualizadoEm: dias(atualizado) });
+  ): Cliente => ({ id: id(), nome, apelidos, cnpj: '', para, cc, observacoes, regra: 'dia', diaEmissao: null, inicioLocacao: null, periodoDias: null, frotas: [], ativo: true, atualizadoEm: dias(atualizado) });
 
   const clientes = [
     c('METALURGICA SERRA AZUL', ['financeiro@serraazul.exemplo.br'], ['compras@serraazul.exemplo.br', 'contabil@moura.exemplo.br'], 'Sempre com cópia para o contador.', ['SERRA AZUL'], 40),
@@ -133,10 +133,31 @@ export const mockApi: Api = {
     if (input.id) {
       const atual = b.clientes.find((c) => c.id === input.id);
       if (!atual) throw new Error('Cliente não encontrado.');
-      salvo = { ...atual, ...input, diaEmissao: input.diaEmissao === undefined ? atual.diaEmissao : input.diaEmissao, frotas: input.frotas ?? atual.frotas, id: atual.id, atualizadoEm: agora };
+      salvo = {
+        ...atual,
+        ...input,
+        diaEmissao: input.diaEmissao === undefined ? atual.diaEmissao : input.diaEmissao,
+        frotas: input.frotas ?? atual.frotas,
+        regra: input.regra ?? atual.regra,
+        inicioLocacao: input.inicioLocacao === undefined ? atual.inicioLocacao : input.inicioLocacao,
+        periodoDias: input.periodoDias === undefined ? atual.periodoDias : input.periodoDias,
+        id: atual.id,
+        atualizadoEm: agora,
+      };
       salvar({ ...b, clientes: b.clientes.map((c) => (c.id === salvo.id ? salvo : c)) });
     } else {
-      salvo = { ...input, diaEmissao: input.diaEmissao ?? null, frotas: input.frotas ?? [], id: id(), ativo: true, atualizadoEm: agora };
+      salvo = {
+        ...input,
+        diaEmissao: input.diaEmissao ?? null,
+        frotas: input.frotas ?? [],
+        regra: input.regra ?? 'dia',
+        inicioLocacao: input.inicioLocacao ?? null,
+        periodoDias: input.periodoDias ?? null,
+        id: id(),
+        ativo: true,
+        criadoEm: agora,
+        atualizadoEm: agora,
+      };
       salvar({ ...b, clientes: [...b.clientes, salvo] });
     }
     return salvo;
@@ -154,6 +175,21 @@ export const mockApi: Api = {
     return novo;
   },
 
+  async listarFaturamentos(de, ate) {
+    await espera(80);
+    return (carregar().faturamentos ?? []).filter((f) => f.data >= de && f.data <= ate);
+  },
+  async marcarFaturado(clienteId, data) {
+    const b = carregar();
+    const l = b.faturamentos ?? [];
+    if (!l.some((f) => f.clienteId === clienteId && f.data === data))
+      l.push({ clienteId, data, marcadoEm: new Date().toISOString(), marcadoPor: b.usuario?.nome ?? '', origem: 'manual' });
+    salvar({ ...b, faturamentos: l });
+  },
+  async desmarcarFaturado(clienteId, data) {
+    const b = carregar();
+    salvar({ ...b, faturamentos: (b.faturamentos ?? []).filter((f) => !(f.clienteId === clienteId && f.data === data)) });
+  },
   async listarEnvios() {
     await espera(120);
     return [...carregar().envios].sort((a, b) => b.enviadoEm.localeCompare(a.enviadoEm));
