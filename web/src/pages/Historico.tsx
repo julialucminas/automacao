@@ -25,6 +25,23 @@ export function Historico() {
   const [aberto, setAberto] = useState<string | null>(null);
   const [reenviando, setReenviando] = useState<string | null>(null);
   const [verificando, setVerificando] = useState(false);
+  const [copiando, setCopiando] = useState<string | null>(null);
+
+  const copiarDeNovo = async (e: Envio) => {
+    setCopiando(e.id);
+    try {
+      const novo = await api.copiarEnviados(e.id);
+      await recarregarEnvios();
+      avisar(
+        novo.copiaEmEnviados ? `Cópia da fatura ${e.numero} guardada em Enviados.` : `Ainda não deu para guardar a cópia: ${novo.detalhe}`,
+        novo.copiaEmEnviados ? 'ok' : 'bad',
+      );
+    } catch (err) {
+      avisar(err instanceof Error ? err.message : 'Não foi possível guardar a cópia.', 'bad');
+    } finally {
+      setCopiando(null);
+    }
+  };
   const [ultima, setUltima] = useState<string | null>(null);
 
   // a caixa de entrada é lida sozinha a cada 5 minutos no servidor; aqui só atualiza a lista
@@ -180,6 +197,17 @@ export function Historico() {
                       {!e.lidoEm && !e.devolucao && <span className="text-xs text-ink-3">{e.detalhe}</span>}
                     </div>
                     <div className="flex flex-wrap gap-1.5">
+                      {!e.copiaEmEnviados && e.status !== 'falhou' && (
+                        <button
+                          type="button"
+                          className="btn-secondary btn-sm"
+                          disabled={copiando === e.id}
+                          onClick={() => copiarDeNovo(e)}
+                          title="Grava a cópia deste e-mail na pasta Itens Enviados"
+                        >
+                          {copiando === e.id ? 'Guardando…' : 'Guardar cópia'}
+                        </button>
+                      )}
                       {(e.status === 'devolvido' || e.status === 'falhou') && (
                         <button type="button" className="btn-primary btn-sm" disabled={reenviando === e.id} onClick={() => reenviar(e)}>
                           {reenviando === e.id ? 'Reenviando…' : 'Reenviar'}

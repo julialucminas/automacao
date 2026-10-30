@@ -62,6 +62,8 @@ export interface Api {
   /** Envia um e-mail (SMTP) e salva a cópia em Enviados (IMAP). */
   enviar(pedido: EnvioPedido): Promise<Envio>;
   reenviar(envioId: string): Promise<Envio>;
+  /** tenta de novo gravar a cópia de um envio na pasta Enviados */
+  copiarEnviados(envioId: string): Promise<Envio>;
   /** manda a fatura só para quem está logado, para conferir como chega */
   testarEnvio(pedido: EnvioPedido): Promise<ResultadoTeste>;
   situacaoEnvio(): Promise<SituacaoEnvio>;

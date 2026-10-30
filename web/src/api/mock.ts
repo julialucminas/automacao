@@ -317,6 +317,11 @@ export const mockApi: Api = {
     await espera(500);
     return { lidas: 0, atualizados: 0, ultimaVerificacao: new Date().toISOString() };
   },
+  async copiarEnviados(envioId) {
+    const e = carregar().envios.find((x) => x.id === envioId);
+    if (!e) throw new Error('Envio não encontrado.');
+    return { ...e, copiaEmEnviados: true };
+  },
   async reenviar(envioId) {
     await espera(500);
     const b = carregar();

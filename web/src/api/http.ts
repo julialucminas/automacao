@@ -125,4 +125,5 @@ export const httpApi: Api = {
   situacaoEnvio: () => chamar('GET', '/api/envio/situacao'),
   verificarCaixa: () => chamar('POST', '/api/envios/verificar', undefined, 240_000),
   reenviar: (id) => chamar('POST', `/api/envios/${id}/reenviar`, undefined, 180_000),
+  copiarEnviados: (id) => chamar('POST', `/api/envios/${id}/copiar`, undefined, 180_000),
 };

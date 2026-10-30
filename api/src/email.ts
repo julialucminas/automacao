@@ -38,11 +38,14 @@ export type Mensagem = {
   pedirLeitura: boolean;
   /** Cabeçalhos extras (ex.: X-Lucminas-Fatura) para reconhecer devoluções depois. */
   cabecalhos?: Record<string, string>;
+  /** para remontar uma mensagem já enviada (mesmo identificador e data) */
+  messageId?: string;
+  data?: Date;
 };
 
 export async function montar(conta: ContaEmail, m: Mensagem): Promise<{ bruto: Buffer; messageId: string }> {
   const dominio = conta.usuario.split('@')[1] ?? 'localhost';
-  const messageId = `<${randomUUID()}@${dominio}>`;
+  const messageId = m.messageId ?? `<${randomUUID()}@${dominio}>`;
   const cabecalhos: Record<string, string> = { ...(m.cabecalhos ?? {}) };
   if (m.pedirLeitura) {
     cabecalhos['Disposition-Notification-To'] = conta.usuario;
@@ -55,7 +58,7 @@ export async function montar(conta: ContaEmail, m: Mensagem): Promise<{ bruto: B
     subject: m.assunto,
     text: m.texto,
     messageId,
-    date: new Date(),
+    date: m.data ?? new Date(),
     headers: cabecalhos,
     attachments: m.anexos.map((a) => ({ filename: a.nome, content: a.conteudo, contentType: 'application/pdf' })),
   });
@@ -132,14 +135,22 @@ function conectarImap(conta: ContaEmail) {
  * o Node derruba o servidor inteiro. Aqui o erro só fecha aquela conexão.
  */
 export function semQuedas(c: ImapFlow) {
-  c.on('error', () => {
-    try {
-      c.close();
-    } catch {
-      /* já fechada */
-    }
+  // só registra: quando o erro é grave, a própria biblioteca fecha a conexão
+  c.on('error', (e: Error) => {
+    (c as unknown as { ultimoErro?: string }).ultimoErro = e?.message ?? String(e);
   });
   return c;
+}
+
+/** Mensagem de erro do IMAP com o que o servidor respondeu (ajuda a entender falhas). */
+export function erroImap(e: unknown, c?: ImapFlow): string {
+  const x = e as { message?: string; responseText?: string; responseStatus?: string; code?: string };
+  const partes = [x?.message ?? String(e)];
+  if (x?.responseStatus || x?.responseText) partes.push(`resposta do servidor: ${[x.responseStatus, x.responseText].filter(Boolean).join(' ')}`);
+  if (x?.code) partes.push(`código ${x.code}`);
+  const anterior = c ? (c as unknown as { ultimoErro?: string }).ultimoErro : undefined;
+  if (anterior && anterior !== x?.message) partes.push(`antes: ${anterior}`);
+  return partes.join('; ');
 }
 
 /** Fecha sem esperar resposta (logout pode ficar pendurado se o servidor não responder). */
@@ -167,7 +178,21 @@ export async function listarPastas(conta: ContaEmail): Promise<{ caminho: string
 }
 
 /** Grava a mensagem na pasta Enviados (descoberta pelo marcador \Sent ou pelo nome). Devolve o nome da pasta. */
+/** Grava em Enviados, tentando até 3 vezes (conexão nova a cada tentativa). */
 export async function salvarEmEnviados(conta: ContaEmail, bruto: Buffer): Promise<string> {
+  const erros: string[] = [];
+  for (const espera of [0, 3_000, 10_000]) {
+    if (espera) await new Promise((ok) => setTimeout(ok, espera));
+    try {
+      return await gravarUmaVez(conta, bruto);
+    } catch (e) {
+      erros.push(e instanceof Error ? e.message : String(e));
+    }
+  }
+  throw new Error(`3 tentativas: ${[...new Set(erros)].join(' | ')}`);
+}
+
+function gravarUmaVez(conta: ContaEmail, bruto: Buffer): Promise<string> {
   return naFilaImap(async () => {
     const c = conectarImap(conta);
     try {
@@ -185,7 +210,9 @@ export async function salvarEmEnviados(conta: ContaEmail, bruto: Buffer): Promis
         90_000,
         'Gravar em Enviados',
         () => c.close(),
-      );
+      ).catch((e) => {
+        throw new Error(erroImap(e, c));
+      });
     } finally {
       fechar(c);
     }

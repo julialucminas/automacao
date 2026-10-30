@@ -11,6 +11,7 @@ import { CONTA_PADRAO, enviarSmtp, montar, salvarEmEnviados, type ContaEmail, ty
  */
 
 const ARQ_CONTA = 'email-conta.json';
+const MENSAGEM = 'mensagem.eml';
 
 export function lerConta(pastaDados: string): ContaEmail | null {
   const arq = join(pastaDados, ARQ_CONTA);
@@ -155,6 +156,8 @@ export function servicoEnvio(db: Banco, repo: Repositorio, pastaDados: string, c
         const pasta = pastaEnvio(e.id);
         mkdirSync(pasta, { recursive: true });
         for (const a of p.anexos) writeFileSync(join(pasta, a.nome.replace(/[/\\]/g, '_')), a.conteudo);
+        // a mensagem exatamente como saiu (para gravar a cópia em Enviados depois, se precisar)
+        if (r.ok) writeFileSync(join(pasta, MENSAGEM), r.bruto);
       } catch {
         /* sem espaço/permissão: o envio já foi feito e registrado */
       }
@@ -178,7 +181,10 @@ export function servicoEnvio(db: Banco, repo: Repositorio, pastaDados: string, c
       if (!r0) throw new Error('NAO_ACHOU');
       const pasta = pastaEnvio(envioId);
       if (!existsSync(pasta)) throw new Error('SEM_ARQUIVOS');
-      const anexos = readdirSync(pasta).sort((a, b) => (a.startsWith('BOLETO') ? 1 : 0) - (b.startsWith('BOLETO') ? 1 : 0)).map((nome) => ({ nome, conteudo: readFileSync(join(pasta, nome)) }));
+      const anexos = readdirSync(pasta)
+        .filter((n) => n !== MENSAGEM)
+        .sort((a, b) => (/^boleto/i.test(a) ? 1 : 0) - (/^boleto/i.test(b) ? 1 : 0))
+        .map((nome) => ({ nome, conteudo: readFileSync(join(pasta, nome)) }));
       const cliente = repo.buscarCliente(r0.cliente_id as string);
       if (!cliente.para.length) throw new Error('SEM_EMAIL');
       return this.enviar(
@@ -208,6 +214,47 @@ export function servicoEnvio(db: Banco, repo: Repositorio, pastaDados: string, c
       if (!r.ok) return { ok: false, para, copiaEmEnviados: false, detalhe: r.detalhe };
       const cp = await Promise.race([copiar(r.conta, r.bruto), new Promise<null>((ok) => setTimeout(() => ok(null), esperaCopiaMs))]);
       return { ok: true, para, copiaEmEnviados: !!cp?.copia, detalhe: cp ? cp.texto : 'Enviado; a cópia em Enviados ainda está sendo gravada.' };
+    },
+
+    /** Tenta de novo gravar a cópia em Enviados de um envio já feito (mesma mensagem, byte a byte). */
+    async copiarDeNovo(envioId: string, usuarioId: number): Promise<Envio> {
+      const conta = lerConta(pastaDados);
+      if (!conta) throw new Error('SEM_CONTA');
+      const r0 = db.prepare('SELECT * FROM envios WHERE id = ?').get(envioId) as Record<string, unknown> | undefined;
+      if (!r0) throw new Error('NAO_ACHOU');
+      const pasta = pastaEnvio(envioId);
+      const arq = join(pasta, MENSAGEM);
+      let bruto: Buffer;
+      if (existsSync(arq)) bruto = readFileSync(arq);
+      else {
+        // envios antigos: remonta a mensagem com os PDFs guardados, o mesmo identificador e a mesma data
+        if (!existsSync(pasta)) throw new Error('SEM_MENSAGEM');
+        const anexos = readdirSync(pasta)
+          .filter((n) => /\.pdf$/i.test(n))
+          .sort((a, b) => (/^boleto/i.test(a) ? 1 : 0) - (/^boleto/i.test(b) ? 1 : 0))
+          .map((nome) => ({ nome, conteudo: readFileSync(join(pasta, nome)) }));
+        const cfg = db.prepare("SELECT valor FROM configuracoes WHERE chave = 'email.remetente'").get() as { valor: string } | undefined;
+        const m = await montar(
+          { ...conta, nomeRemetente: cfg?.valor || conta.nomeRemetente },
+          {
+            para: JSON.parse(r0.para as string),
+            cc: JSON.parse(r0.cc as string),
+            assunto: r0.assunto as string,
+            texto: (r0.corpo as string) || '',
+            anexos,
+            pedirLeitura: !!r0.pediu_leitura,
+            cabecalhos: { 'X-Lucminas-Fatura': r0.numero as string },
+            messageId: r0.message_id as string,
+            data: new Date(r0.enviado_em as string),
+          },
+        );
+        bruto = m.bruto;
+      }
+      const cp = await copiar(conta, bruto);
+      const detalhe = cp.copia ? cp.texto : cp.texto.replace(/^Enviado, mas /, 'Enviado; nova tentativa: ');
+      db.prepare('UPDATE envios SET copia_em_enviados = ?, detalhe = ? WHERE id = ?').run(cp.copia ? 1 : 0, detalhe, envioId);
+      if (cp.copia) repo.registrarLog((r0.cliente_id as string) ?? '', usuarioId, `guardou a cópia da fatura ${r0.numero} em Enviados`, null, null, 'cliente');
+      return repo.listarEnvios().find((e) => e.id === envioId)!;
     },
 
     jaEnviada(referencia: string, numero: string): Envio | null {

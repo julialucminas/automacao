@@ -15,6 +15,7 @@ let enviados: { para: string[]; bruto: string }[] = [];
 let guardados = 0;
 let falharSmtp: Error | null = null;
 let travarImap = false;
+let falharImap = 0;
 
 const carteiro: Carteiro = {
   async enviar(_c, bruto, dest) {
@@ -24,6 +25,10 @@ const carteiro: Carteiro = {
   },
   async salvarEnviados() {
     if (travarImap) await new Promise(() => undefined); // UOL não responde nunca
+    if (falharImap > 0) {
+      falharImap--;
+      throw new Error('Connection not available');
+    }
     guardados++;
     return 'Itens Enviados';
   },
@@ -38,6 +43,7 @@ beforeEach(async () => {
   guardados = 0;
   falharSmtp = null;
   travarImap = false;
+  falharImap = 0;
   const db = abrirBanco(':memory:');
   repositorio(db).criarUsuario('lucminas@lucminas.com.br', 'Angelise', await gerarHash('senha-angeli'), 'Angeli');
   app = criarApp(db, { cookieSeguro: false, pastaDados: pasta, carteiro, esperaCopiaMs: 300 });
@@ -89,7 +95,7 @@ describe('envio de verdade', () => {
     expect(guardados).toBe(1);
     expect((await req('GET', '/api/envios')).json()).toHaveLength(1);
     expect((await req('GET', '/api/faturamentos?de=2026-10-01&ate=2026-10-31')).json()).toEqual([expect.objectContaining({ clienteId: c.id, data: '2026-10-05', origem: 'envio' })]);
-    expect(readdirSync(join(pasta, 'envios', e.id)).sort()).toEqual(['1234 MINASBEV.PDF', 'BOLETO 1234.PDF']);
+    expect(readdirSync(join(pasta, 'envios', e.id)).sort()).toEqual(['1234 MINASBEV.PDF', 'BOLETO 1234.PDF', 'mensagem.eml']);
 
     // não manda a mesma fatura duas vezes sem querer
     const dup = await req('POST', '/api/envios', pedido(c.id));
@@ -142,5 +148,23 @@ describe('envio de verdade', () => {
     expect(e).toMatchObject({ status: 'enviado', copiaEmEnviados: false, detalhe: expect.stringMatching(/guardando a cópia/) });
     expect((await req('GET', '/api/envios')).json()).toHaveLength(1);
     expect((await req('POST', '/api/envios/teste', pedido(c.id))).json()).toMatchObject({ ok: true, copiaEmEnviados: false });
+  });
+
+  it('se a cópia falhar, dá para gravar depois (mensagem guardada; envio antigo é remontado)', async () => {
+    salvarConta(pasta, 'financeiro@lucminas.com.br', 'segredo');
+    const c = (await req('POST', '/api/clientes', { nome: 'MINASBEV', para: ['fin@minasbev.com'] })).json();
+    falharImap = 1;
+    const e = (await req('POST', '/api/envios', pedido(c.id))).json();
+    expect(e.copiaEmEnviados).toBe(false);
+    expect(readdirSync(join(pasta, 'envios', e.id))).toContain('mensagem.eml');
+    const d = (await req('POST', `/api/envios/${e.id}/copiar`)).json();
+    expect(d).toMatchObject({ copiaEmEnviados: true, detalhe: expect.stringMatching(/guardado em "Itens Enviados"/) });
+
+    // envio feito antes de guardar a mensagem: remonta com os PDFs e o mesmo identificador
+    const { unlinkSync } = await import('node:fs');
+    unlinkSync(join(pasta, 'envios', e.id, 'mensagem.eml'));
+    const antes = guardados;
+    expect((await req('POST', `/api/envios/${e.id}/copiar`)).json().copiaEmEnviados).toBe(true);
+    expect(guardados).toBe(antes + 1);
   });
 });

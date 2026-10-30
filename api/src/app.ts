@@ -476,6 +476,18 @@ export function criarApp(db: Banco, opcoes: { cookieSeguro: boolean; logger?: bo
     return r;
   });
 
+  app.post<{ Params: { id: string } }>('/api/envios/:id/copiar', { preHandler: exigirFinanceiro }, async (req, reply) => {
+    if (!envio.configurado()) return reply.code(503).send({ erro: SEM_CONTA });
+    try {
+      return await envio.copiarDeNovo(req.params.id, req.usuario.id);
+    } catch (e) {
+      const m = e instanceof Error ? e.message : '';
+      if (m === 'NAO_ACHOU') throw new NaoEncontrado('Envio não encontrado.');
+      if (m === 'SEM_MENSAGEM') throw new Conflito('Este envio foi feito antes de o sistema guardar a mensagem, então não dá para gravar a cópia depois. Os próximos já ficam guardados.');
+      throw e;
+    }
+  });
+
   app.post<{ Params: { id: string } }>('/api/envios/:id/reenviar', { preHandler: exigirFinanceiro }, async (req, reply) => {
     if (!envio.configurado()) return reply.code(503).send({ erro: SEM_CONTA });
     try {
