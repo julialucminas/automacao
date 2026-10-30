@@ -1,4 +1,4 @@
-import { Fragment, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { api } from '../api';
 import { useEstado } from '../state';
 import type { Envio, StatusEnvio } from '../types';
@@ -24,6 +24,36 @@ export function Historico() {
   const [busca, setBusca] = useState('');
   const [aberto, setAberto] = useState<string | null>(null);
   const [reenviando, setReenviando] = useState<string | null>(null);
+  const [verificando, setVerificando] = useState(false);
+  const [ultima, setUltima] = useState<string | null>(null);
+
+  // a caixa de entrada é lida sozinha a cada 5 minutos no servidor; aqui só atualiza a lista
+  useEffect(() => {
+    api.situacaoEnvio().then(
+      (s) => setUltima(s.ultimaVerificacao ?? null),
+      () => undefined,
+    );
+    const t = setInterval(() => void recarregarEnvios(), 60_000);
+    return () => clearInterval(t);
+  }, [recarregarEnvios]);
+
+  const verificarAgora = async () => {
+    setVerificando(true);
+    try {
+      const r = await api.verificarCaixa();
+      setUltima(r.ultimaVerificacao);
+      await recarregarEnvios();
+      avisar(
+        r.atualizados
+          ? `${r.atualizados} envio${r.atualizados > 1 ? 's' : ''} atualizado${r.atualizados > 1 ? 's' : ''} (leitura ou devolução).`
+          : 'Caixa de entrada conferida: nada novo.',
+      );
+    } catch (e) {
+      avisar(e instanceof Error ? e.message : 'Não foi possível conferir a caixa de entrada.', 'bad');
+    } finally {
+      setVerificando(false);
+    }
+  };
 
   const lista = useMemo(() => {
     const q = semAcento(busca).toUpperCase().trim();
@@ -49,11 +79,13 @@ export function Historico() {
       const novo = await api.reenviar(e.id);
       await recarregarEnvios();
       avisar(
-        novo.status === 'devolvido'
-          ? `Fatura ${e.numero} reenviada, mas voltou a ser devolvida. Corrija o e-mail no cadastro do cliente.`
-          : `Fatura ${e.numero} reenviada com os e-mails atuais do cadastro.`,
-        novo.status === 'devolvido' ? 'bad' : 'ok',
+        novo.status === 'falhou'
+          ? `Não foi possível reenviar a fatura ${e.numero}: ${novo.detalhe}`
+          : `Fatura ${e.numero} reenviada para ${[...novo.para, ...novo.cc].join(', ')}.`,
+        novo.status === 'falhou' ? 'bad' : 'ok',
       );
+    } catch (err) {
+      avisar(err instanceof Error ? err.message : 'Não foi possível reenviar.', 'bad');
     } finally {
       setReenviando(null);
     }
@@ -69,11 +101,27 @@ export function Historico() {
             Cada envio fica registrado aqui e com uma cópia na pasta Enviados do e-mail. Devoluções e confirmações de leitura que chegam na caixa de entrada atualizam a situação.
           </p>
         </div>
-        <label className="flex min-h-[44px] items-center gap-2 rounded-[10px] border border-line-strong bg-white px-3 text-ink-3">
-          <IcBusca />
-          <span className="sr-only">Buscar envio</span>
-          <input type="search" value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Nº da fatura, cliente ou e-mail" className="w-[240px] bg-transparent text-ink outline-none" />
-        </label>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-col items-end">
+            <button type="button" className="btn-secondary" disabled={verificando} onClick={verificarAgora}>
+              {verificando ? 'Conferindo…' : 'Conferir caixa de entrada agora'}
+            </button>
+            <span className="mt-0.5 text-[11.5px] text-ink-3">
+              {ultima ? `Última conferência: ${dataHora(ultima)} · automática a cada 5 min` : 'Conferência automática a cada 5 min'}
+            </span>
+          </div>
+          <label className="flex min-h-[44px] items-center gap-2 rounded-[10px] border border-line-strong bg-white px-3 text-ink-3">
+            <IcBusca />
+            <span className="sr-only">Buscar envio</span>
+            <input
+              type="search"
+              value={busca}
+              onChange={(e) => setBusca(e.target.value)}
+              placeholder="Nº da fatura, cliente ou e-mail"
+              className="w-[240px] bg-transparent text-ink outline-none"
+            />
+          </label>
+        </div>
       </div>
 
       <div className="mb-3 flex flex-wrap gap-1.5" role="group" aria-label="Filtrar envios">
@@ -122,7 +170,14 @@ export function Historico() {
                     </span>
                     <div className="flex flex-col items-start gap-1">
                       <Chip tom={st.tom}>{st.rotulo}</Chip>
-                      <span className="text-xs text-ink-3">{e.detalhe}</span>
+                      {e.lidoEm && (
+                        <span className="text-xs font-medium text-info">
+                          Lido em {dataHora(e.lidoEm)}
+                          {e.lidoPor ? ` por ${e.lidoPor}` : ''}
+                        </span>
+                      )}
+                      {e.devolucao && <span className="text-xs font-medium text-bad">{e.devolucao}</span>}
+                      {!e.lidoEm && !e.devolucao && <span className="text-xs text-ink-3">{e.detalhe}</span>}
                     </div>
                     <div className="flex flex-wrap gap-1.5">
                       {(e.status === 'devolvido' || e.status === 'falhou') && (
@@ -163,7 +218,19 @@ export function Historico() {
                       </div>
                       <div>
                         <dt className="text-ink-3">Confirmação de leitura</dt>
-                        <dd>{e.pediuLeitura ? 'Pedida' : 'Não pedida'}</dd>
+                        <dd>
+                          {e.lidoEm ? `Confirmada em ${dataHora(e.lidoEm)}${e.lidoPor ? ` por ${e.lidoPor}` : ''}` : e.pediuLeitura ? 'Pedida, ainda não confirmada' : 'Não pedida'}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="text-ink-3">Entrega</dt>
+                        <dd>
+                          {e.devolvidoEm
+                            ? `Devolvido em ${dataHora(e.devolvidoEm)}: ${e.devolucao}`
+                            : e.status === 'falhou'
+                              ? 'Não saiu'
+                              : 'Aceito pelo servidor; nenhuma devolução recebida'}
+                        </dd>
                       </div>
                       <div>
                         <dt className="text-ink-3">Observação</dt>

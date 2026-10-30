@@ -2,7 +2,8 @@ import Fastify, { type FastifyReply, type FastifyRequest } from 'fastify';
 import cookie from '@fastify/cookie';
 import { Conflito, NaoEncontrado, repositorio, type Banco, type ClienteInput, type Frota, type Usuario } from './db.js';
 import { CONFIG_PADRAO, Conflito2, operacoes, type NovaMov, type TipoMov } from './operacoes.js';
-import { carteiroReal, servicoEnvio, type Anexo, type Carteiro } from './envio.js';
+import { monitorCaixa } from './monitor.js';
+import { carteiroReal, lerConta, servicoEnvio, type Anexo, type Carteiro } from './envio.js';
 import { conferirSenha, gerarHash, hashToken, novoToken, problemaSenha } from './senha.js';
 
 const COOKIE = 'sessao';
@@ -138,7 +139,7 @@ function limitador(max: number, janelaMs: number) {
   };
 }
 
-export function criarApp(db: Banco, opcoes: { cookieSeguro: boolean; logger?: boolean; pastaDados?: string; carteiro?: Carteiro }) {
+export function criarApp(db: Banco, opcoes: { cookieSeguro: boolean; logger?: boolean; pastaDados?: string; carteiro?: Carteiro; monitorar?: boolean }) {
   const repo = repositorio(db);
   const ops = operacoes(db, repo);
   const app = Fastify({ logger: opcoes.logger ?? false, trustProxy: true, bodyLimit: 1_000_000 });
@@ -409,7 +410,23 @@ export function criarApp(db: Banco, opcoes: { cookieSeguro: boolean; logger?: bo
   const SEM_CONTA = 'O e-mail da empresa ainda não foi configurado no servidor. Nenhum e-mail foi enviado.';
   const remetente = () => ops.lerConfig()['email.remetente'];
 
-  app.get('/api/envio/situacao', { preHandler: exigirLogin }, async () => ({ configurado: envio.configurado(), conta: envio.contaUsuario() }));
+  const monitor = monitorCaixa(db, repo, () => lerConta(opcoes.pastaDados ?? '/dados'), (m) => app.log.warn(m));
+  if (opcoes.monitorar) {
+    const parar = monitor.iniciar(5);
+    app.addHook('onClose', async () => parar());
+  }
+
+  app.get('/api/envio/situacao', { preHandler: exigirLogin }, async () => ({
+    configurado: envio.configurado(),
+    conta: envio.contaUsuario(),
+    ultimaVerificacao: monitor.ultimaVerificacao(),
+  }));
+  // olha a caixa de entrada agora (devoluções e confirmações de leitura)
+  app.post('/api/envios/verificar', { preHandler: exigirFinanceiro }, async () => {
+    const r = await monitor.verificar();
+    if (r.erro) throw new Conflito(`Não conseguiu abrir a caixa de entrada do e-mail: ${r.erro}`);
+    return { lidas: r.lidas, atualizados: r.atualizados, ultimaVerificacao: monitor.ultimaVerificacao() };
+  });
 
   const lerAnexos = (v: unknown): Anexo[] => {
     if (!Array.isArray(v) || v.length < 1 || v.length > 4) throw new Invalido('Envie a fatura e o boleto em PDF.');

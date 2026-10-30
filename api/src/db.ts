@@ -68,6 +68,10 @@ export type Envio = {
   status: 'enviado' | 'lido' | 'devolvido' | 'falhou';
   detalhe: string;
   observacao: string;
+  lidoEm?: string | null;
+  lidoPor?: string;
+  devolvidoEm?: string | null;
+  devolucao?: string;
 };
 
 export type Perfil = 'financeiro' | 'operacoes';
@@ -255,6 +259,12 @@ const MIGRACOES = [
   `ALTER TABLE solicitacoes ADD COLUMN cliente_texto TEXT NOT NULL DEFAULT '';`,
   // 9: texto do e-mail enviado (para reenviar igual)
   `ALTER TABLE envios ADD COLUMN corpo TEXT NOT NULL DEFAULT '';`,
+  // 10: acompanhamento pela caixa de entrada (confirmação de leitura e devolução)
+  `ALTER TABLE envios ADD COLUMN lido_em TEXT;
+   ALTER TABLE envios ADD COLUMN lido_por TEXT NOT NULL DEFAULT '';
+   ALTER TABLE envios ADD COLUMN devolvido_em TEXT;
+   ALTER TABLE envios ADD COLUMN devolucao TEXT NOT NULL DEFAULT '';
+   CREATE INDEX envios_message_id ON envios(message_id);`,
 ];
 
 export function abrirBanco(caminho: string) {
@@ -644,6 +654,10 @@ export function repositorio(db: Banco) {
         status: r.status as Envio['status'],
         detalhe: r.detalhe as string,
         observacao: r.observacao as string,
+        lidoEm: (r.lido_em as string) ?? null,
+        lidoPor: (r.lido_por as string) ?? '',
+        devolvidoEm: (r.devolvido_em as string) ?? null,
+        devolucao: (r.devolucao as string) ?? '',
       }));
     },
   };

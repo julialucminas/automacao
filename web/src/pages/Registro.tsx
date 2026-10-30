@@ -71,7 +71,7 @@ export function Registro() {
                   <Chip tom={a.tom}>{a.rotulo}</Chip>
                 </span>
                 <span className="min-w-0 flex-1 text-[13.5px]">
-                  <b>{i.usuario || '—'}</b> {i.acao}
+                  <b>{i.usuario || 'Sistema'}</b> {i.acao}
                   {i.clienteNome && !i.acao.includes(i.clienteNome) && <span className="text-ink-3"> · {i.clienteNome}</span>}
                   <Mudancas i={i} />
                 </span>

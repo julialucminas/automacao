@@ -116,6 +116,12 @@ export type Envio = {
   status: StatusEnvio;
   detalhe: string;
   observacao: string;
+  /** confirmação de leitura que chegou na caixa de entrada */
+  lidoEm?: string | null;
+  lidoPor?: string;
+  /** devolução ("não entregue") que chegou na caixa de entrada */
+  devolvidoEm?: string | null;
+  devolucao?: string;
 };
 
 /** chamar: como a pessoa é chamada na saudação do topo (ex.: "Angeli"). */

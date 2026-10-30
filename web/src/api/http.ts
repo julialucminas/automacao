@@ -117,5 +117,6 @@ export const httpApi: Api = {
   enviar: async (pedido) => chamar('POST', '/api/envios', await corpoEnvio(pedido)),
   testarEnvio: async (pedido) => chamar('POST', '/api/envios/teste', await corpoEnvio(pedido)),
   situacaoEnvio: () => chamar('GET', '/api/envio/situacao'),
+  verificarCaixa: () => chamar('POST', '/api/envios/verificar'),
   reenviar: (id) => chamar('POST', `/api/envios/${id}/reenviar`),
 };

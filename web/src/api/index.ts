@@ -21,7 +21,7 @@ export type EnvioPedido = {
 };
 
 export type ResultadoTeste = { ok: boolean; para: string; copiaEmEnviados: boolean; detalhe: string };
-export type SituacaoEnvio = { configurado: boolean; conta: string | null };
+export type SituacaoEnvio = { configurado: boolean; conta: string | null; ultimaVerificacao?: string | null };
 
 export interface Api {
   login(email: string, senha: string): Promise<Usuario>;
@@ -65,6 +65,8 @@ export interface Api {
   /** manda a fatura só para quem está logado, para conferir como chega */
   testarEnvio(pedido: EnvioPedido): Promise<ResultadoTeste>;
   situacaoEnvio(): Promise<SituacaoEnvio>;
+  /** olha a caixa de entrada agora (devoluções e confirmações de leitura) */
+  verificarCaixa(): Promise<{ lidas: number; atualizados: number; ultimaVerificacao: string | null }>;
 }
 
 export const MODO_DEMO = import.meta.env.VITE_API !== 'http';

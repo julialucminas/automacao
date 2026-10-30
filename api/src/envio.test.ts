@@ -62,7 +62,7 @@ describe('envio de verdade', () => {
   it('sem senha configurada não envia nada', async () => {
     const r = await req('POST', '/api/envios', pedido('x'));
     expect(r.statusCode).toBe(503);
-    expect((await req('GET', '/api/envio/situacao')).json()).toEqual({ configurado: false, conta: null });
+    expect((await req('GET', '/api/envio/situacao')).json()).toEqual({ configurado: false, conta: null, ultimaVerificacao: null });
     expect(enviados).toHaveLength(0);
   });
 
