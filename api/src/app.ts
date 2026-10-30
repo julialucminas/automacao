@@ -139,7 +139,7 @@ function limitador(max: number, janelaMs: number) {
   };
 }
 
-export function criarApp(db: Banco, opcoes: { cookieSeguro: boolean; logger?: boolean; pastaDados?: string; carteiro?: Carteiro; monitorar?: boolean }) {
+export function criarApp(db: Banco, opcoes: { cookieSeguro: boolean; logger?: boolean; pastaDados?: string; carteiro?: Carteiro; monitorar?: boolean; esperaCopiaMs?: number }) {
   const repo = repositorio(db);
   const ops = operacoes(db, repo);
   const app = Fastify({ logger: opcoes.logger ?? false, trustProxy: true, bodyLimit: 1_000_000 });
@@ -406,7 +406,7 @@ export function criarApp(db: Banco, opcoes: { cookieSeguro: boolean; logger?: bo
   // ---------- envios ----------
   app.get('/api/envios', { preHandler: exigirLogin }, async () => repo.listarEnvios());
 
-  const envio = servicoEnvio(db, repo, opcoes.pastaDados ?? '/dados', opcoes.carteiro ?? carteiroReal);
+  const envio = servicoEnvio(db, repo, opcoes.pastaDados ?? '/dados', opcoes.carteiro ?? carteiroReal, opcoes.esperaCopiaMs);
   const SEM_CONTA = 'O e-mail da empresa ainda não foi configurado no servidor. Nenhum e-mail foi enviado.';
   const remetente = () => ops.lerConfig()['email.remetente'];
 

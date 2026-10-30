@@ -64,7 +64,7 @@ export function explicarErro(e: unknown): string {
   return `Falha no envio: ${m}`;
 }
 
-export function servicoEnvio(db: Banco, repo: Repositorio, pastaDados: string, carteiro: Carteiro) {
+export function servicoEnvio(db: Banco, repo: Repositorio, pastaDados: string, carteiro: Carteiro, esperaCopiaMs = 20_000) {
   const pastaEnvio = (id: string) => join(pastaDados, 'envios', id);
 
   function gravar(e: Envio, corpo: string, usuarioId: number) {
@@ -94,25 +94,26 @@ export function servicoEnvio(db: Banco, repo: Repositorio, pastaDados: string, c
     );
   }
 
-  /** Monta, envia pelo SMTP e grava a cópia em Enviados. Não lança erro de envio: devolve o resultado. */
+  /** Monta e envia pelo SMTP. Não lança erro de envio: devolve o resultado. */
   async function despachar(conta: ContaEmail, nomeRemetente: string, para: string[], cc: string[], assunto: string, corpo: string, anexos: Anexo[], pediuLeitura: boolean, numero: string) {
     const c = { ...conta, nomeRemetente: nomeRemetente || conta.nomeRemetente };
     const { bruto, messageId } = await montar(c, { para, cc, assunto, texto: corpo, anexos, pedirLeitura: pediuLeitura, cabecalhos: { 'X-Lucminas-Fatura': numero } });
     try {
       const r = await carteiro.enviar(c, bruto, [...para, ...cc]);
-      if (!r.aceitos.length) return { ok: false as const, messageId, copia: false, detalhe: `O servidor de e-mail não aceitou nenhum destinatário (${r.recusados.join(', ')}).` };
-      let copia = false;
-      let detalhe = r.recusados.length ? `Recusados pelo servidor: ${r.recusados.join(', ')}. ` : '';
-      try {
-        const pasta = await carteiro.salvarEnviados(c, bruto);
-        copia = true;
-        detalhe += `Enviado e guardado em "${pasta}".`;
-      } catch (e) {
-        detalhe += `Enviado, mas não conseguiu guardar a cópia em Enviados (${msg(e)}).`;
-      }
-      return { ok: true as const, messageId, copia, detalhe };
+      if (!r.aceitos.length) return { ok: false as const, messageId, bruto, conta: c, detalhe: `O servidor de e-mail não aceitou nenhum destinatário (${r.recusados.join(', ')}).` };
+      return { ok: true as const, messageId, bruto, conta: c, detalhe: r.recusados.length ? `Recusados pelo servidor: ${r.recusados.join(', ')}. ` : '' };
     } catch (e) {
-      return { ok: false as const, messageId, copia: false, detalhe: explicarErro(e) };
+      return { ok: false as const, messageId, bruto, conta: c, detalhe: explicarErro(e) };
+    }
+  }
+
+  /** Grava a cópia em Enviados. Nunca lança erro. */
+  async function copiar(conta: ContaEmail, bruto: Buffer): Promise<{ copia: boolean; texto: string }> {
+    try {
+      const pasta = await carteiro.salvarEnviados(conta, bruto);
+      return { copia: true, texto: `Enviado e guardado em "${pasta}".` };
+    } catch (e) {
+      return { copia: false, texto: `Enviado, mas não conseguiu guardar a cópia em Enviados (${msg(e)}).` };
     }
   }
 
@@ -125,6 +126,7 @@ export function servicoEnvio(db: Banco, repo: Repositorio, pastaDados: string, c
       const conta = lerConta(pastaDados);
       if (!conta) throw new Error('SEM_CONTA');
       const r = await despachar(conta, nomeRemetente, p.cliente.para, p.cliente.cc, p.assunto, p.corpo, p.anexos, p.pediuLeitura, p.numero);
+      // registra assim que o e-mail saiu; a cópia em Enviados vem logo depois
       const e: Envio = {
         id: randomUUID(),
         enviadoEm: new Date().toISOString(),
@@ -137,10 +139,10 @@ export function servicoEnvio(db: Banco, repo: Repositorio, pastaDados: string, c
         assunto: p.assunto,
         anexos: p.anexos.map((a) => a.nome),
         messageId: r.messageId,
-        copiaEmEnviados: r.copia,
+        copiaEmEnviados: false,
         pediuLeitura: p.pediuLeitura,
         status: r.ok ? 'enviado' : 'falhou',
-        detalhe: r.detalhe,
+        detalhe: r.ok ? `${r.detalhe}Enviado; guardando a cópia em Enviados…` : r.detalhe,
         observacao: p.observacao,
       };
       db.transaction(() => {
@@ -155,6 +157,15 @@ export function servicoEnvio(db: Banco, repo: Repositorio, pastaDados: string, c
         for (const a of p.anexos) writeFileSync(join(pasta, a.nome.replace(/[/\\]/g, '_')), a.conteudo);
       } catch {
         /* sem espaço/permissão: o envio já foi feito e registrado */
+      }
+      if (r.ok) {
+        const pronto = copiar(r.conta, r.bruto).then((cp) => {
+          e.copiaEmEnviados = cp.copia;
+          e.detalhe = r.detalhe + cp.texto;
+          db.prepare('UPDATE envios SET copia_em_enviados = ?, detalhe = ? WHERE id = ?').run(cp.copia ? 1 : 0, e.detalhe, e.id);
+        });
+        // espera a cópia por até 20 s; se o UOL demorar, responde e a cópia termina sozinha
+        await Promise.race([pronto, new Promise((ok) => setTimeout(ok, esperaCopiaMs))]);
       }
       return e;
     },
@@ -194,7 +205,9 @@ export function servicoEnvio(db: Banco, repo: Repositorio, pastaDados: string, c
       const aviso =
         '[TESTE — este e-mail foi enviado só para você. No envio de verdade, vai para os e-mails do cadastro do cliente.]\n\n';
       const r = await despachar(conta, nomeRemetente, [para], [], `[TESTE] ${assunto}`, aviso + corpo, anexos, false, numero);
-      return { ok: r.ok, para, copiaEmEnviados: r.copia, detalhe: r.detalhe };
+      if (!r.ok) return { ok: false, para, copiaEmEnviados: false, detalhe: r.detalhe };
+      const cp = await Promise.race([copiar(r.conta, r.bruto), new Promise<null>((ok) => setTimeout(() => ok(null), esperaCopiaMs))]);
+      return { ok: true, para, copiaEmEnviados: !!cp?.copia, detalhe: cp ? cp.texto : 'Enviado; a cópia em Enviados ainda está sendo gravada.' };
     },
 
     jaEnviada(referencia: string, numero: string): Envio | null {

@@ -76,7 +76,7 @@ export async function enviarSmtp(conta: ContaEmail, bruto: Buffer, destinatarios
     socketTimeout: 60_000,
   });
   try {
-    const info = await t.sendMail({ envelope: { from: conta.usuario, to: destinatarios }, raw: bruto });
+    const info = await comPrazo(t.sendMail({ envelope: { from: conta.usuario, to: destinatarios }, raw: bruto }), 120_000, 'Envio (SMTP)', () => t.close());
     return {
       aceitos: (info.accepted as (string | { address: string })[]).map((x) => (typeof x === 'string' ? x : x.address)),
       recusados: (info.rejected as (string | { address: string })[]).map((x) => (typeof x === 'string' ? x : x.address)),
@@ -85,6 +85,29 @@ export async function enviarSmtp(conta: ContaEmail, bruto: Buffer, destinatarios
   } finally {
     t.close();
   }
+}
+
+/** Rejeita se a operação passar do prazo (e chama `aoEstourar` para fechar a conexão). */
+export function comPrazo<T>(p: Promise<T>, ms: number, oQue: string, aoEstourar?: () => void): Promise<T> {
+  let t: NodeJS.Timeout;
+  const prazo = new Promise<never>((_, erro) => {
+    t = setTimeout(() => {
+      aoEstourar?.();
+      erro(new Error(`${oQue}: o servidor de e-mail não respondeu em ${Math.round(ms / 1000)} s`));
+    }, ms);
+  });
+  return Promise.race([p, prazo]).finally(() => clearTimeout(t));
+}
+
+/**
+ * Uma conexão IMAP por vez para a conta (o UOL pode limitar conexões simultâneas):
+ * gravar em Enviados e ler a caixa de entrada esperam um ao outro.
+ */
+let filaImap: Promise<unknown> = Promise.resolve();
+export function naFilaImap<T>(f: () => Promise<T>): Promise<T> {
+  const r = filaImap.then(f, f);
+  filaImap = r.catch(() => undefined);
+  return r;
 }
 
 const NOMES_ENVIADOS = /^(sent|sent items|sent messages|sent mail|enviados|enviadas|itens enviados|mensagens enviadas)$/i;
@@ -97,34 +120,59 @@ function conectarImap(conta: ContaEmail) {
     auth: { user: conta.usuario, pass: conta.senha },
     logger: false,
     socketTimeout: 60_000,
+    connectionTimeout: 20_000,
+    greetingTimeout: 20_000,
   });
 }
 
+/** Fecha sem esperar resposta (logout pode ficar pendurado se o servidor não responder). */
+function fechar(c: ImapFlow) {
+  void comPrazo(c.logout(), 5_000, 'logout', () => c.close()).catch(() => c.close());
+}
+
 export async function listarPastas(conta: ContaEmail): Promise<{ caminho: string; especial: string }[]> {
-  const c = conectarImap(conta);
-  await c.connect();
-  try {
-    return (await c.list()).map((b) => ({ caminho: b.path, especial: b.specialUse ?? '' }));
-  } finally {
-    await c.logout().catch(() => undefined);
-  }
+  return naFilaImap(async () => {
+    const c = conectarImap(conta);
+    try {
+      return await comPrazo(
+        (async () => {
+          await c.connect();
+          return (await c.list()).map((b) => ({ caminho: b.path, especial: b.specialUse ?? '' }));
+        })(),
+        45_000,
+        'Listar pastas',
+        () => c.close(),
+      );
+    } finally {
+      fechar(c);
+    }
+  });
 }
 
 /** Grava a mensagem na pasta Enviados (descoberta pelo marcador \Sent ou pelo nome). Devolve o nome da pasta. */
 export async function salvarEmEnviados(conta: ContaEmail, bruto: Buffer): Promise<string> {
-  const c = conectarImap(conta);
-  await c.connect();
-  try {
-    const caixas = await c.list();
-    const pasta =
-      process.env.IMAP_PASTA_ENVIADOS ??
-      (caixas.find((b) => b.specialUse === '\\Sent') ?? caixas.find((b) => NOMES_ENVIADOS.test(b.name)))?.path;
-    if (!pasta) throw new Error('Pasta Enviados não encontrada. Pastas existentes: ' + caixas.map((b) => b.path).join(', '));
-    await c.append(pasta, bruto, ['\\Seen'], new Date());
-    return pasta;
-  } finally {
-    await c.logout().catch(() => undefined);
-  }
+  return naFilaImap(async () => {
+    const c = conectarImap(conta);
+    try {
+      return await comPrazo(
+        (async () => {
+          await c.connect();
+          const caixas = await c.list();
+          const pasta =
+            process.env.IMAP_PASTA_ENVIADOS ??
+            (caixas.find((b) => b.specialUse === '\\Sent') ?? caixas.find((b) => NOMES_ENVIADOS.test(b.name)))?.path;
+          if (!pasta) throw new Error('Pasta Enviados não encontrada. Pastas existentes: ' + caixas.map((b) => b.path).join(', '));
+          await c.append(pasta, bruto, ['\\Seen'], new Date());
+          return pasta;
+        })(),
+        90_000,
+        'Gravar em Enviados',
+        () => c.close(),
+      );
+    } finally {
+      fechar(c);
+    }
+  });
 }
 
 /** PDF mínimo de uma página, para testes. */

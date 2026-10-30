@@ -87,7 +87,11 @@ export function Conferencia() {
         setProgresso((p) => p && { ...p, feitos: [...p.feitos, { numero: item.numero, cliente: cliente.nome, ok: false, detalhe: e instanceof Error ? e.message : 'Erro no envio' }] });
       }
     }
-    await recarregarEnvios();
+    try {
+      await recarregarEnvios();
+    } catch {
+      /* a lista do Histórico atualiza na próxima vez */
+    }
     setProgresso((p) => p && { ...p, terminou: true });
   };
 

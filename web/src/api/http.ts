@@ -10,18 +10,24 @@ class ErroApi extends Error {
   }
 }
 
-async function chamar<T>(metodo: string, url: string, corpo?: unknown): Promise<T> {
+async function chamar<T>(metodo: string, url: string, corpo?: unknown, prazoMs = 60_000): Promise<T> {
   let r: Response;
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), prazoMs);
   try {
     r = await fetch(url, {
+      signal: ctrl.signal,
       method: metodo,
       credentials: 'same-origin',
       headers: corpo === undefined ? {} : { 'Content-Type': 'application/json' },
       body: corpo === undefined ? undefined : JSON.stringify(corpo),
     });
   } catch {
+    clearTimeout(t);
+    if (ctrl.signal.aborted) throw new ErroApi(0, 'O servidor demorou demais para responder. Confira no Histórico se o e-mail saiu antes de tentar de novo.');
     throw new ErroApi(0, 'Sem conexão com o servidor. Confira a internet e tente de novo.');
   }
+  clearTimeout(t);
   const dados = r.headers.get('content-type')?.includes('json') ? await r.json() : null;
   if (!r.ok) {
     // sessão expirou no meio do uso: volta para a tela de login
@@ -114,9 +120,9 @@ export const httpApi: Api = {
 
   listarEnvios: () => chamar('GET', '/api/envios'),
   // o envio real (SMTP + cópia em Enviados) entra na próxima etapa; o servidor responde com a explicação
-  enviar: async (pedido) => chamar('POST', '/api/envios', await corpoEnvio(pedido)),
-  testarEnvio: async (pedido) => chamar('POST', '/api/envios/teste', await corpoEnvio(pedido)),
+  enviar: async (pedido) => chamar('POST', '/api/envios', await corpoEnvio(pedido), 180_000),
+  testarEnvio: async (pedido) => chamar('POST', '/api/envios/teste', await corpoEnvio(pedido), 180_000),
   situacaoEnvio: () => chamar('GET', '/api/envio/situacao'),
-  verificarCaixa: () => chamar('POST', '/api/envios/verificar'),
-  reenviar: (id) => chamar('POST', `/api/envios/${id}/reenviar`),
+  verificarCaixa: () => chamar('POST', '/api/envios/verificar', undefined, 240_000),
+  reenviar: (id) => chamar('POST', `/api/envios/${id}/reenviar`, undefined, 180_000),
 };

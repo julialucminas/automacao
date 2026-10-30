@@ -14,6 +14,7 @@ let pasta = '';
 let enviados: { para: string[]; bruto: string }[] = [];
 let guardados = 0;
 let falharSmtp: Error | null = null;
+let travarImap = false;
 
 const carteiro: Carteiro = {
   async enviar(_c, bruto, dest) {
@@ -22,6 +23,7 @@ const carteiro: Carteiro = {
     return { aceitos: dest, recusados: [], resposta: '250 OK' };
   },
   async salvarEnviados() {
+    if (travarImap) await new Promise(() => undefined); // UOL não responde nunca
     guardados++;
     return 'Itens Enviados';
   },
@@ -35,9 +37,10 @@ beforeEach(async () => {
   enviados = [];
   guardados = 0;
   falharSmtp = null;
+  travarImap = false;
   const db = abrirBanco(':memory:');
   repositorio(db).criarUsuario('lucminas@lucminas.com.br', 'Angelise', await gerarHash('senha-angeli'), 'Angeli');
-  app = criarApp(db, { cookieSeguro: false, pastaDados: pasta, carteiro });
+  app = criarApp(db, { cookieSeguro: false, pastaDados: pasta, carteiro, esperaCopiaMs: 300 });
   const r = await app.inject({ method: 'POST', url: '/api/sessao', payload: { email: 'lucminas@lucminas.com.br', senha: 'senha-angeli' } });
   cookie = String(r.headers['set-cookie']).split(';')[0];
 });
@@ -129,5 +132,15 @@ describe('envio de verdade', () => {
     const r = await req('POST', '/api/envios/teste', pedido(c.id, { anexos: [{ nome: 'x.pdf', base64: Buffer.from('oi').toString('base64') }] }));
     expect(r.json().erro).toMatch(/não parece ser um PDF/);
     expect(enviados).toHaveLength(0);
+  });
+
+  it('se o UOL não responder na cópia em Enviados, o envio responde e fica registrado mesmo assim', async () => {
+    salvarConta(pasta, 'financeiro@lucminas.com.br', 'segredo');
+    travarImap = true;
+    const c = (await req('POST', '/api/clientes', { nome: 'MINASBEV', para: ['fin@minasbev.com'] })).json();
+    const e = (await req('POST', '/api/envios', pedido(c.id))).json();
+    expect(e).toMatchObject({ status: 'enviado', copiaEmEnviados: false, detalhe: expect.stringMatching(/guardando a cópia/) });
+    expect((await req('GET', '/api/envios')).json()).toHaveLength(1);
+    expect((await req('POST', '/api/envios/teste', pedido(c.id))).json()).toMatchObject({ ok: true, copiaEmEnviados: false });
   });
 });

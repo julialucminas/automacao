@@ -1,6 +1,6 @@
 import { ImapFlow } from 'imapflow';
 import type { Banco, Repositorio } from './db.js';
-import type { ContaEmail } from './email.js';
+import { comPrazo, naFilaImap, type ContaEmail } from './email.js';
 
 /*
  * Acompanha a caixa de entrada do e-mail da empresa (só leitura) e reconhece:
@@ -163,49 +163,74 @@ export function monitorCaixa(db: Banco, repo: Repositorio, lerConta: () => Conta
     if (!conta) return { lidas: 0, atualizados: 0, erro: 'O e-mail da empresa ainda não foi configurado no servidor.' };
     if (rodando) return { lidas: 0, atualizados: 0 };
     rodando = true;
-    const c = new ImapFlow({ host: conta.imapHost, port: conta.imapPorta, secure: true, auth: { user: conta.usuario, pass: conta.senha }, logger: false, socketTimeout: 60_000 });
     let lidas = 0;
     let atualizados = 0;
     let erro: string | undefined;
     try {
-      await c.connect();
-      const trava = await c.getMailboxLock('INBOX', { readOnly: true });
-      try {
-        const caixa = c.mailbox && typeof c.mailbox === 'object' ? c.mailbox : null;
-        const validade = String(caixa?.uidValidity ?? '');
-        let desde = Number(ler(ESTADO_UID) || 0);
-        if (ler(ESTADO_VALIDADE) !== validade) desde = 0;
-        // primeira vez: olha as mensagens dos últimos 15 dias
-        const busca = desde ? { uid: `${desde + 1}:*` } : { since: new Date(Date.now() - 15 * 86400_000) };
-        const uids = ((await c.search(busca, { uid: true })) || []).filter((u) => u > desde);
-        let maior = desde;
-        for (const uid of uids) {
-          maior = Math.max(maior, uid);
-          const m = await c.fetchOne(String(uid), { envelope: true, size: true }, { uid: true });
-          if (!m) continue;
-          const assunto = m.envelope?.subject ?? '';
-          const de = (m.envelope?.from ?? []).map((f) => `${f.name ?? ''} ${f.address ?? ''}`).join(' ');
-          // só baixa o que pode ser resposta automática (e nada muito grande)
-          const candidato = RE_REMETENTE_SISTEMA.test(de) || RE_ASSUNTO_DEVOLUCAO.test(assunto) || RE_ASSUNTO_LEITURA.test(assunto) || /lid[ao]:|read:|notifica/i.test(assunto);
-          if (!candidato || (m.size ?? 0) > 3_000_000) continue;
-          const completo = await c.fetchOne(String(uid), { source: true }, { uid: true });
-          if (!completo || !completo.source) continue;
-          lidas++;
-          const ev = interpretar(completo.source.toString('utf8'));
-          if (ev) atualizados += aplicar(ev);
+      // mesma fila da gravação em Enviados: nunca duas conexões ao mesmo tempo
+      await naFilaImap(async () => {
+        const c = new ImapFlow({
+          host: conta.imapHost,
+          port: conta.imapPorta,
+          secure: true,
+          auth: { user: conta.usuario, pass: conta.senha },
+          logger: false,
+          socketTimeout: 60_000,
+          connectionTimeout: 20_000,
+          greetingTimeout: 20_000,
+        });
+        try {
+          await comPrazo(
+            (async () => {
+              await c.connect();
+              const trava = await c.getMailboxLock('INBOX', { readOnly: true });
+              try {
+                const caixa = c.mailbox && typeof c.mailbox === 'object' ? c.mailbox : null;
+                const validade = String(caixa?.uidValidity ?? '');
+                let desde = Number(ler(ESTADO_UID) || 0);
+                if (ler(ESTADO_VALIDADE) !== validade) desde = 0;
+                // primeira vez: só as mensagens dos últimos 3 dias
+                const busca = desde ? { uid: `${desde + 1}:*` } : { since: new Date(Date.now() - 3 * 86400_000) };
+                const uids = ((await c.search(busca, { uid: true })) || []).filter((u) => u > desde);
+                // 1) cabeçalhos de todas de uma vez; 2) baixa só as que podem ser resposta automática
+                const candidatos: number[] = [];
+                if (uids.length) {
+                  for await (const m of c.fetch(uids.join(','), { envelope: true, size: true, uid: true }, { uid: true })) {
+                    const assunto = m.envelope?.subject ?? '';
+                    const de = (m.envelope?.from ?? []).map((f) => `${f.name ?? ''} ${f.address ?? ''}`).join(' ');
+                    const candidato = RE_REMETENTE_SISTEMA.test(de) || RE_ASSUNTO_DEVOLUCAO.test(assunto) || RE_ASSUNTO_LEITURA.test(assunto) || /lid[ao]:|read:|notifica/i.test(assunto);
+                    if (candidato && (m.size ?? 0) <= 3_000_000) candidatos.push(m.uid);
+                  }
+                }
+                gravar(ESTADO_VALIDADE, validade);
+                for (const uid of candidatos.sort((x, y) => x - y)) {
+                  const completo = await c.fetchOne(String(uid), { source: true }, { uid: true });
+                  if (completo && completo.source) {
+                    lidas++;
+                    const ev = interpretar(completo.source.toString('utf8'));
+                    if (ev) atualizados += aplicar(ev);
+                  }
+                  gravar(ESTADO_UID, String(uid)); // guarda o progresso a cada mensagem
+                }
+                if (uids.length) gravar(ESTADO_UID, String(Math.max(desde, ...uids)));
+              } finally {
+                trava.release();
+              }
+            })(),
+            150_000,
+            'Ler a caixa de entrada',
+            () => c.close(),
+          );
+          gravar(ESTADO_ULTIMA, new Date().toISOString());
+        } finally {
+          void comPrazo(c.logout(), 5_000, 'logout', () => c.close()).catch(() => c.close());
         }
-        gravar(ESTADO_VALIDADE, validade);
-        gravar(ESTADO_UID, String(maior));
-      } finally {
-        trava.release();
-      }
-      gravar(ESTADO_ULTIMA, new Date().toISOString());
+      });
     } catch (e) {
       erro = e instanceof Error ? e.message : String(e);
       log('monitor da caixa: ' + erro);
     } finally {
       rodando = false;
-      await c.logout().catch(() => undefined);
     }
     return { lidas, atualizados, erro };
   }
