@@ -1,9 +1,10 @@
 /*
- * Ponto único de acesso a dados. Hoje usa a implementação simulada (dados no navegador).
- * Quando o backend existir, criamos api/http.ts com as mesmas funções chamando /api/...
- * e trocamos a linha abaixo. As telas não mudam.
+ * Ponto único de acesso a dados.
+ *   VITE_API=http  → servidor real (faturas.lucminas.com.br)
+ *   sem a variável → demonstração com dados no navegador (prévia do GitHub Pages)
  */
 import { mockApi } from './mock';
+import { httpApi } from './http';
 import type { Cliente, ClienteInput, Envio, Usuario } from '../types';
 
 export type EnvioPedido = {
@@ -33,4 +34,6 @@ export interface Api {
   reenviar(envioId: string): Promise<Envio>;
 }
 
-export const api: Api = mockApi;
+export const MODO_DEMO = import.meta.env.VITE_API !== 'http';
+
+export const api: Api = MODO_DEMO ? mockApi : httpApi;

@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { useEstado } from '../state';
 import { EMPRESA } from '../lib/email';
 import { IcEmail } from '../components/Icones';
+import { MODO_DEMO } from '../api';
 
 export function Login() {
   const { entrar } = useEstado();
@@ -55,7 +56,7 @@ export function Login() {
         <button type="submit" className="btn-primary" disabled={entrando}>
           {entrando ? 'Entrando…' : 'Entrar'}
         </button>
-        <p className="rounded-[10px] bg-warn-soft px-3 py-2 text-xs text-warn-strong">Versão de demonstração: qualquer e-mail e senha entram.</p>
+        {MODO_DEMO && <p className="rounded-[10px] bg-warn-soft px-3 py-2 text-xs text-warn-strong">Versão de demonstração: qualquer e-mail e senha entram.</p>}
       </form>
     </div>
   );

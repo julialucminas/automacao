@@ -4,6 +4,7 @@ import { useEstado } from '../state';
 import { temAviso } from '../lib/pareamento';
 import { EMPRESA, REMETENTE } from '../lib/email';
 import { IcEmail, IcFechar, IcSair } from './Icones';
+import { MODO_DEMO } from '../api';
 
 export function Layout() {
   const { usuario, sair, lote, clientes, envios, aviso, fecharAviso } = useEstado();
@@ -38,8 +39,9 @@ export function Layout() {
           <div className="flex flex-wrap items-center gap-2">
             <span className="flex items-center gap-2 rounded-full bg-white/10 px-3 py-1.5 text-xs text-white/80">
               <span className="h-2 w-2 rounded-full bg-brand" aria-hidden="true" />
-              {REMETENTE} · modo de teste (nenhum e-mail sai)
+              {REMETENTE} · {MODO_DEMO ? 'demonstração (nenhum e-mail sai)' : 'envio ainda não ativado'}
             </span>
+            <span className="hidden text-xs text-white/70 sm:inline">{usuario?.nome}</span>
             <button type="button" onClick={sair} className="btn btn-sm border border-white/25 text-white hover:bg-white/10" title={usuario?.email}>
               <IcSair tamanho={14} /> Sair
             </button>

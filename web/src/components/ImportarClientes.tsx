@@ -79,11 +79,12 @@ export function useImportacao() {
   const confirmar = async () => {
     setSalvando(0);
     try {
-      const n = await importarClientes(
+      const { ok: n, falhas } = await importarClientes(
         aplicaveis.map((p) => p.input),
         (k) => setSalvando(k),
       );
-      avisar(`${n} cliente${n > 1 ? 's' : ''} importado${n > 1 ? 's' : ''}.`);
+      if (falhas.length) avisar(`${n} importado(s). Não foi possível importar ${falhas.length}: ${falhas.join(' · ')}`, 'bad');
+      else avisar(`${n} cliente${n > 1 ? 's' : ''} importado${n > 1 ? 's' : ''}.`);
       fechar();
     } finally {
       setSalvando(null);

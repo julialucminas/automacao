@@ -7,6 +7,7 @@ import { Chip } from '../components/ui';
 import { IcBusca, IcMais } from '../components/Icones';
 import { baixarModelo, exportarClientes, useImportacao } from '../components/ImportarClientes';
 import { apagarExemplos, temExemplos } from '../api/mock';
+import { MODO_DEMO } from '../api';
 
 const COLUNAS = 'grid grid-cols-[minmax(220px,1.3fr)_minmax(200px,1.2fr)_minmax(200px,1.2fr)_minmax(200px,1.3fr)_96px_88px] gap-3';
 
@@ -67,7 +68,7 @@ export function Clientes() {
         importacao.previa
       ) : (
         <>
-      {temExemplos() && (
+      {MODO_DEMO && temExemplos() && (
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-warn-line bg-warn-soft px-4 py-3 text-[13px] text-warn-strong">
           <span>Versão de demonstração: há clientes e envios fictícios (e-mails terminados em .exemplo.br). Os dados ficam só neste navegador.</span>
           <button

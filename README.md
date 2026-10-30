@@ -5,9 +5,10 @@ a partir de financeiro@lucminas.com.br, com cópia na pasta Enviados e históric
 
 ## Estado atual
 
-**Interface pronta, com dados simulados.** Nenhum e-mail sai: a camada `web/src/api/mock.ts`
-guarda clientes e histórico no navegador. O backend (Node + SMTP/IMAP do UOL) entra depois,
-trocando apenas `web/src/api/index.ts`.
+- **Servidor (faturas.lucminas.com.br):** interface + API com banco SQLite e login. Envio real ainda desligado.
+- **Prévia no GitHub Pages:** mesma interface em modo demonstração (dados só no navegador).
+
+O modo é escolhido no build: `VITE_API=http` usa a API; sem a variável, usa `web/src/api/mock.ts`.
 
 ## Rodar
 
@@ -57,6 +58,21 @@ aponta e-mails inválidos e domínios com provável erro de digitação, e nunca
 Situações na conferência: pronto · fatura sem boleto · empresa sem cadastro ·
 boleto sem fatura · número repetido · já enviada antes (fica desmarcada).
 
+## API (`api/`)
+
+Node + Fastify + SQLite (better-sqlite3). Banco no servidor em `/opt/faturas-dados/faturas.db`
+(fora da pasta do código). Login por cookie de sessão (httpOnly, SameSite=Strict), senhas com scrypt,
+limite de tentativas. Toda alteração em cliente fica registrada em `historico_clientes`.
+
+```bash
+cd api && npm install && npm test
+npm run dev      # API em http://localhost:3333 (banco em api/dados-dev)
+cd ../web && VITE_API=http npm run dev   # interface usando a API
+```
+
+Usuários (no servidor): `bash /opt/faturas/deploy/usuario.sh criar email "Nome"` — gera e mostra a senha uma vez.
+Outros comandos: `senha`, `desativar`, `reativar`, `listar`.
+
 ## Servidor (faturas.lucminas.com.br)
 
 VPS Hostinger (Ubuntu 24.04). Instalação, uma vez, como root no Web console:
@@ -72,7 +88,6 @@ curl -fsSL https://raw.githubusercontent.com/julialucminas/automacao/main/deploy
 
 ## Próximos passos
 
-2. Backend: API (Fastify + SQLite), login real, upload dos PDFs
 3. Envio real pelo UOL (SMTP) + cópia em Enviados (IMAP)
 4. Leitura da caixa: devoluções e confirmações de leitura
 5. Hospedagem (VPS) em faturas.lucminas.com.br + backup no Google Drive
