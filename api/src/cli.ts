@@ -108,8 +108,8 @@ const sair = (msg: string, codigo = 1): never => {
 /** Lê linhas sem mostrar o que é digitado. Sem terminal (entrada redirecionada), lê as linhas da entrada em ordem. */
 const leitor: { rl?: Interface; fila?: string[]; mudo: boolean } = { mudo: false };
 async function lerEscondido(pergunta: string, esconder = true): Promise<string> {
-  process.stdout.write(pergunta);
   if (!process.stdin.isTTY) {
+    process.stdout.write(pergunta);
     if (!leitor.fila) {
       let texto = '';
       for await (const parte of process.stdin) texto += parte;
@@ -118,6 +118,9 @@ async function lerEscondido(pergunta: string, esconder = true): Promise<string> 
     process.stdout.write('\n');
     return leitor.fila.shift() ?? '';
   }
+  // pergunta visível vai pelo próprio readline (senão ele apaga a linha ao redesenhar);
+  // pergunta escondida é escrita direto e o readline fica mudo
+  if (esconder) process.stdout.write(pergunta);
   leitor.mudo = esconder;
   if (!leitor.rl) {
     const saida = new Writable({
@@ -128,7 +131,7 @@ async function lerEscondido(pergunta: string, esconder = true): Promise<string> 
     });
     leitor.rl = createInterface({ input: process.stdin, output: saida, terminal: true });
   }
-  const r = await leitor.rl.question('');
+  const r = await leitor.rl.question(esconder ? '' : pergunta);
   leitor.mudo = false;
   if (esconder) process.stdout.write('\n');
   return r;
