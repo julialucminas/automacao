@@ -10,7 +10,9 @@ services:
       - "443:443"
       - "443:443/udp"
     volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # monta a PASTA (não o arquivo): o git troca o arquivo por um novo, e a montagem de arquivo
+      # continuaria apontando para o antigo
+      - ./caddy:/etc/caddy:ro
       # monta a pasta web inteira (e não só dist) para a troca de versão não "perder" o diretório
       - ../web:/srv/web:ro
       - caddy_data:/data

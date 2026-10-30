@@ -86,7 +86,7 @@ curl -fsSL https://raw.githubusercontent.com/julialucminas/automacao/main/deploy
 - `deploy/instalar.sh`: firewall, fail2ban, atualizações automáticas, Docker, publicação
 - `deploy/atualizar.sh`: verifica o GitHub a cada 5 min; se mudou, roda os testes, monta e publica
   (se um teste falhar, a versão anterior continua no ar). Logs: `journalctl -u faturas-atualizar -n 50`
-- `deploy/docker-compose.yml` + `Caddyfile`: HTTPS automático
+- `deploy/docker-compose.yml` + `deploy/caddy/Caddyfile`: HTTPS automático e encaminhamento de /api
 
 ## Próximos passos
 

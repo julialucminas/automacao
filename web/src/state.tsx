@@ -8,6 +8,7 @@ type Aviso = { id: number; texto: string; tom: 'ok' | 'bad' };
 type Estado = {
   usuario: Usuario | null;
   carregando: boolean;
+  erroInicial: string;
   entrar(email: string, senha: string): Promise<void>;
   sair(): Promise<void>;
 
@@ -37,6 +38,7 @@ export const chaveItem = (i: ItemLote) => `${i.numero}|${i.fatura?.caminho ?? i.
 export function EstadoProvider({ children }: { children: ReactNode }) {
   const [usuario, setUsuario] = useState<Usuario | null>(null);
   const [carregando, setCarregando] = useState(true);
+  const [erroInicial, setErroInicial] = useState('');
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [envios, setEnvios] = useState<Envio[]>([]);
   const [lote, setLote] = useState<Lote | null>(null);
@@ -46,11 +48,14 @@ export function EstadoProvider({ children }: { children: ReactNode }) {
   const recarregarEnvios = useCallback(async () => setEnvios(await api.listarEnvios()), []);
 
   useEffect(() => {
-    api.usuarioAtual().then(async (u) => {
-      setUsuario(u);
-      if (u) await Promise.all([recarregarClientes(), recarregarEnvios()]);
-      setCarregando(false);
-    });
+    api
+      .usuarioAtual()
+      .then(async (u) => {
+        setUsuario(u);
+        if (u) await Promise.all([recarregarClientes(), recarregarEnvios()]);
+      })
+      .catch((e) => setErroInicial(e instanceof Error ? e.message : 'Erro ao conectar com o servidor.'))
+      .finally(() => setCarregando(false));
   }, [recarregarClientes, recarregarEnvios]);
 
   const avisar = useCallback((texto: string, tom: Aviso['tom'] = 'ok') => setAviso({ id: Date.now(), texto, tom }), []);
@@ -77,6 +82,7 @@ export function EstadoProvider({ children }: { children: ReactNode }) {
     () => ({
       usuario,
       carregando,
+      erroInicial,
       async entrar(email, senha) {
         const u = await api.login(email, senha);
         setUsuario(u);
@@ -153,7 +159,7 @@ export function EstadoProvider({ children }: { children: ReactNode }) {
       avisar,
       fecharAviso: () => setAviso(null),
     }),
-    [usuario, carregando, clientes, envios, lote, aviso, avisar, recarregarClientes, recarregarEnvios, reconciliarLote],
+    [usuario, carregando, erroInicial, clientes, envios, lote, aviso, avisar, recarregarClientes, recarregarEnvios, reconciliarLote],
   );
 
   return <Ctx.Provider value={valor}>{children}</Ctx.Provider>;
