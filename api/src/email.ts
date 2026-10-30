@@ -1,0 +1,151 @@
+import { randomUUID } from 'node:crypto';
+import nodemailer from 'nodemailer';
+import MailComposer from 'nodemailer/lib/mail-composer/index.js';
+import { ImapFlow } from 'imapflow';
+
+/*
+ * Envio pelo e-mail da empresa (UOL Mail Pro):
+ *  1. monta a mensagem completa UMA vez (com Message-ID nosso)
+ *  2. envia esses mesmos bytes pelo SMTP
+ *  3. grava esses mesmos bytes na pasta Enviados pelo IMAP
+ * Assim a cópia em Enviados é idêntica ao que o cliente recebeu.
+ */
+
+export type ContaEmail = {
+  usuario: string;
+  senha: string;
+  nomeRemetente: string;
+  smtpHost: string;
+  smtpPorta: number;
+  imapHost: string;
+  imapPorta: number;
+};
+
+export const CONTA_PADRAO = {
+  smtpHost: process.env.SMTP_HOST ?? 'smtps.uhserver.com',
+  smtpPorta: Number(process.env.SMTP_PORTA ?? 465),
+  imapHost: process.env.IMAP_HOST ?? 'imap.uhserver.com',
+  imapPorta: Number(process.env.IMAP_PORTA ?? 993),
+  nomeRemetente: process.env.REMETENTE_NOME ?? 'Financeiro · Lucminas Empilhadeiras',
+};
+
+export type Mensagem = {
+  para: string[];
+  cc: string[];
+  assunto: string;
+  texto: string;
+  anexos: { nome: string; conteudo: Buffer }[];
+  pedirLeitura: boolean;
+  /** Cabeçalhos extras (ex.: X-Lucminas-Fatura) para reconhecer devoluções depois. */
+  cabecalhos?: Record<string, string>;
+};
+
+export async function montar(conta: ContaEmail, m: Mensagem): Promise<{ bruto: Buffer; messageId: string }> {
+  const dominio = conta.usuario.split('@')[1] ?? 'localhost';
+  const messageId = `<${randomUUID()}@${dominio}>`;
+  const cabecalhos: Record<string, string> = { ...(m.cabecalhos ?? {}) };
+  if (m.pedirLeitura) {
+    cabecalhos['Disposition-Notification-To'] = conta.usuario;
+    cabecalhos['Return-Receipt-To'] = conta.usuario;
+  }
+  const composer = new MailComposer({
+    from: { name: conta.nomeRemetente, address: conta.usuario },
+    to: m.para,
+    cc: m.cc.length ? m.cc : undefined,
+    subject: m.assunto,
+    text: m.texto,
+    messageId,
+    date: new Date(),
+    headers: cabecalhos,
+    attachments: m.anexos.map((a) => ({ filename: a.nome, content: a.conteudo, contentType: 'application/pdf' })),
+  });
+  const bruto = await new Promise<Buffer>((ok, erro) => composer.compile().build((e, b) => (e ? erro(e) : ok(b))));
+  return { bruto, messageId };
+}
+
+export type ResultadoSmtp = { aceitos: string[]; recusados: string[]; resposta: string };
+
+export async function enviarSmtp(conta: ContaEmail, bruto: Buffer, destinatarios: string[]): Promise<ResultadoSmtp> {
+  const t = nodemailer.createTransport({
+    host: conta.smtpHost,
+    port: conta.smtpPorta,
+    secure: conta.smtpPorta === 465,
+    auth: { user: conta.usuario, pass: conta.senha },
+    connectionTimeout: 20_000,
+    greetingTimeout: 20_000,
+    socketTimeout: 60_000,
+  });
+  try {
+    const info = await t.sendMail({ envelope: { from: conta.usuario, to: destinatarios }, raw: bruto });
+    return {
+      aceitos: (info.accepted as (string | { address: string })[]).map((x) => (typeof x === 'string' ? x : x.address)),
+      recusados: (info.rejected as (string | { address: string })[]).map((x) => (typeof x === 'string' ? x : x.address)),
+      resposta: info.response,
+    };
+  } finally {
+    t.close();
+  }
+}
+
+const NOMES_ENVIADOS = /^(sent|sent items|sent messages|sent mail|enviados|enviadas|itens enviados|mensagens enviadas)$/i;
+
+function conectarImap(conta: ContaEmail) {
+  return new ImapFlow({
+    host: conta.imapHost,
+    port: conta.imapPorta,
+    secure: true,
+    auth: { user: conta.usuario, pass: conta.senha },
+    logger: false,
+    socketTimeout: 60_000,
+  });
+}
+
+export async function listarPastas(conta: ContaEmail): Promise<{ caminho: string; especial: string }[]> {
+  const c = conectarImap(conta);
+  await c.connect();
+  try {
+    return (await c.list()).map((b) => ({ caminho: b.path, especial: b.specialUse ?? '' }));
+  } finally {
+    await c.logout().catch(() => undefined);
+  }
+}
+
+/** Grava a mensagem na pasta Enviados (descoberta pelo marcador \Sent ou pelo nome). Devolve o nome da pasta. */
+export async function salvarEmEnviados(conta: ContaEmail, bruto: Buffer): Promise<string> {
+  const c = conectarImap(conta);
+  await c.connect();
+  try {
+    const caixas = await c.list();
+    const pasta =
+      process.env.IMAP_PASTA_ENVIADOS ??
+      (caixas.find((b) => b.specialUse === '\\Sent') ?? caixas.find((b) => NOMES_ENVIADOS.test(b.name)))?.path;
+    if (!pasta) throw new Error('Pasta Enviados não encontrada. Pastas existentes: ' + caixas.map((b) => b.path).join(', '));
+    await c.append(pasta, bruto, ['\\Seen'], new Date());
+    return pasta;
+  } finally {
+    await c.logout().catch(() => undefined);
+  }
+}
+
+/** PDF mínimo de uma página, para testes. */
+export function pdfDeTeste(titulo: string): Buffer {
+  const esc = (s: string) => s.replace(/[\\()]/g, (c) => '\\' + c);
+  const conteudo = `BT /F1 18 Tf 60 770 Td (${esc(titulo)}) Tj /F1 11 Tf 0 -24 Td (Arquivo de teste do sistema de envio de faturas.) Tj ET`;
+  const objs = [
+    '<< /Type /Catalog /Pages 2 0 R >>',
+    '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>',
+    `<< /Length ${conteudo.length} >>\nstream\n${conteudo}\nendstream`,
+    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
+  ];
+  let s = '%PDF-1.4\n';
+  const pos: number[] = [];
+  objs.forEach((o, i) => {
+    pos.push(s.length);
+    s += `${i + 1} 0 obj\n${o}\nendobj\n`;
+  });
+  const xref = s.length;
+  s += `xref\n0 ${objs.length + 1}\n0000000000 65535 f \n` + pos.map((p) => String(p).padStart(10, '0') + ' 00000 n \n').join('');
+  s += `trailer\n<< /Size ${objs.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
+  return Buffer.from(s, 'latin1');
+}

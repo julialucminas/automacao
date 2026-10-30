@@ -12,6 +12,7 @@ import { createInterface, type Interface } from 'node:readline/promises';
 import { Writable } from 'node:stream';
 import { abrirBanco, repositorio } from './db.js';
 import { gerarHash, problemaSenha, senhaAleatoria } from './senha.js';
+import { CONTA_PADRAO, enviarSmtp, listarPastas, montar, pdfDeTeste, salvarEmEnviados, type ContaEmail } from './email.js';
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -27,6 +28,73 @@ const chamarFlag = flag('--chamar');
 const pedirSenha = flag('--senha') !== undefined;
 const [cmd, email, ...resto] = args;
 
+const ok = (m: string) => console.log('  ✔ ' + m);
+const falha = (m: string) => console.log('  ✖ ' + m);
+
+/** Teste de envio real pelo UOL: envia para um endereço de teste e grava a cópia em Enviados. Não guarda a senha. */
+async function testarEmail() {
+  console.log('Teste de envio pelo e-mail da empresa');
+  console.log(`  SMTP ${CONTA_PADRAO.smtpHost}:${CONTA_PADRAO.smtpPorta} · IMAP ${CONTA_PADRAO.imapHost}:${CONTA_PADRAO.imapPorta}`);
+  console.log('');
+  const padrao = 'financeiro@lucminas.com.br';
+  const usuario = (await lerEscondido(`Conta que envia [${padrao}]: `, false)).trim() || padrao;
+  const senha = await lerEscondido('Senha dessa conta (não aparece na tela): ');
+  const destino = (await lerEscondido('Enviar o teste para qual e-mail? ', false)).trim();
+  if (!EMAIL.test(usuario) || !EMAIL.test(destino) || !senha) sair('Dados incompletos. Nada foi enviado.');
+  const conta: ContaEmail = { ...CONTA_PADRAO, usuario, senha };
+
+  console.log('');
+  console.log('1/3 Montando a mensagem com 2 PDFs de teste…');
+  const quando = new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+  const { bruto, messageId } = await montar(conta, {
+    para: [destino],
+    cc: [],
+    assunto: `[TESTE] Envio de faturas · ${quando}`,
+    texto:
+      'Este é um e-mail de TESTE do sistema de envio de faturas da Lucminas Empilhadeiras.\n\n' +
+      'Se você recebeu, o envio pelo e-mail da empresa está funcionando.\n' +
+      'Confira também se ele aparece na pasta Enviados da conta ' + usuario + '.',
+    anexos: [
+      { nome: '0000 TESTE FATURA.PDF', conteudo: pdfDeTeste('FATURA DE TESTE') },
+      { nome: 'BOLETO 0000.PDF', conteudo: pdfDeTeste('BOLETO DE TESTE') },
+    ],
+    pedirLeitura: true,
+    cabecalhos: { 'X-Lucminas-Fatura': 'TESTE' },
+  });
+  ok(`Mensagem montada (${Math.round(bruto.length / 1024)} KB) · ${messageId}`);
+
+  console.log('2/3 Enviando pelo SMTP…');
+  try {
+    const r = await enviarSmtp(conta, bruto, [destino]);
+    if (r.recusados.length) falha('Recusados pelo servidor: ' + r.recusados.join(', '));
+    if (r.aceitos.length) ok('Aceito pelo servidor do UOL: ' + r.resposta);
+    if (!r.aceitos.length) sair('Nenhum destinatário aceito. Pare aqui e me mande um print.');
+  } catch (e) {
+    falha('Não conseguiu enviar: ' + (e instanceof Error ? e.message : String(e)));
+    sair('Confira a senha e me mande um print desta tela.');
+  }
+
+  console.log('3/3 Gravando a cópia na pasta Enviados (IMAP)…');
+  try {
+    const pasta = await salvarEmEnviados(conta, bruto);
+    ok(`Cópia gravada na pasta "${pasta}"`);
+  } catch (e) {
+    falha('Não conseguiu gravar em Enviados: ' + (e instanceof Error ? e.message : String(e)));
+    try {
+      const ps = await listarPastas(conta);
+      console.log('  Pastas da conta: ' + ps.map((p) => p.caminho + (p.especial ? ` (${p.especial})` : '')).join(', '));
+    } catch {
+      /* sem acesso ao IMAP */
+    }
+    sair('O e-mail foi enviado, mas a cópia não. Me mande um print desta tela.');
+  }
+
+  console.log('');
+  console.log('PRONTO. Agora confira:');
+  console.log(`  • a caixa de entrada de ${destino} (veja o lixo eletrônico também)`);
+  console.log(`  • a pasta Enviados de ${usuario} no webmail do UOL`);
+}
+
 const db = abrirBanco(process.env.BANCO ?? '/dados/faturas.db');
 const repo = repositorio(db);
 
@@ -39,7 +107,7 @@ const sair = (msg: string, codigo = 1): never => {
 
 /** Lê linhas sem mostrar o que é digitado. Sem terminal (entrada redirecionada), lê as linhas da entrada em ordem. */
 const leitor: { rl?: Interface; fila?: string[]; mudo: boolean } = { mudo: false };
-async function lerEscondido(pergunta: string): Promise<string> {
+async function lerEscondido(pergunta: string, esconder = true): Promise<string> {
   process.stdout.write(pergunta);
   if (!process.stdin.isTTY) {
     if (!leitor.fila) {
@@ -50,7 +118,7 @@ async function lerEscondido(pergunta: string): Promise<string> {
     process.stdout.write('\n');
     return leitor.fila.shift() ?? '';
   }
-  leitor.mudo = true;
+  leitor.mudo = esconder;
   if (!leitor.rl) {
     const saida = new Writable({
       write(chunk, _enc, cb) {
@@ -62,7 +130,7 @@ async function lerEscondido(pergunta: string): Promise<string> {
   }
   const r = await leitor.rl.question('');
   leitor.mudo = false;
-  process.stdout.write('\n');
+  if (esconder) process.stdout.write('\n');
   return r;
 }
 
@@ -109,12 +177,14 @@ if (cmd === 'criar') {
   if (!email) sair(`Uso: ${cmd} email@lucminas.com.br`);
   if (!repo.definirUsuarioAtivo(email, cmd === 'reativar')) sair(`Usuário ${email} não encontrado.`);
   console.log(cmd === 'desativar' ? 'Usuário desativado.' : 'Usuário reativado.');
+} else if (cmd === 'testar-email') {
+  await testarEmail();
 } else if (cmd === 'listar') {
   const us = repo.listarUsuarios();
   if (!us.length) console.log('Nenhum usuário ainda.');
   for (const u of us) console.log(`${u.ativo ? 'ativo     ' : 'desativado'}  ${u.email}  (${u.nome}${u.chamar ? `, "Oi ${u.chamar}!"` : ''})`);
 } else {
-  sair('Comandos: criar, senha, chamar, desativar, reativar, listar');
+  sair('Comandos: criar, senha, chamar, desativar, reativar, listar, testar-email');
 }
 leitor.rl?.close();
   db.close();
