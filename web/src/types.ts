@@ -1,7 +1,8 @@
 // Tipos compartilhados. Quando a API existir, estes formatos são o contrato entre front e back.
 
 /** Equipamento (frota) alugado. valor em centavos. */
-export type Frota = { numero: string; valor: number; descricao: string };
+/** Equipamento (frota) alugado. valor em centavos. Os campos de locação vêm das movimentações. */
+export type Frota = { numero: string; valor: number; descricao: string; inicio?: string | null; contrato?: string; gas?: number; frete?: '' | 'lucminas' | 'cliente' };
 
 export type Cliente = {
   id: string;
@@ -12,6 +13,9 @@ export type Cliente = {
   inicioLocacao: string | null; // AAAA-MM-DD
   periodoDias: number | null;
   frotas: Frota[];
+  contato?: string;
+  telefone?: string;
+  prazoPagamento?: string;
   /** Nome como aparece no arquivo da fatura (MAIÚSCULO). */
   nome: string;
   /** Outros nomes que podem aparecer nos arquivos. */
@@ -34,6 +38,9 @@ export type ClienteInput = Omit<Cliente, 'id' | 'atualizadoEm' | 'ativo' | 'diaE
   regra?: 'dia' | 'periodo';
   inicioLocacao?: string | null;
   periodoDias?: number | null;
+  contato?: string;
+  telefone?: string;
+  prazoPagamento?: string;
 };
 
 /** Faturamento marcado no calendário (cliente + data prevista). */
@@ -112,7 +119,8 @@ export type Envio = {
 };
 
 /** chamar: como a pessoa é chamada na saudação do topo (ex.: "Angeli"). */
-export type Usuario = { id?: number; nome: string; email: string; chamar?: string };
+export type Perfil = 'financeiro' | 'operacoes';
+export type Usuario = { id?: number; nome: string; email: string; chamar?: string; perfil?: Perfil };
 
 export type Pessoa = { id: number; nome: string; chamar: string; email: string };
 
@@ -140,3 +148,51 @@ export type Solicitacao = {
 };
 
 export type NovaSolicitacao = { paraUsuario: number; data: string; clienteId: string | null; titulo: string; texto: string };
+
+export type TipoMov = 'locacao' | 'devolucao' | 'troca';
+export type DadosMov = {
+  data: string;
+  valor: number | null;
+  frete: '' | 'lucminas' | 'cliente';
+  gas: number;
+  contrato: string;
+  prazoPagamento: string;
+  emails: string[];
+  contatoNome: string;
+  contatoTelefone: string;
+  descricao: string;
+  observacoes: string;
+};
+export type NovaMovimentacao = { tipo: TipoMov; frota: string; frotaNova?: string; clienteId?: string | null; clienteNome?: string } & DadosMov;
+export type Movimentacao = {
+  id: string;
+  tipo: TipoMov;
+  frota: string;
+  frotaNova: string | null;
+  clienteId: string | null;
+  clienteNome: string;
+  dados: DadosMov;
+  status: 'pendente' | 'aprovada' | 'rejeitada';
+  criadaEm: string;
+  criadaPorNome: string;
+  decididaEm: string | null;
+  decididaPorNome: string | null;
+  motivo: string;
+};
+export type Proposta = {
+  id: string;
+  clienteId: string | null;
+  dados: ClienteInput;
+  status: 'pendente' | 'aprovada' | 'rejeitada';
+  criadaEm: string;
+  criadaPor: number;
+  criadaPorNome: string;
+  decididaEm: string | null;
+  decididaPorNome: string | null;
+  motivo: string;
+  atual: Cliente | null;
+  /** como o cadastro fica se aprovar agora: só o que a pessoa mudou é aplicado sobre o cadastro atual */
+  resultado: ClienteInput;
+};
+export type ItemLog = { id: number; quando: string; usuario: string; area: string; acao: string; clienteId: string; clienteNome: string; antes: unknown; depois: unknown };
+export type ConfigEmail = Record<'email.remetente' | 'email.assunto' | 'email.corpo', string>;

@@ -8,9 +8,13 @@ import { Historico } from './pages/Historico';
 import { Calendario } from './pages/Calendario';
 import { Frotas } from './pages/Frotas';
 import { Solicitacoes } from './pages/Solicitacoes';
+import { Movimentacoes } from './pages/Movimentacoes';
+import { Aprovacoes } from './pages/Aprovacoes';
+import { Registro } from './pages/Registro';
+import { Configuracoes } from './pages/Configuracoes';
 
 function Rotas() {
-  const { usuario, carregando, erroInicial } = useEstado();
+  const { usuario, carregando, erroInicial, ehFinanceiro } = useEstado();
   if (carregando) return <div className="p-10 text-ink-3">Carregando…</div>;
   if (erroInicial)
     return (
@@ -27,13 +31,17 @@ function Rotas() {
   return (
     <Routes>
       <Route element={<Layout />}>
-        <Route path="/envio" element={<Envio />} />
+        {ehFinanceiro && <Route path="/envio" element={<Envio />} />}
         <Route path="/clientes" element={<Clientes />} />
         <Route path="/calendario" element={<Calendario />} />
         <Route path="/frotas" element={<Frotas />} />
         <Route path="/solicitacoes" element={<Solicitacoes />} />
-        <Route path="/historico" element={<Historico />} />
-        <Route path="*" element={<Navigate to="/envio" replace />} />
+        <Route path="/movimentacoes" element={<Movimentacoes />} />
+        <Route path="/aprovacoes" element={<Aprovacoes />} />
+        <Route path="/registro" element={<Registro />} />
+        <Route path="/configuracoes" element={<Configuracoes />} />
+        {ehFinanceiro && <Route path="/historico" element={<Historico />} />}
+        <Route path="*" element={<Navigate to={ehFinanceiro ? '/envio' : '/movimentacoes'} replace />} />
       </Route>
     </Routes>
   );

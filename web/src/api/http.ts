@@ -71,6 +71,20 @@ export const httpApi: Api = {
   responderSolicitacao: (id, texto) => chamar('POST', `/api/solicitacoes/${id}/mensagens`, { texto }),
   alterarSolicitacao: (id, mudanca) => chamar('PATCH', `/api/solicitacoes/${id}`, mudanca),
 
+  listarMovimentacoes: () => chamar('GET', '/api/movimentacoes'),
+  registrarMovimentacao: (m) => chamar('POST', '/api/movimentacoes', m),
+  decidirMovimentacao: (id, aprovar, motivo) => chamar('POST', `/api/movimentacoes/${id}/${aprovar ? 'aprovar' : 'recusar'}`, { motivo: motivo ?? '' }),
+  listarPropostas: () => chamar('GET', '/api/propostas'),
+  proporAlteracao: async (input) => {
+    await chamar('POST', '/api/propostas', input);
+  },
+  decidirProposta: async (id, aprovar, motivo) => {
+    await chamar('POST', `/api/propostas/${id}/${aprovar ? 'aprovar' : 'recusar'}`, { motivo: motivo ?? '' });
+  },
+  lerConfig: () => chamar('GET', '/api/config'),
+  salvarConfig: (c) => chamar('PUT', '/api/config', c),
+  listarRegistro: () => chamar('GET', '/api/registro'),
+
   listarEnvios: () => chamar('GET', '/api/envios'),
   // o envio real (SMTP + cópia em Enviados) entra na próxima etapa; o servidor responde com a explicação
   enviar: (pedido) => chamar('POST', '/api/envios', { referencia: pedido.referencia, numero: pedido.numero, clienteId: pedido.clienteId }),

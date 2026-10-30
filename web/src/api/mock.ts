@@ -106,7 +106,7 @@ export const mockApi: Api = {
   async login(email, senha) {
     await espera(400);
     if (!email.trim() || !senha) throw new Error('Informe e-mail e senha.');
-    const usuario = { id: 1, nome: email.split('@')[0], email: email.trim().toLowerCase() };
+    const usuario = { id: 1, nome: email.split('@')[0], email: email.trim().toLowerCase(), perfil: 'financeiro' as const };
     salvar({ ...carregar(), usuario });
     return usuario;
   },
@@ -234,6 +234,31 @@ export const mockApi: Api = {
     salvar({ ...b, solicitacoes: l });
     return l.find((s) => s.id === sid)!;
   },
+  // demonstração: movimentações/propostas/registro simplificados (o real fica no servidor)
+  async listarMovimentacoes() {
+    return [];
+  },
+  async registrarMovimentacao() {
+    throw new Error('Movimentações só funcionam no sistema (faturas.lucminas.com.br).');
+  },
+  async decidirMovimentacao() {
+    throw new Error('Indisponível na demonstração.');
+  },
+  async listarPropostas() {
+    return [];
+  },
+  async proporAlteracao() {},
+  async decidirProposta() {},
+  async lerConfig() {
+    return { ...CONFIG_DEMO };
+  },
+  async salvarConfig(c) {
+    Object.assign(CONFIG_DEMO, c);
+    return { ...CONFIG_DEMO };
+  },
+  async listarRegistro() {
+    return [];
+  },
   async listarEnvios() {
     await espera(120);
     return [...carregar().envios].sort((a, b) => b.enviadoEm.localeCompare(a.enviadoEm));
@@ -302,6 +327,13 @@ export function apagarExemplos() {
 export function temExemplos(): boolean {
   return carregar().clientes.some((c) => [...c.para, ...c.cc].every((e) => /\.exemplo\.br$/.test(e)));
 }
+
+const CONFIG_DEMO = {
+  'email.remetente': 'Financeiro · Lucminas Empilhadeiras',
+  'email.assunto': 'Fatura de locação nº {numero} · Lucminas Empilhadeiras',
+  'email.corpo':
+    'Prezados,\n\nSegue em anexo a fatura de locação nº {numero}, referente a {mes}, e o boleto para pagamento.\n\nEm caso de dúvida, é só responder este e-mail.\n\nAtenciosamente,\nFinanceiro · Lucminas Empilhadeiras',
+};
 
 /** Volta os dados de demonstração ao estado inicial. */
 export function resetarDemo() {

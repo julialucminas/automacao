@@ -27,7 +27,7 @@ export function PainelFatura({
   envioAnterior: Envio | undefined;
   cadastrarNovo: (item: ItemLote) => void;
 }) {
-  const { clientes, atualizarItem } = useEstado();
+  const { clientes, atualizarItem, config } = useEstado();
 
   if (!item) {
     return (
@@ -40,7 +40,7 @@ export function PainelFatura({
   const st = statusDoItem(item, clientes);
   const meta = STATUS_ITEM[st];
   const cliente: Cliente | undefined = clientes.find((c) => c.id === item.clienteId);
-  const email = cliente && cliente.para.length && item.fatura ? montarEmail(item, cliente, referencia) : null;
+  const email = cliente && cliente.para.length && item.fatura ? montarEmail(item, cliente, referencia, config) : null;
   const anexos = [item.fatura, item.boleto].filter((a): a is NonNullable<typeof a> => !!a);
 
   return (
@@ -84,7 +84,7 @@ export function PainelFatura({
             <dl className="flex flex-col gap-2 border-b border-line bg-[#F8F9FB] px-3.5 py-3 text-[13px]">
               <div className="flex gap-2">
                 <dt className="w-[52px] shrink-0 text-ink-3">De</dt>
-                <dd>{REMETENTE}</dd>
+                <dd>{email.remetente} &lt;{REMETENTE}&gt;</dd>
               </div>
               <div className="flex gap-2">
                 <dt className="w-[52px] shrink-0 pt-0.5 text-ink-3">Para</dt>

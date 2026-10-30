@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { Cliente, ClienteInput, Frota } from '../types';
 import { formatarReais, lerReais, reaisParaCampo } from '../lib/dinheiro';
-import { dataCurta, dataValida, descreverRegra, proximasDatas, regraDoCliente } from '../lib/calendario';
+import { dataBr, dataCurta, dataValida, descreverRegra, proximasDatas, regraDoCliente } from '../lib/calendario';
 import { emailValido } from '../lib/normalizar';
 import { useEstado } from '../state';
 import { IcFechar, IcMais } from './Icones';
@@ -21,11 +21,14 @@ export type Rascunho = {
   dia: string;
   inicio: string; // AAAA-MM-DD do campo de data
   periodo: string;
-  /** frotas com o valor como texto do campo, para permitir digitar à vontade */
-  frotas: { numero: string; valor: string; descricao: string }[];
+  contato: string;
+  telefone: string;
+  prazoPagamento: string;
+  /** frotas com o valor como texto do campo, para permitir digitar à vontade; extra = dados da locação (vêm das movimentações) */
+  frotas: { numero: string; valor: string; descricao: string; extra?: Pick<Frota, 'inicio' | 'contrato' | 'gas' | 'frete'> }[];
 };
 
-export const rascunhoVazio = (nome = ''): Rascunho => ({ nome, apelidos: '', cnpj: '', para: [], cc: [], observacoes: '', regra: 'dia', dia: '', inicio: '', periodo: '', frotas: [] });
+export const rascunhoVazio = (nome = ''): Rascunho => ({ nome, apelidos: '', cnpj: '', para: [], cc: [], observacoes: '', regra: 'dia', dia: '', inicio: '', periodo: '', contato: '', telefone: '', prazoPagamento: '', frotas: [] });
 
 export const rascunhoDe = (c: Cliente): Rascunho => ({
   id: c.id,
@@ -40,7 +43,15 @@ export const rascunhoDe = (c: Cliente): Rascunho => ({
   dia: c.diaEmissao ? String(c.diaEmissao) : '',
   inicio: c.inicioLocacao ?? '',
   periodo: c.periodoDias ? String(c.periodoDias) : '',
-  frotas: c.frotas.map((f) => ({ numero: f.numero, valor: f.valor ? reaisParaCampo(f.valor) : '', descricao: f.descricao })),
+  contato: c.contato ?? '',
+  telefone: c.telefone ?? '',
+  prazoPagamento: c.prazoPagamento ?? '',
+  frotas: c.frotas.map((f) => ({
+    numero: f.numero,
+    valor: f.valor ? reaisParaCampo(f.valor) : '',
+    descricao: f.descricao,
+    extra: { inicio: f.inicio ?? null, contrato: f.contrato ?? '', gas: f.gas ?? 0, frete: f.frete ?? '' },
+  })),
 });
 
 function ListaEmails({
@@ -131,15 +142,21 @@ export function ClienteForm({
   fechar: () => void;
   aoSalvar?: (c: Cliente) => void;
 }) {
+  const ehFin = useEstado().ehFinanceiro;
   return (
     <Gaveta aberto={!!inicial} fechar={fechar} titulo={inicial?.id ? 'Editar cliente' : 'Novo cliente'}>
+      {inicial && !ehFin && (
+        <p className="rounded-[10px] bg-brand-soft px-3 py-2.5 text-[13px]">
+          As alterações vão para a <b>Angelise aprovar</b> antes de entrar no cadastro.
+        </p>
+      )}
       {inicial && <Formulario key={inicial.id ?? 'novo'} inicial={inicial} fechar={fechar} aoSalvar={aoSalvar} />}
     </Gaveta>
   );
 }
 
 function Formulario({ inicial, fechar, aoSalvar }: { inicial: Rascunho; fechar: () => void; aoSalvar?: (c: Cliente) => void }) {
-  const { salvarCliente, definirAtivo, clientes, avisar } = useEstado();
+  const { salvarCliente, proporCliente, ehFinanceiro, definirAtivo, clientes, avisar } = useEstado();
   const [d, setD] = useState<Rascunho>(inicial);
   const [paraIn, setParaIn] = useState('');
   const [ccIn, setCcIn] = useState('');
@@ -183,7 +200,7 @@ function Formulario({ inicial, fechar, aoSalvar }: { inicial: Rascunho; fechar: 
       if (frotas.some((x) => x.numero === numero)) return setErro(`A frota ${numero} está repetida.`);
       const valor = f.valor.trim() ? lerReais(f.valor) : 0;
       if (valor === null) return setErro(`Não entendi o valor "${f.valor}" da frota ${numero}. Use, por exemplo, 1.500,00`);
-      frotas.push({ numero, valor, descricao: f.descricao.trim() });
+      frotas.push({ numero, valor, descricao: f.descricao.trim(), ...(f.extra ?? {}) });
     }
 
     const input: ClienteInput = {
@@ -199,12 +216,20 @@ function Formulario({ inicial, fechar, aoSalvar }: { inicial: Rascunho; fechar: 
       para,
       cc: cc.filter((e) => !para.includes(e)),
       observacoes: d.observacoes.trim(),
+      contato: d.contato.trim(),
+      telefone: d.telefone.trim(),
+      prazoPagamento: d.prazoPagamento.trim(),
     };
     setSalvando(true);
     try {
-      const salvo = await salvarCliente(input);
-      avisar(`Cliente ${salvo.nome} salvo.`);
-      aoSalvar?.(salvo);
+      if (!ehFinanceiro) {
+        await proporCliente(input);
+        avisar(`Alteração de ${nome} enviada para aprovação do financeiro.`);
+      } else {
+        const salvo = await salvarCliente(input);
+        avisar(`Cliente ${salvo.nome} salvo.`);
+        aoSalvar?.(salvo);
+      }
       fechar();
     } catch (e) {
       setErro(e instanceof Error ? e.message : 'Não foi possível salvar.');
@@ -240,6 +265,27 @@ function Formulario({ inicial, fechar, aoSalvar }: { inicial: Rascunho; fechar: 
       <ListaEmails id="cad-para" rotulo="Para" dica="quem recebe a fatura" emails={d.para} mudar={(para) => setD({ ...d, para })} pendente={paraIn} setPendente={setParaIn} tom="para" erro={setErro} />
       <ListaEmails id="cad-cc" rotulo="Cópia (Cc)" dica="contador, compras, diretoria…" emails={d.cc} mudar={(cc) => setD({ ...d, cc })} pendente={ccIn} setPendente={setCcIn} tom="cc" erro={setErro} />
 
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="cad-contato" className="label">
+            Contato
+          </label>
+          <input id="cad-contato" className="input" value={d.contato} onChange={(e) => setD({ ...d, contato: e.target.value })} placeholder="Ex.: João Pedro" />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="cad-telefone" className="label">
+            Telefone
+          </label>
+          <input id="cad-telefone" className="input" inputMode="tel" value={d.telefone} onChange={(e) => setD({ ...d, telefone: e.target.value })} placeholder="(31) 98888-0000" />
+        </div>
+        <div className="flex flex-col gap-1.5 sm:col-span-2">
+          <label htmlFor="cad-prazo" className="label">
+            Prazo de pagamento
+          </label>
+          <input id="cad-prazo" className="input" value={d.prazoPagamento} onChange={(e) => setD({ ...d, prazoPagamento: e.target.value })} placeholder="Ex.: 30 dias após emissão da fatura" />
+        </div>
+      </div>
+
       <Faturamento d={d} setD={setD} />
 
       <div className="flex flex-col gap-1.5">
@@ -264,7 +310,7 @@ function Formulario({ inicial, fechar, aoSalvar }: { inicial: Rascunho; fechar: 
       )}
 
       <div className="mt-auto flex flex-wrap items-center justify-between gap-2.5 pt-2">
-        {d.id ? (
+        {d.id && ehFinanceiro ? (
           <button
             type="button"
             className="btn-secondary btn-sm"
@@ -284,7 +330,7 @@ function Formulario({ inicial, fechar, aoSalvar }: { inicial: Rascunho; fechar: 
             Cancelar
           </button>
           <button type="button" className="btn-primary" onClick={salvar} disabled={salvando}>
-            {salvando ? 'Salvando…' : 'Salvar cliente'}
+            {salvando ? 'Salvando…' : ehFinanceiro ? 'Salvar cliente' : 'Enviar para aprovação'}
           </button>
         </div>
       </div>
@@ -344,6 +390,7 @@ function Faturamento({ d, setD }: { d: Rascunho; setD: (r: Rascunho) => void }) 
             >
               <IcFechar tamanho={14} />
             </button>
+            {resumoLocacao(f.extra) && <p className="col-span-3 -mt-1 text-xs text-ink-3 sm:col-span-4">{resumoLocacao(f.extra)}</p>}
           </div>
         ))}
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -359,6 +406,19 @@ function Faturamento({ d, setD }: { d: Rascunho; setD: (r: Rascunho) => void }) 
       </div>
     </fieldset>
   );
+}
+
+/** "desde 20/10/2026 · contrato 12 meses · 1 vasilhame de gás · frete Lucminas" */
+export function resumoLocacao(x?: Pick<Frota, 'inicio' | 'contrato' | 'gas' | 'frete'>): string {
+  if (!x) return '';
+  return [
+    x.inicio ? `desde ${dataBr(x.inicio)}` : '',
+    x.contrato ? `contrato ${x.contrato}` : '',
+    x.gas ? `${x.gas} vasilhame${x.gas > 1 ? 's' : ''} de gás` : '',
+    x.frete === 'lucminas' ? 'frete Lucminas' : x.frete === 'cliente' ? 'frete do cliente' : '',
+  ]
+    .filter(Boolean)
+    .join(' · ');
 }
 
 function RegraCampos({ d, setD }: { d: Rascunho; setD: (r: Rascunho) => void }) {

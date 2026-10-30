@@ -13,6 +13,7 @@ beforeEach(async () => {
   const db = abrirBanco(':memory:');
   repositorio(db).criarUsuario('julia@lucminas.com.br', 'Júlia', await gerarHash('senha-certa'));
   repositorio(db).criarUsuario('angelise@lucminas.com.br', 'Angelise', await gerarHash('senha-angeli'), 'Angeli');
+  repositorio(db).criarUsuario('junior@lucminas.com.br', 'Júnior', await gerarHash('senha-junior'), 'Júnior', 'operacoes');
   app = criarApp(db, { cookieSeguro: false });
   const r = await req('POST', '/api/sessao', { email: 'JULIA@lucminas.com.br', senha: 'senha-certa' }, false);
   expect(r.statusCode).toBe(200);
@@ -33,7 +34,7 @@ describe('login', () => {
   });
 
   it('logout derruba a sessão', async () => {
-    expect((await req('GET', '/api/sessao')).json()).toEqual({ id: 1, email: 'julia@lucminas.com.br', nome: 'Júlia', chamar: '' });
+    expect((await req('GET', '/api/sessao')).json()).toEqual({ id: 1, email: 'julia@lucminas.com.br', nome: 'Júlia', chamar: '', perfil: 'financeiro' });
     await req('DELETE', '/api/sessao');
     expect((await req('GET', '/api/sessao')).statusCode).toBe(401);
   });
@@ -154,7 +155,7 @@ describe('solicitações', () => {
       app.inject({ method, url, payload: payload as object, headers: { cookie: cookieAngeli } });
 
     const usuarios = (await req('GET', '/api/usuarios')).json();
-    expect(usuarios.map((u: { nome: string }) => u.nome)).toEqual(['Angelise', 'Júlia']);
+    expect(usuarios.map((u: { nome: string }) => u.nome)).toEqual(['Angelise', 'Júlia', 'Júnior']);
     const idAngeli = usuarios.find((u: { nome: string }) => u.nome === 'Angelise').id;
     const cli = (await req('POST', '/api/clientes', { nome: 'Minasbev', para: ['g@minasbev.com'] })).json();
 
@@ -176,5 +177,100 @@ describe('solicitações', () => {
     expect(concl).toMatchObject({ status: 'concluida', concluidaPorNome: 'Angelise', data: '2026-11-04' });
     expect(concl.mensagens.length).toBe(4);
     expect((await req('GET', '/api/solicitacoes/inexistente')).statusCode).toBe(404);
+  });
+});
+
+describe('operações (Júnior) e aprovação', () => {
+  const comoJunior = async () => {
+    const r = await app.inject({ method: 'POST', url: '/api/sessao', payload: { email: 'junior@lucminas.com.br', senha: 'senha-junior' } });
+    const ck = String(r.headers['set-cookie']).split(';')[0];
+    return (method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE', url: string, payload?: unknown) => app.inject({ method, url, payload: payload as object, headers: { cookie: ck } });
+  };
+
+  it('Júnior não altera direto: nova locação fica pendente e só muda o cadastro na aprovação', async () => {
+    const jr = await comoJunior();
+    const panex = (await req('POST', '/api/clientes', { nome: 'Panex', para: ['c@panex.com'], frotas: [{ numero: '35', valor: 100 }] })).json();
+
+    expect((await jr('POST', '/api/clientes', { nome: 'X', para: [] })).statusCode).toBe(403);
+    expect((await jr('POST', '/api/faturamentos', { clienteId: panex.id, data: '2026-11-01' })).statusCode).toBe(403);
+    expect((await jr('GET', '/api/clientes')).statusCode).toBe(200);
+
+    const mov = (
+      await jr('POST', '/api/movimentacoes', {
+        tipo: 'locacao', frota: 'FT35', clienteNome: 'Fenix Novus', data: '2026-10-20', valor: 335000, frete: 'lucminas', gas: 1,
+        contrato: '12 meses', prazoPagamento: '30 dias após emissão da fatura', emails: ['Compras@fenixsa.com.br', 'comercial@fenixsa.com.br'],
+        contatoNome: 'João Pedro', contatoTelefone: '(31) 98808-9842',
+      })
+    ).json();
+    expect(mov).toMatchObject({ status: 'pendente', frota: '35', clienteNome: 'FENIX NOVUS', criadaPorNome: 'Júnior' });
+    expect((await req('GET', '/api/clientes')).json().some((c: { nome: string }) => c.nome === 'FENIX NOVUS')).toBe(false);
+
+    expect((await jr('POST', `/api/movimentacoes/${mov.id}/aprovar`)).statusCode).toBe(403);
+    const ap = (await req('POST', `/api/movimentacoes/${mov.id}/aprovar`)).json();
+    expect(ap).toMatchObject({ status: 'aprovada', decididaPorNome: 'Júlia' });
+
+    const clientes = (await req('GET', '/api/clientes')).json();
+    const fenix = clientes.find((c: { nome: string }) => c.nome === 'FENIX NOVUS');
+    expect(fenix).toMatchObject({ para: ['compras@fenixsa.com.br', 'comercial@fenixsa.com.br'], contato: 'João Pedro', telefone: '(31) 98808-9842', prazoPagamento: '30 dias após emissão da fatura' });
+    expect(fenix.frotas).toEqual([{ numero: '35', valor: 335000, descricao: '', inicio: '2026-10-20', contrato: '12 meses', gas: 1, frete: 'lucminas' }]);
+    // a FT35 saiu da Panex
+    expect(clientes.find((c: { nome: string }) => c.nome === 'PANEX').frotas).toEqual([]);
+    // decidida não decide de novo
+    expect((await req('POST', `/api/movimentacoes/${mov.id}/recusar`)).statusCode).toBe(409);
+
+    // editar o cliente pelo formulário preserva os dados da locação
+    const ed = (await req('PUT', `/api/clientes/${fenix.id}`, { ...fenix, observacoes: 'ok' })).json();
+    expect(ed.frotas[0]).toMatchObject({ inicio: '2026-10-20', gas: 1, contrato: '12 meses' });
+  });
+
+  it('troca e devolução', async () => {
+    const c = (await req('POST', '/api/clientes', { nome: 'Tumi', para: ['a@t.com'], frotas: [{ numero: '116', valor: 5000, descricao: 'Paleteira', gas: 2 }] })).json();
+    await req('POST', '/api/movimentacoes', { tipo: 'troca', frota: '116', frotaNova: '120', data: '2026-11-01' });
+    let t = (await req('GET', '/api/clientes')).json().find((x: { id: string }) => x.id === c.id);
+    expect(t.frotas).toEqual([{ numero: '120', valor: 5000, descricao: 'Paleteira', gas: 2 }]);
+    await req('POST', '/api/movimentacoes', { tipo: 'devolucao', frota: '120', data: '2026-11-10' });
+    t = (await req('GET', '/api/clientes')).json().find((x: { id: string }) => x.id === c.id);
+    expect(t.frotas).toEqual([]);
+    expect((await req('POST', '/api/movimentacoes', { tipo: 'devolucao', frota: '999', data: '2026-11-10' })).statusCode).toBe(409);
+  });
+
+  it('proposta de alteração do Júnior e registro de tudo', async () => {
+    const jr = await comoJunior();
+    const c = (await req('POST', '/api/clientes', { nome: 'Weir', para: ['b@weir.com'] })).json();
+    expect((await jr('PUT', `/api/clientes/${c.id}`, { ...c, para: ['novo@weir.com'] })).statusCode).toBe(403);
+    const { id } = (await jr('POST', '/api/propostas', { ...c, para: ['novo@weir.com'] })).json();
+    expect((await jr('GET', '/api/propostas')).json()).toHaveLength(1);
+    const p = (await req('GET', '/api/propostas')).json()[0];
+    expect(p).toMatchObject({ status: 'pendente', criadaPorNome: 'Júnior', atual: { para: ['b@weir.com'] }, dados: { para: ['novo@weir.com'] } });
+    await req('POST', `/api/propostas/${id}/aprovar`);
+    expect((await req('GET', '/api/clientes')).json().find((x: { id: string }) => x.id === c.id).para).toEqual(['novo@weir.com']);
+
+    const log = (await req('GET', '/api/registro')).json();
+    expect(log[0]).toMatchObject({ usuario: 'Júlia', acao: 'aprovou alteração proposta por Júnior', clienteNome: 'WEIR' });
+    expect(log.some((l: { usuario: string; area: string }) => l.usuario === 'Júnior' && l.area === 'proposta')).toBe(true);
+  });
+
+  it('proposta antiga não desfaz o que mudou depois (frota que foi para outro cliente)', async () => {
+    const jr = await comoJunior();
+    const c = (await req('POST', '/api/clientes', { nome: 'Antiga', para: ['a@a.com'], observacoes: 'x', frotas: [{ numero: '35', valor: 1000, descricao: '' }, { numero: '7', valor: 500, descricao: '' }] })).json();
+    // Júnior edita a observação e o valor da FT7 (vendo a FT35 ainda lá)
+    const { id } = (await jr('POST', '/api/propostas', { ...c, observacoes: 'boleto dia 10', frotas: [c.frotas[0], { numero: '7', valor: 900, descricao: '' }] })).json();
+    // enquanto isso, a FT35 vai para outro cliente e a Angelise muda o e-mail
+    await req('POST', '/api/movimentacoes', { tipo: 'locacao', frota: '35', clienteNome: 'Fenix', data: '2026-10-20' });
+    await req('PUT', `/api/clientes/${c.id}`, { ...(await req('GET', '/api/clientes')).json().find((x: { id: string }) => x.id === c.id), para: ['novo@a.com'] });
+    const p = (await req('GET', '/api/propostas')).json().find((x: { id: string }) => x.id === id);
+    expect(p.resultado.frotas.map((f: { numero: string }) => f.numero)).toEqual(['7']);
+    await req('POST', `/api/propostas/${id}/aprovar`);
+    const t = (await req('GET', '/api/clientes')).json().find((x: { id: string }) => x.id === c.id);
+    expect(t).toMatchObject({ observacoes: 'boleto dia 10', para: ['novo@a.com'], frotas: [{ numero: '7', valor: 900 }] });
+  });
+
+  it('configuração do e-mail: só financeiro altera, fica no registro', async () => {
+    const jr = await comoJunior();
+    expect((await jr('PUT', '/api/config', { 'email.assunto': 'x' })).statusCode).toBe(403);
+    const cfg = (await req('PUT', '/api/config', { 'email.assunto': 'Fatura {numero} – {cliente}' })).json();
+    expect(cfg['email.assunto']).toBe('Fatura {numero} – {cliente}');
+    expect(cfg['email.corpo']).toMatch(/Prezados/);
+    expect((await req('GET', '/api/registro')).json()[0]).toMatchObject({ area: 'configuracao', acao: 'alterou o modelo do e-mail das faturas' });
   });
 });

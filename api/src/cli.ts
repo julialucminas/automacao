@@ -1,6 +1,6 @@
 /*
  * Administração de usuários, pelo terminal do servidor:
- *   bash /opt/faturas/deploy/usuario.sh criar  email@lucminas.com.br "Nome" [--chamar Apelido] [--senha]
+ *   bash /opt/faturas/deploy/usuario.sh criar  email@lucminas.com.br "Nome" [--chamar Apelido] [--senha] [--perfil operacoes]
  *   bash /opt/faturas/deploy/usuario.sh senha  email@lucminas.com.br [--senha]
  *   bash /opt/faturas/deploy/usuario.sh chamar email@lucminas.com.br Apelido
  *   bash /opt/faturas/deploy/usuario.sh desativar | reativar email@lucminas.com.br
@@ -27,6 +27,7 @@ const flag = (nome: string) => {
 const chamarFlag = flag('--chamar');
 const pedirSenha = flag('--senha') !== undefined;
 const contaFlag = flag('--conta') || undefined;
+const perfilFlag = flag('--perfil');
 const [cmd, email, ...resto] = args;
 
 const ok = (m: string) => console.log('  ✔ ' + m);
@@ -167,8 +168,10 @@ if (cmd === 'criar') {
   if (!email || !EMAIL.test(email) || !nome) sair('Uso: criar email@lucminas.com.br "Nome" [--chamar Apelido] [--senha]');
   if (repo.usuarioParaLogin(email)) sair(`Já existe usuário com o e-mail ${email}. Para trocar a senha use: senha ${email}`);
   const s = await obterSenha();
-  const u = repo.criarUsuario(email, nome, await gerarHash(s.senha), (chamarFlag ?? '').trim());
-  console.log(`Usuário criado: ${u.nome}${u.chamar ? ` (saudação: "Oi ${u.chamar}! :)")` : ''}`);
+  const perfil = perfilFlag === 'operacoes' ? 'operacoes' : 'financeiro';
+  if (perfilFlag && perfilFlag !== 'operacoes' && perfilFlag !== 'financeiro') sair('Perfil deve ser financeiro ou operacoes.');
+  const u = repo.criarUsuario(email, nome, await gerarHash(s.senha), (chamarFlag ?? '').trim(), perfil);
+  console.log(`Usuário criado: ${u.nome} · perfil ${u.perfil}${u.chamar ? ` · saudação: "Oi ${u.chamar}! :)"` : ''}`);
   mostrar(u.email, s);
 } else if (cmd === 'senha') {
   if (!email) sair('Uso: senha email@lucminas.com.br [--senha]');
@@ -186,14 +189,19 @@ if (cmd === 'criar') {
   if (!email) sair(`Uso: ${cmd} email@lucminas.com.br`);
   if (!repo.definirUsuarioAtivo(email, cmd === 'reativar')) sair(`Usuário ${email} não encontrado.`);
   console.log(cmd === 'desativar' ? 'Usuário desativado.' : 'Usuário reativado.');
+} else if (cmd === 'perfil') {
+  const p = resto[0];
+  if (!email || (p !== 'financeiro' && p !== 'operacoes')) sair('Uso: perfil email@lucminas.com.br financeiro|operacoes');
+  if (!repo.definirPerfil(email, p as 'financeiro' | 'operacoes')) sair(`Usuário ${email} não encontrado.`);
+  console.log(`Perfil de ${email}: ${p}`);
 } else if (cmd === 'testar-email') {
   await testarEmail();
 } else if (cmd === 'listar') {
   const us = repo.listarUsuarios();
   if (!us.length) console.log('Nenhum usuário ainda.');
-  for (const u of us) console.log(`${u.ativo ? 'ativo     ' : 'desativado'}  ${u.email}  (${u.nome}${u.chamar ? `, "Oi ${u.chamar}!"` : ''})`);
+  for (const u of us) console.log(`${u.ativo ? 'ativo     ' : 'desativado'}  ${u.perfil.padEnd(10)}  ${u.email}  (${u.nome}${u.chamar ? `, "Oi ${u.chamar}!"` : ''})`);
 } else {
-  sair('Comandos: criar, senha, chamar, desativar, reativar, listar, testar-email');
+  sair('Comandos: criar, senha, chamar, perfil, desativar, reativar, listar, testar-email');
 }
 leitor.rl?.close();
   db.close();

@@ -22,7 +22,7 @@ type Progresso = {
 const COLUNAS = 'grid grid-cols-[48px_60px_minmax(200px,1.4fr)_minmax(170px,1.1fr)_minmax(150px,1fr)_156px] items-center gap-3';
 
 export function Conferencia() {
-  const { lote, definirLote, atualizarItem, clientes, envios, recarregarEnvios, vincularCliente } = useEstado();
+  const { lote, definirLote, atualizarItem, clientes, envios, recarregarEnvios, vincularCliente, config } = useEstado();
   const navegar = useNavigate();
   const [sel, setSel] = useState<string | null>(lote?.itens[0] ? chaveItem(lote.itens[0]) : null);
   const [filtro, setFiltro] = useState<Filtro>('todos');
@@ -67,7 +67,7 @@ export function Conferencia() {
     setProgresso({ total: fila.length, feitos: [], terminou: false });
     for (const item of fila) {
       const cliente = porId.get(item.clienteId!) as Cliente;
-      const { assunto, corpo } = montarEmail(item, cliente, lote.referencia);
+      const { assunto, corpo } = montarEmail(item, cliente, lote.referencia, config);
       try {
         const envio = await api.enviar({
           referencia: lote.referencia,

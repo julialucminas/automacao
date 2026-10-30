@@ -5,7 +5,7 @@ import type { Cliente, Frota } from '../types';
 import { formatarReais } from '../lib/dinheiro';
 import { dataCurta, descreverRegra, hojeIso, proximasDatas, regraDoCliente } from '../lib/calendario';
 import { chaveEmpresa } from '../lib/normalizar';
-import { ClienteForm, rascunhoDe, type Rascunho } from '../components/ClienteForm';
+import { ClienteForm, rascunhoDe, resumoLocacao, type Rascunho } from '../components/ClienteForm';
 import { Cartao, Chip } from '../components/ui';
 import { IcAlerta, IcBusca, IcUpload } from '../components/Icones';
 import { gerarExcelOperacoes } from '../lib/exportarExcel';
@@ -177,7 +177,10 @@ export function Frotas() {
                     <span className="font-semibold">{l.cliente.nome}</span>
                     {!l.cliente.ativo && <span className="ml-2 text-xs text-ink-3">(desativado)</span>}
                   </span>
-                  <span className="text-ink-2">{l.frota.descricao || '—'}</span>
+                  <span className="text-ink-2">
+                    {l.frota.descricao || (resumoLocacao(l.frota) ? '' : '—')}
+                    {resumoLocacao(l.frota) && <span className="block text-xs text-ink-3">{resumoLocacao(l.frota)}</span>}
+                  </span>
                   <span className={`text-right font-semibold ${l.frota.valor ? '' : 'text-warn'}`}>{l.frota.valor ? formatarReais(l.frota.valor) : 'sem valor'}</span>
                   <span className="text-ink-2">
                     {l.proxima ? <b className="text-ink">{dataCurta(l.proxima)}</b> : '—'}

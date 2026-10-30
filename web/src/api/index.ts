@@ -5,7 +5,7 @@
  */
 import { mockApi } from './mock';
 import { httpApi } from './http';
-import type { Cliente, ClienteInput, Envio, Faturamento, NovaSolicitacao, Pessoa, Solicitacao, Usuario } from '../types';
+import type { Cliente, ClienteInput, ConfigEmail, Envio, Faturamento, ItemLog, Movimentacao, NovaMovimentacao, NovaSolicitacao, Pessoa, Proposta, Solicitacao, Usuario } from '../types';
 
 export type EnvioPedido = {
   referencia: string;
@@ -39,6 +39,16 @@ export interface Api {
   criarSolicitacao(s: NovaSolicitacao): Promise<Solicitacao>;
   responderSolicitacao(id: string, texto: string): Promise<Solicitacao>;
   alterarSolicitacao(id: string, mudanca: { status?: 'aberta' | 'concluida'; data?: string }): Promise<Solicitacao>;
+
+  listarMovimentacoes(): Promise<Movimentacao[]>;
+  registrarMovimentacao(m: NovaMovimentacao): Promise<Movimentacao>;
+  decidirMovimentacao(id: string, aprovar: boolean, motivo?: string): Promise<Movimentacao>;
+  listarPropostas(): Promise<Proposta[]>;
+  proporAlteracao(input: ClienteInput): Promise<void>;
+  decidirProposta(id: string, aprovar: boolean, motivo?: string): Promise<void>;
+  lerConfig(): Promise<ConfigEmail>;
+  salvarConfig(c: Partial<ConfigEmail>): Promise<ConfigEmail>;
+  listarRegistro(): Promise<ItemLog[]>;
 
   listarEnvios(): Promise<Envio[]>;
   /** Envia um e-mail (SMTP) e salva a cópia em Enviados (IMAP). */

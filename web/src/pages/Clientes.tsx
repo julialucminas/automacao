@@ -32,7 +32,7 @@ export function etiquetasDe(c: Cliente): Etiqueta[] {
 const COLUNAS = 'grid grid-cols-[minmax(200px,1.2fr)_minmax(190px,1.1fr)_minmax(170px,1fr)_minmax(170px,1fr)_minmax(180px,1.1fr)_90px_80px] gap-3';
 
 export function Clientes() {
-  const { clientes } = useEstado();
+  const { clientes, ehFinanceiro } = useEstado();
   const [busca, setBusca] = useState('');
   const [mostrarInativos, setMostrarInativos] = useState(false);
   const [etiqueta, setEtiqueta] = useState<Etiqueta | 'todos' | 'completos'>('todos');
@@ -81,7 +81,7 @@ export function Clientes() {
             <span className="sr-only">Buscar cliente</span>
             <input type="search" value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar por nome, e-mail ou CNPJ" className="w-[240px] bg-transparent text-ink outline-none" />
           </label>
-          {importacao.botao}
+          {ehFinanceiro && importacao.botao}
           <button type="button" className="btn-primary" onClick={() => setEditando(rascunhoVazio())}>
             <IcMais /> Novo cliente
           </button>

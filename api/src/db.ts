@@ -2,7 +2,16 @@ import Database from 'better-sqlite3';
 import { randomUUID } from 'node:crypto';
 
 /** Equipamento (frota) alugado pelo cliente. valor em centavos, para não ter erro de arredondamento. */
-export type Frota = { numero: string; valor: number; descricao: string };
+export type Frota = {
+  numero: string;
+  valor: number;
+  descricao: string;
+  /** dados da locação (vêm das movimentações) */
+  inicio?: string | null;
+  contrato?: string;
+  gas?: number;
+  frete?: '' | 'lucminas' | 'cliente';
+};
 
 export type Cliente = {
   id: string;
@@ -13,6 +22,9 @@ export type Cliente = {
   inicioLocacao: string | null; // AAAA-MM-DD
   periodoDias: number | null;
   frotas: Frota[];
+  contato: string;
+  telefone: string;
+  prazoPagamento: string;
   nome: string;
   apelidos: string[];
   cnpj: string;
@@ -25,13 +37,16 @@ export type Cliente = {
 };
 
 /** diaEmissao/frotas ausentes = manter como está (ou vazio, se for cliente novo). */
-export type ClienteInput = Omit<Cliente, 'id' | 'ativo' | 'criadoEm' | 'atualizadoEm' | 'diaEmissao' | 'frotas' | 'regra' | 'inicioLocacao' | 'periodoDias'> & {
+export type ClienteInput = Omit<Cliente, 'id' | 'ativo' | 'criadoEm' | 'atualizadoEm' | 'diaEmissao' | 'frotas' | 'regra' | 'inicioLocacao' | 'periodoDias' | 'contato' | 'telefone' | 'prazoPagamento'> & {
   id?: string;
   diaEmissao?: number | null;
   frotas?: Frota[];
   regra?: 'dia' | 'periodo';
   inicioLocacao?: string | null;
   periodoDias?: number | null;
+  contato?: string;
+  telefone?: string;
+  prazoPagamento?: string;
 };
 
 export type Faturamento = { clienteId: string; data: string; marcadoEm: string; marcadoPor: string; origem: 'manual' | 'envio' };
@@ -55,7 +70,8 @@ export type Envio = {
   observacao: string;
 };
 
-export type Usuario = { id: number; email: string; nome: string; chamar: string };
+export type Perfil = 'financeiro' | 'operacoes';
+export type Usuario = { id: number; email: string; nome: string; chamar: string; perfil: Perfil };
 
 export type Mensagem = { id: number; usuarioId: number; autor: string; texto: string; criadaEm: string };
 export type Solicitacao = {
@@ -183,6 +199,45 @@ const MIGRACOES = [
      vista_em TEXT NOT NULL,
      PRIMARY KEY (solicitacao_id, usuario_id)
    );`,
+  // perfis, contato do cliente, movimentações, propostas de alteração, configurações e log geral
+  `ALTER TABLE usuarios ADD COLUMN perfil TEXT NOT NULL DEFAULT 'financeiro';
+   ALTER TABLE clientes ADD COLUMN contato TEXT NOT NULL DEFAULT '';
+   ALTER TABLE clientes ADD COLUMN telefone TEXT NOT NULL DEFAULT '';
+   ALTER TABLE clientes ADD COLUMN prazo_pagamento TEXT NOT NULL DEFAULT '';
+   ALTER TABLE historico_clientes ADD COLUMN area TEXT NOT NULL DEFAULT 'cliente';
+   CREATE TABLE movimentacoes (
+     id TEXT PRIMARY KEY,
+     tipo TEXT NOT NULL,
+     frota TEXT NOT NULL,
+     frota_nova TEXT,
+     cliente_id TEXT REFERENCES clientes(id) ON DELETE SET NULL,
+     cliente_nome TEXT NOT NULL DEFAULT '',
+     dados TEXT NOT NULL,
+     status TEXT NOT NULL,
+     criada_em TEXT NOT NULL,
+     criada_por INTEGER REFERENCES usuarios(id),
+     decidida_em TEXT,
+     decidida_por INTEGER REFERENCES usuarios(id),
+     motivo TEXT NOT NULL DEFAULT ''
+   );
+   CREATE TABLE propostas (
+     id TEXT PRIMARY KEY,
+     cliente_id TEXT REFERENCES clientes(id) ON DELETE CASCADE,
+     dados TEXT NOT NULL,
+     base TEXT,
+     status TEXT NOT NULL,
+     criada_em TEXT NOT NULL,
+     criada_por INTEGER REFERENCES usuarios(id),
+     decidida_em TEXT,
+     decidida_por INTEGER REFERENCES usuarios(id),
+     motivo TEXT NOT NULL DEFAULT ''
+   );
+   CREATE TABLE configuracoes (
+     chave TEXT PRIMARY KEY,
+     valor TEXT NOT NULL,
+     atualizado_em TEXT NOT NULL,
+     atualizado_por INTEGER REFERENCES usuarios(id)
+   );`,
 ];
 
 export function abrirBanco(caminho: string) {
@@ -214,6 +269,9 @@ type LinhaCliente = {
   regra: string;
   inicio_locacao: string | null;
   periodo_dias: number | null;
+  contato: string;
+  telefone: string;
+  prazo_pagamento: string;
   nome: string;
   apelidos: string;
   cnpj: string;
@@ -231,6 +289,9 @@ const deLinhaCliente = (r: LinhaCliente): Cliente => ({
   diaEmissao: r.dia_emissao ?? null,
   inicioLocacao: r.inicio_locacao ?? null,
   periodoDias: r.periodo_dias ?? null,
+  contato: r.contato ?? '',
+  telefone: r.telefone ?? '',
+  prazoPagamento: r.prazo_pagamento ?? '',
   frotas: JSON.parse(r.frotas),
   nome: r.nome,
   apelidos: lista(r.apelidos),
@@ -247,10 +308,10 @@ export class NaoEncontrado extends Error {}
 export class Conflito extends Error {}
 
 export function repositorio(db: Banco) {
-  const registrar = (clienteId: string, usuarioId: number | null, acao: string, antes: unknown, depois: unknown) =>
+  const registrar = (clienteId: string, usuarioId: number | null, acao: string, antes: unknown, depois: unknown, area = 'cliente') =>
     db
-      .prepare('INSERT INTO historico_clientes (cliente_id, usuario_id, quando, acao, antes, depois) VALUES (?, ?, ?, ?, ?, ?)')
-      .run(clienteId, usuarioId, agora(), acao, antes ? json(antes) : null, depois ? json(depois) : null);
+      .prepare('INSERT INTO historico_clientes (cliente_id, usuario_id, quando, acao, antes, depois, area) VALUES (?, ?, ?, ?, ?, ?, ?)')
+      .run(clienteId, usuarioId, agora(), acao, antes ? json(antes) : null, depois ? json(depois) : null, area);
 
   const buscarCliente = (id: string): Cliente => {
     const r = db.prepare('SELECT * FROM clientes WHERE id = ?').get(id) as LinhaCliente | undefined;
@@ -260,11 +321,15 @@ export function repositorio(db: Banco) {
 
   return {
     // ---------- usuários e sessões ----------
-    criarUsuario(email: string, nome: string, senhaHash: string, chamar = ''): Usuario {
+    registrarLog: registrar,
+    criarUsuario(email: string, nome: string, senhaHash: string, chamar = '', perfil: Perfil = 'financeiro'): Usuario {
       const r = db
-        .prepare('INSERT INTO usuarios (email, nome, senha_hash, criado_em, chamar) VALUES (?, ?, ?, ?, ?)')
-        .run(email.toLowerCase(), nome, senhaHash, agora(), chamar);
-      return { id: Number(r.lastInsertRowid), email: email.toLowerCase(), nome, chamar };
+        .prepare('INSERT INTO usuarios (email, nome, senha_hash, criado_em, chamar, perfil) VALUES (?, ?, ?, ?, ?, ?)')
+        .run(email.toLowerCase(), nome, senhaHash, agora(), chamar, perfil);
+      return { id: Number(r.lastInsertRowid), email: email.toLowerCase(), nome, chamar, perfil };
+    },
+    definirPerfil(email: string, perfil: Perfil): boolean {
+      return db.prepare('UPDATE usuarios SET perfil = ? WHERE email = ?').run(perfil, email.toLowerCase()).changes > 0;
     },
     definirChamar(email: string, chamar: string): boolean {
       return db.prepare('UPDATE usuarios SET chamar = ? WHERE email = ?').run(chamar, email.toLowerCase()).changes > 0;
@@ -285,7 +350,7 @@ export function repositorio(db: Banco) {
       return r.changes > 0;
     },
     listarUsuarios(): (Usuario & { ativo: boolean })[] {
-      return (db.prepare('SELECT id, email, nome, chamar, ativo FROM usuarios ORDER BY id').all() as (Usuario & { ativo: number })[]).map((u) => ({
+      return (db.prepare('SELECT id, email, nome, chamar, perfil, ativo FROM usuarios ORDER BY id').all() as (Usuario & { ativo: number })[]).map((u) => ({
         ...u,
         ativo: !!u.ativo,
       }));
@@ -296,7 +361,7 @@ export function repositorio(db: Banco) {
       return r.changes > 0;
     },
     usuarioParaLogin(email: string) {
-      return db.prepare('SELECT id, email, nome, chamar, senha_hash FROM usuarios WHERE email = ? AND ativo = 1').get(email.toLowerCase()) as
+      return db.prepare('SELECT id, email, nome, chamar, perfil, senha_hash FROM usuarios WHERE email = ? AND ativo = 1').get(email.toLowerCase()) as
         | (Usuario & { senha_hash: string })
         | undefined;
     },
@@ -308,7 +373,7 @@ export function repositorio(db: Banco) {
     usuarioDaSessao(tokenHash: string): Usuario | undefined {
       return db
         .prepare(
-          `SELECT u.id, u.email, u.nome, u.chamar FROM sessoes s JOIN usuarios u ON u.id = s.usuario_id
+          `SELECT u.id, u.email, u.nome, u.chamar, u.perfil FROM sessoes s JOIN usuarios u ON u.id = s.usuario_id
            WHERE s.token_hash = ? AND s.expira_em > ? AND u.ativo = 1`,
         )
         .get(tokenHash, agora()) as Usuario | undefined;
@@ -322,7 +387,7 @@ export function repositorio(db: Banco) {
       return (db.prepare('SELECT * FROM clientes ORDER BY nome').all() as LinhaCliente[]).map(deLinhaCliente);
     },
     buscarCliente,
-    salvarCliente(input: ClienteInput, usuarioId: number): Cliente {
+    salvarCliente(input: ClienteInput, usuarioId: number, acao?: string): Cliente {
       return db.transaction(() => {
         const repetido = db.prepare('SELECT id FROM clientes WHERE nome = ? AND id IS NOT ?').get(input.nome, input.id ?? null) as { id: string } | undefined;
         if (repetido) throw new Conflito(`Já existe um cliente chamado ${input.nome}.`);
@@ -331,7 +396,7 @@ export function repositorio(db: Banco) {
           const antes = buscarCliente(input.id);
           db.prepare(
             `UPDATE clientes SET nome = ?, apelidos = ?, cnpj = ?, para = ?, cc = ?, observacoes = ?, dia_emissao = ?, frotas = ?,
-               regra = ?, inicio_locacao = ?, periodo_dias = ?, atualizado_em = ?, atualizado_por = ?
+               regra = ?, inicio_locacao = ?, periodo_dias = ?, contato = ?, telefone = ?, prazo_pagamento = ?, atualizado_em = ?, atualizado_por = ?
              WHERE id = ?`,
           ).run(
             input.nome,
@@ -345,19 +410,22 @@ export function repositorio(db: Banco) {
             input.regra ?? antes.regra,
             input.inicioLocacao === undefined ? antes.inicioLocacao : input.inicioLocacao,
             input.periodoDias === undefined ? antes.periodoDias : input.periodoDias,
+            input.contato ?? antes.contato,
+            input.telefone ?? antes.telefone,
+            input.prazoPagamento ?? antes.prazoPagamento,
             t,
             usuarioId,
             input.id,
           );
           const depois = buscarCliente(input.id);
-          registrar(input.id, usuarioId, 'editou', antes, depois);
+          registrar(input.id, usuarioId, acao ?? 'editou', antes, depois);
           return depois;
         }
         const id = randomUUID();
         db.prepare(
           `INSERT INTO clientes (id, nome, apelidos, cnpj, para, cc, observacoes, dia_emissao, frotas, regra, inicio_locacao, periodo_dias,
-             criado_em, atualizado_em, atualizado_por)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+             contato, telefone, prazo_pagamento, criado_em, atualizado_em, atualizado_por)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         ).run(
           id,
           input.nome,
@@ -371,12 +439,15 @@ export function repositorio(db: Banco) {
           input.regra ?? 'dia',
           input.inicioLocacao ?? null,
           input.periodoDias ?? null,
+          input.contato ?? '',
+          input.telefone ?? '',
+          input.prazoPagamento ?? '',
           t,
           t,
           usuarioId,
         );
         const criado = buscarCliente(id);
-        registrar(id, usuarioId, 'criou', null, criado);
+        registrar(id, usuarioId, acao ?? 'criou', null, criado);
         return criado;
       })();
     },

@@ -26,7 +26,7 @@ const SEMANA = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 const totalFrotas = (c: Cliente) => c.frotas.reduce((s, f) => s + f.valor, 0);
 
 export function Calendario() {
-  const { clientes, avisar, solicitacoes } = useEstado();
+  const { clientes, avisar, solicitacoes, ehFinanceiro } = useEstado();
   const navegar = useNavigate();
   const hoje = hojeIso();
   const [ano, setAno] = useState(Number(hoje.slice(0, 4)));
@@ -306,9 +306,11 @@ export function Calendario() {
               <div className="w-[120px]">
                 <Chip tom={STATUS[i.status].tom}>{STATUS[i.status].rotulo}</Chip>
               </div>
-              <button type="button" disabled={salvando} onClick={() => alternar(i)} className={i.marca ? 'btn-secondary btn-sm' : 'btn-primary btn-sm'}>
-                {i.marca ? 'Desmarcar' : 'Marcar faturado'}
-              </button>
+              {ehFinanceiro && (
+                <button type="button" disabled={salvando} onClick={() => alternar(i)} className={i.marca ? 'btn-secondary btn-sm' : 'btn-primary btn-sm'}>
+                  {i.marca ? 'Desmarcar' : 'Marcar faturado'}
+                </button>
+              )}
             </div>
           ))}
         </section>
@@ -359,9 +361,11 @@ export function Calendario() {
               <button type="button" className="btn-secondary" onClick={() => setAberto(null)}>
                 Fechar
               </button>
-              <button type="button" className={aberto.marca ? 'btn-secondary' : 'btn-primary'} disabled={salvando} onClick={() => alternar(aberto)}>
-                {aberto.marca ? 'Desmarcar faturado' : 'Marcar como faturado'}
-              </button>
+              {ehFinanceiro && (
+                <button type="button" className={aberto.marca ? 'btn-secondary' : 'btn-primary'} disabled={salvando} onClick={() => alternar(aberto)}>
+                  {aberto.marca ? 'Desmarcar faturado' : 'Marcar como faturado'}
+                </button>
+              )}
             </div>
           </>
         )}
