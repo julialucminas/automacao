@@ -57,6 +57,19 @@ aponta e-mails inválidos e domínios com provável erro de digitação, e nunca
 Situações na conferência: pronto · fatura sem boleto · empresa sem cadastro ·
 boleto sem fatura · número repetido · já enviada antes (fica desmarcada).
 
+## Servidor (faturas.lucminas.com.br)
+
+VPS Hostinger (Ubuntu 24.04). Instalação, uma vez, como root no Web console:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/julialucminas/automacao/main/deploy/instalar.sh | bash
+```
+
+- `deploy/instalar.sh`: firewall, fail2ban, atualizações automáticas, Docker, publicação
+- `deploy/atualizar.sh`: verifica o GitHub a cada 5 min; se mudou, roda os testes, monta e publica
+  (se um teste falhar, a versão anterior continua no ar). Logs: `journalctl -u faturas-atualizar -n 50`
+- `deploy/docker-compose.yml` + `Caddyfile`: HTTPS automático
+
 ## Próximos passos
 
 2. Backend: API (Fastify + SQLite), login real, upload dos PDFs

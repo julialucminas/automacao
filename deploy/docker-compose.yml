@@ -1,0 +1,21 @@
+name: faturas
+
+services:
+  # Porta de entrada: HTTPS automático (Let's Encrypt) e entrega da interface.
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # monta a pasta web inteira (e não só dist) para a troca de versão não "perder" o diretório
+      - ../web:/srv/web:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  caddy_data:
+  caddy_config:
