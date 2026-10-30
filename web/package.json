@@ -11,6 +11,8 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "jspdf": "^3.0.3",
+    "jspdf-autotable": "^5.0.2",
     "jszip": "^3.10.1",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",

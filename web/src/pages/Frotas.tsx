@@ -8,10 +8,11 @@ import { chaveEmpresa } from '../lib/normalizar';
 import { ClienteForm, rascunhoDe, resumoLocacao, type Rascunho } from '../components/ClienteForm';
 import { Cartao, Chip, Modal } from '../components/ui';
 import { api } from '../api';
-import { dataHora } from '../lib/email';
+import { dataHora, referenciaAtual } from '../lib/email';
 import type { FrotaOficina } from '../types';
-import { IcAlerta, IcBusca, IcUpload } from '../components/Icones';
+import { IcAlerta, IcBusca, IcMais, IcNota, IcUpload } from '../components/Icones';
 import { gerarExcelOperacoes } from '../lib/exportarExcel';
+import { gerarPdfLocacoes, montarRelatorio } from '../lib/relatorioLocacoes';
 
 type Linha = { frota: Frota; cliente: Cliente; proxima: string | null; duplicada: boolean };
 type Ordem = 'frota' | 'cliente' | 'valor' | 'proxima';
@@ -25,6 +26,7 @@ const COLUNAS = 'grid grid-cols-[120px_minmax(200px,1.4fr)_minmax(160px,1fr)_120
 export function Frotas() {
   const { clientes, avisar, oficina, definirOficina, ehFinanceiro } = useEstado();
   const [verOficina, setVerOficina] = useState(false);
+  const [relatorio, setRelatorio] = useState(false);
   const naOficina = useMemo(() => new Map(oficina.map((o) => [o.frota, o])), [oficina]);
   const [exportando, setExportando] = useState(false);
   const [busca, setBusca] = useState('');
@@ -104,6 +106,12 @@ export function Frotas() {
           <p className="text-[13px] text-ink-3">Cada frota e o cliente com quem está. Para mudar, edite o cliente (as frotas ficam no cadastro dele).</p>
         </div>
         <div className="flex flex-wrap items-center gap-2.5">
+          <button type="button" className="btn-secondary border-[#F59E0B]/50 bg-[#FFF4E5] text-[#B45309] hover:bg-[#FFEBCC]" onClick={() => setVerOficina(true)}>
+            <IcMais tamanho={15} /> Oficina{oficina.length ? ` (${oficina.length})` : ''}
+          </button>
+          <button type="button" className="btn-secondary" onClick={() => setRelatorio(true)}>
+            <IcNota tamanho={15} /> Relatório PDF
+          </button>
           <button
             type="button"
             className="btn-primary"
@@ -140,7 +148,7 @@ export function Frotas() {
         <Cartao rotulo="Clientes com frota" valor={clientesComFrota} />
         {ehFinanceiro && <Cartao rotulo="Valor total das frotas" valor={formatarReais(valorTotal)} />}
         <button type="button" onClick={() => setVerOficina(true)} className="text-left" aria-label="Ver frotas na oficina">
-          <Cartao rotulo="Na oficina (clique para ver)" valor={oficina.length} cor={oficina.length ? 'text-[#B45309]' : ''} />
+          <Cartao rotulo="Na oficina" valor={oficina.length} cor={oficina.length ? 'text-[#B45309]' : ''} />
         </button>
         <Cartao rotulo="Clientes ativos sem frota" valor={semFrota} cor={semFrota ? 'text-warn' : ''} />
       </div>
@@ -304,6 +312,7 @@ export function Frotas() {
       )}
 
       <ClienteForm inicial={editando} fechar={() => setEditando(null)} />
+      <RelatorioPdf aberto={relatorio} fechar={() => setRelatorio(false)} />
       <Oficina aberto={verOficina} fechar={() => setVerOficina(false)} lista={oficina} definir={definirOficina} clientes={clientes} avisar={avisar} />
     </div>
   );
@@ -404,6 +413,54 @@ function Oficina({
           ))}
         </ul>
       )}
+    </Modal>
+  );
+}
+
+function RelatorioPdf({ aberto, fechar }: { aberto: boolean; fechar: () => void }) {
+  const { clientes, oficina, ehFinanceiro, usuario, avisar } = useEstado();
+  const [ref, setRef] = useState(referenciaAtual());
+  const [gerando, setGerando] = useState(false);
+  const r = useMemo(() => (/^\d{4}-\d{2}$/.test(ref) ? montarRelatorio(clientes, oficina, ref) : null), [clientes, oficina, ref]);
+  return (
+    <Modal aberto={aberto} fechar={fechar} titulo="Relatório de locações ativas">
+      <p className="text-[13px] text-ink-2">PDF com a logo, as frotas locadas no mês agrupadas por cliente, as locações que terminam no mês e as frotas na oficina.</p>
+      <label className="flex w-fit flex-col gap-1.5 text-[13px] font-semibold">
+        Mês
+        <input type="month" className="input w-auto" value={ref} onChange={(e) => setRef(e.target.value)} />
+      </label>
+      {r && (
+        <p className="text-[13px] text-ink-3">
+          {r.resumo.frotas} frota{r.resumo.frotas === 1 ? '' : 's'} em {r.resumo.clientes} cliente{r.resumo.clientes === 1 ? '' : 's'}
+          {r.resumo.terminando ? ` · ${r.resumo.terminando} terminando no mês` : ''}
+          {r.resumo.naOficina ? ` · ${r.resumo.naOficina} na oficina` : ''}
+          {ehFinanceiro ? ` · ${formatarReais(r.resumo.valorTotal)} por mês` : ''}
+        </p>
+      )}
+      <div className="flex justify-end gap-2.5">
+        <button type="button" className="btn-secondary" onClick={fechar}>
+          Cancelar
+        </button>
+        <button
+          type="button"
+          className="btn-primary"
+          disabled={!r || gerando}
+          onClick={async () => {
+            if (!r) return;
+            setGerando(true);
+            try {
+              await gerarPdfLocacoes(r, { comValores: ehFinanceiro, geradoPor: usuario?.chamar || usuario?.nome || '' });
+              fechar();
+            } catch {
+              avisar('Não foi possível gerar o PDF.', 'bad');
+            } finally {
+              setGerando(false);
+            }
+          }}
+        >
+          {gerando ? 'Gerando…' : 'Baixar PDF'}
+        </button>
+      </div>
     </Modal>
   );
 }
