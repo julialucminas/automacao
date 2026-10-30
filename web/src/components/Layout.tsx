@@ -53,6 +53,7 @@ export function Layout() {
         { para: '/movimentacoes', rotulo: 'Movimentações', badge: 0, alerta: false },
         { para: '/conferencia', rotulo: 'Conferência', badge: 0, alerta: false },
         { para: '/frotas', rotulo: 'Frotas', badge: 0, alerta: false },
+        { para: '/calendario', rotulo: 'Calendário', badge: 0, alerta: false },
         { para: '/solicitacoes', rotulo: 'Solicitações', badge: badgeSolicitacoes, alerta: true },
         { para: '/aprovacoes', rotulo: 'Minhas alterações', badge: meusPendentes, alerta: false },
       ];

@@ -1,5 +1,5 @@
 import type { Api } from './index';
-import type { Cliente, Conferencia, Envio, Faturamento, Solicitacao, Usuario } from '../types';
+import type { Cliente, Conferencia, Envio, FrotaOficina, Faturamento, Solicitacao, Usuario } from '../types';
 import { REMETENTE } from '../lib/email';
 
 /*
@@ -259,6 +259,19 @@ export const mockApi: Api = {
   async listarRegistro() {
     return [];
   },
+  async listarOficina() {
+    return [...OFICINA_DEMO];
+  },
+  async colocarNaOficina(frota, observacao) {
+    const n = frota.trim().toUpperCase().replace(/^FT[\s-]*/, '');
+    if (!OFICINA_DEMO.some((o) => o.frota === n)) OFICINA_DEMO.push({ frota: n, desde: new Date().toISOString(), observacao, usuario: 'Demonstração' });
+    return [...OFICINA_DEMO];
+  },
+  async tirarDaOficina(frota) {
+    const i = OFICINA_DEMO.findIndex((o) => o.frota === frota);
+    if (i >= 0) OFICINA_DEMO.splice(i, 1);
+    return [...OFICINA_DEMO];
+  },
   async listarConferencia(ref) {
     return CONFERENCIAS_DEMO.filter((c) => c.referencia === ref);
   },
@@ -361,6 +374,7 @@ export function temExemplos(): boolean {
 }
 
 const CONFERENCIAS_DEMO: Conferencia[] = [];
+const OFICINA_DEMO: FrotaOficina[] = [];
 
 const CONFIG_DEMO = {
   'email.remetente': 'Financeiro · Lucminas Empilhadeiras',

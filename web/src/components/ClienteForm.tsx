@@ -25,7 +25,7 @@ export type Rascunho = {
   telefone: string;
   prazoPagamento: string;
   /** frotas com o valor como texto do campo, para permitir digitar à vontade; extra = dados da locação (vêm das movimentações) */
-  frotas: { numero: string; valor: string; descricao: string; extra?: Pick<Frota, 'inicio' | 'contrato' | 'gas' | 'frete'> }[];
+  frotas: { numero: string; valor: string; descricao: string; extra?: Pick<Frota, 'inicio' | 'fim' | 'contrato' | 'gas' | 'frete'> }[];
 };
 
 export const rascunhoVazio = (nome = ''): Rascunho => ({ nome, apelidos: '', cnpj: '', para: [], cc: [], observacoes: '', regra: 'dia', dia: '', inicio: '', periodo: '', contato: '', telefone: '', prazoPagamento: '', frotas: [] });
@@ -50,7 +50,7 @@ export const rascunhoDe = (c: Cliente): Rascunho => ({
     numero: f.numero,
     valor: f.valor ? reaisParaCampo(f.valor) : '',
     descricao: f.descricao,
-    extra: { inicio: f.inicio ?? null, contrato: f.contrato ?? '', gas: f.gas ?? 0, frete: f.frete ?? '' },
+    extra: { inicio: f.inicio ?? null, fim: f.fim ?? null, contrato: f.contrato ?? '', gas: f.gas ?? 0, frete: f.frete ?? '' },
   })),
 });
 
@@ -390,7 +390,32 @@ function Faturamento({ d, setD }: { d: Rascunho; setD: (r: Rascunho) => void }) 
             >
               <IcFechar tamanho={14} />
             </button>
-            {resumoLocacao(f.extra) && <p className="col-span-3 -mt-1 text-xs text-ink-3 sm:col-span-4">{resumoLocacao(f.extra)}</p>}
+            <div className="col-span-3 -mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-3 sm:col-span-4">
+              <label className="flex items-center gap-1.5">
+                Início
+                <input
+                  type="date"
+                  aria-label={`Início da locação da frota ${f.numero || i + 1}`}
+                  value={f.extra?.inicio ?? ''}
+                  onChange={(e) => setD({ ...d, frotas: d.frotas.map((x, k) => (k === i ? { ...x, extra: { ...x.extra, inicio: e.target.value || null } } : x)) })}
+                  className="input h-8 min-h-0 w-auto bg-white px-2 py-0 text-xs"
+                />
+              </label>
+              <label className="flex items-center gap-1.5">
+                Término
+                <input
+                  type="date"
+                  aria-label={`Término da locação da frota ${f.numero || i + 1}`}
+                  value={f.extra?.fim ?? ''}
+                  onChange={(e) => setD({ ...d, frotas: d.frotas.map((x, k) => (k === i ? { ...x, extra: { ...x.extra, fim: e.target.value || null } } : x)) })}
+                  className="input h-8 min-h-0 w-auto bg-white px-2 py-0 text-xs"
+                />
+              </label>
+              {(() => {
+                const r = resumoLocacao({ ...f.extra, inicio: null, fim: null });
+                return r ? <span>{r}</span> : null;
+              })()}
+            </div>
           </div>
         ))}
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -409,10 +434,11 @@ function Faturamento({ d, setD }: { d: Rascunho; setD: (r: Rascunho) => void }) 
 }
 
 /** "desde 20/10/2026 · contrato 12 meses · 1 vasilhame de gás · frete Lucminas" */
-export function resumoLocacao(x?: Pick<Frota, 'inicio' | 'contrato' | 'gas' | 'frete'>): string {
+export function resumoLocacao(x?: Pick<Frota, 'inicio' | 'fim' | 'contrato' | 'gas' | 'frete'>): string {
   if (!x) return '';
   return [
     x.inicio ? `desde ${dataBr(x.inicio)}` : '',
+    x.fim ? `até ${dataBr(x.fim)}` : '',
     x.contrato ? `contrato ${x.contrato}` : '',
     x.gas ? `${x.gas} vasilhame${x.gas > 1 ? 's' : ''} de gás` : '',
     x.frete === 'lucminas' ? 'frete Lucminas' : x.frete === 'cliente' ? 'frete do cliente' : '',

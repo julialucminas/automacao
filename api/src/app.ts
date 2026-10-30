@@ -82,6 +82,7 @@ function lerFrotas(v: unknown): Frota[] | undefined {
     const f: Frota = { numero, valor, descricao: texto(o.descricao, 'descrição', 200) };
     // dados da locação vindos das movimentações (preservados ao editar o cliente)
     if (o.inicio !== undefined) f.inicio = lerDataIso(o.inicio, 'Início da locação') ?? null;
+    if (o.fim !== undefined) f.fim = lerDataIso(o.fim, 'Término da locação') ?? null;
     if (o.contrato !== undefined) f.contrato = texto(o.contrato, 'contrato', 60);
     if (o.gas !== undefined) f.gas = lerInteiro(o.gas, 'vasilhames de gás', 0, 50);
     if (o.frete !== undefined) f.frete = lerFrete(o.frete);
@@ -294,6 +295,7 @@ export function criarApp(db: Banco, opcoes: { cookieSeguro: boolean; logger?: bo
       frete: lerFrete(b.frete),
       gas: lerInteiro(b.gas, 'vasilhames de gás', 0, 50),
       contrato: texto(b.contrato, 'tempo de contrato', 60),
+      fim: lerDataIso(b.fim, 'Término da locação') ?? null,
       prazoPagamento: texto(b.prazoPagamento, 'prazo de pagamento', 100),
       emails: listaEmails(b.emails, 'e-mails'),
       contatoNome: texto(b.contatoNome, 'contato', 120),
@@ -338,6 +340,23 @@ export function criarApp(db: Banco, opcoes: { cookieSeguro: boolean; logger?: bo
     return ops.salvarConfig(valores, req.usuario.id);
   });
   app.get('/api/registro', { preHandler: exigirFinanceiro }, async () => ops.listarLog());
+
+  // ---------- frotas na oficina (financeiro e operações) ----------
+  const lerNumFrota = (v: unknown) => {
+    const n = texto(v, 'frota', 50).toUpperCase().replace(/^FT[\s-]*/, '');
+    if (!n) throw new Invalido('Informe o número da frota.');
+    return n;
+  };
+  app.get('/api/oficina', { preHandler: exigirLogin }, async () => ops.listarOficina());
+  app.post('/api/oficina', { preHandler: exigirLogin }, async (req, reply) => {
+    const b = (req.body ?? {}) as Record<string, unknown>;
+    ops.colocarNaOficina(lerNumFrota(b.frota), texto(b.observacao, 'observação', 300), req.usuario.id);
+    return reply.code(201).send(ops.listarOficina());
+  });
+  app.delete<{ Params: { frota: string } }>('/api/oficina/:frota', { preHandler: exigirLogin }, async (req) => {
+    ops.tirarDaOficina(lerNumFrota(req.params.frota), req.usuario.id);
+    return ops.listarOficina();
+  });
 
   // ---------- conferência mensal das frotas ----------
   const lerRef = (v: unknown) => {

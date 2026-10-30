@@ -8,6 +8,8 @@ export type Frota = {
   descricao: string;
   /** dados da locação (vêm das movimentações) */
   inicio?: string | null;
+  /** término previsto da locação (aparece no Calendário) */
+  fim?: string | null;
   contrato?: string;
   gas?: number;
   frete?: '' | 'lucminas' | 'cliente';
@@ -265,6 +267,13 @@ const MIGRACOES = [
    ALTER TABLE envios ADD COLUMN devolvido_em TEXT;
    ALTER TABLE envios ADD COLUMN devolucao TEXT NOT NULL DEFAULT '';
    CREATE INDEX envios_message_id ON envios(message_id);`,
+  // 11: frotas na oficina
+  `CREATE TABLE oficina (
+     frota TEXT PRIMARY KEY,
+     desde TEXT NOT NULL,
+     observacao TEXT NOT NULL DEFAULT '',
+     usuario_id INTEGER REFERENCES usuarios(id)
+   );`,
 ];
 
 export function abrirBanco(caminho: string) {

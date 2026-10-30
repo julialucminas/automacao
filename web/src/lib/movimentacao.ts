@@ -12,6 +12,7 @@ export const movVazia = (data: string): NovaMovimentacao => ({
   clienteId: null,
   clienteNome: '',
   data,
+  fim: null,
   valor: null,
   frete: '',
   gas: 0,
@@ -77,6 +78,9 @@ export function lerTextoMovimentacao(texto: string, clientes: Cliente[]): Partia
   else if (/sem\s+(?:gas|g[aá]s)/i.test(texto)) r.gas = 0;
   const contrato = campo(/^tempo de contrato\s*:\s*(.+)$/i) || campo(/^contrato\s*:\s*(.+)$/i);
   if (contrato) r.contrato = contrato;
+  const fimTxt = campo(/^(?:t[ée]rmino|fim|final|at[ée])(?: (?:do contrato|da loca[çc][ãa]o|previsto))?\s*:\s*(.+)$/i);
+  const fimD = /(\d{1,2})\/(\d{1,2})\/(\d{4})/.exec(fimTxt);
+  if (fimD) r.fim = `${fimD[3]}-${fimD[2].padStart(2, '0')}-${fimD[1].padStart(2, '0')}`;
   const prazo = campo(/^prazo(?: de pagamento)?\s*:\s*(.+)$/i);
   if (prazo) r.prazoPagamento = prazo;
 
@@ -113,4 +117,28 @@ export function lerTextoMovimentacao(texto: string, clientes: Cliente[]): Partia
     }
   }
   return r;
+}
+
+/**
+ * Sugere o término a partir do início e do tempo de contrato ("12 meses", "30 dias", "1 ano").
+ * Ex.: início 20/10/2026 + 12 meses → 19/10/2027. Devolve null se não der para entender.
+ */
+export function fimSugerido(inicio: string, contrato: string): string | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(inicio)) return null;
+  const m = /(\d+)\s*(dias?|mes(?:es)?|m[eê]s|anos?)/i.exec(semAcento(contrato).toLowerCase());
+  if (!m) return null;
+  const n = Number(m[1]);
+  if (!n) return null;
+  const d = new Date(inicio + 'T00:00:00Z');
+  if (/^dia/.test(m[2])) d.setUTCDate(d.getUTCDate() + n);
+  else {
+    const meses = /^ano/.test(m[2]) ? n * 12 : n;
+    const dia = d.getUTCDate();
+    d.setUTCDate(1);
+    d.setUTCMonth(d.getUTCMonth() + meses);
+    const ultimo = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate();
+    d.setUTCDate(Math.min(dia, ultimo));
+  }
+  d.setUTCDate(d.getUTCDate() - 1); // o último dia é o anterior ao "aniversário"
+  return d.toISOString().slice(0, 10);
 }

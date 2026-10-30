@@ -5,7 +5,7 @@
  */
 import { mockApi } from './mock';
 import { httpApi } from './http';
-import type { Cliente, ClienteInput, ConfigEmail, Conferencia, Envio, Faturamento, ItemLog, Movimentacao, NovaMovimentacao, NovaSolicitacao, Pessoa, Proposta, Solicitacao, Usuario } from '../types';
+import type { Cliente, ClienteInput, ConfigEmail, Conferencia, FrotaOficina, Envio, Faturamento, ItemLog, Movimentacao, NovaMovimentacao, NovaSolicitacao, Pessoa, Proposta, Solicitacao, Usuario } from '../types';
 
 export type EnvioPedido = {
   referencia: string;
@@ -54,6 +54,9 @@ export interface Api {
   lerConfig(): Promise<ConfigEmail>;
   salvarConfig(c: Partial<ConfigEmail>): Promise<ConfigEmail>;
   listarRegistro(): Promise<ItemLog[]>;
+  listarOficina(): Promise<FrotaOficina[]>;
+  colocarNaOficina(frota: string, observacao: string): Promise<FrotaOficina[]>;
+  tirarDaOficina(frota: string): Promise<FrotaOficina[]>;
   listarConferencia(referencia: string): Promise<Conferencia[]>;
   marcarConferencia(referencia: string, c: { clienteId: string; frota: string; status: 'ok' | 'alterado'; observacao?: string }): Promise<Conferencia>;
   desmarcarConferencia(referencia: string, clienteId: string, frota: string): Promise<void>;

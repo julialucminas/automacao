@@ -18,6 +18,8 @@ export type DadosMov = {
   frete: '' | 'lucminas' | 'cliente';
   gas: number;
   contrato: string;
+  /** término previsto (AAAA-MM-DD) */
+  fim?: string | null;
   prazoPagamento: string;
   emails: string[];
   contatoNome: string;
@@ -173,6 +175,7 @@ export function operacoes(db: Banco, repo: Repositorio) {
         valor: d.valor ?? 0,
         descricao: d.descricao,
         inicio: d.data,
+        fim: d.fim ?? null,
         contrato: d.contrato,
         gas: d.gas,
         frete: d.frete,
@@ -235,6 +238,7 @@ export function operacoes(db: Banco, repo: Repositorio) {
           frete: n.frete,
           gas: n.gas,
           contrato: n.contrato,
+          fim: n.fim ?? null,
           prazoPagamento: n.prazoPagamento,
           emails: n.emails,
           contatoNome: n.contatoNome,
@@ -403,6 +407,26 @@ export function operacoes(db: Banco, repo: Repositorio) {
     desmarcarConferencia(referencia: string, clienteId: string, frota: string, usuarioId: number) {
       const r = db.prepare('DELETE FROM conferencias WHERE referencia = ? AND cliente_id = ? AND frota = ?').run(referencia, clienteId, frota);
       if (r.changes) repo.registrarLog(clienteId, usuarioId, `desmarcou a conferência da FT${frota} (${referencia.split('-').reverse().join('/')})`, null, null, 'conferencia');
+    },
+
+    // ---------- oficina ----------
+    listarOficina(): { frota: string; desde: string; observacao: string; usuario: string }[] {
+      return db
+        .prepare("SELECT o.frota, o.desde, o.observacao, COALESCE(u.nome, '') AS usuario FROM oficina o LEFT JOIN usuarios u ON u.id = o.usuario_id ORDER BY o.desde")
+        .all() as { frota: string; desde: string; observacao: string; usuario: string }[];
+    },
+    colocarNaOficina(frota: string, observacao: string, usuarioId: number) {
+      const dono = repo.listarClientes().find((c) => c.frotas.some((f) => f.numero === frota));
+      db.prepare(
+        'INSERT INTO oficina (frota, desde, observacao, usuario_id) VALUES (?, ?, ?, ?) ON CONFLICT (frota) DO UPDATE SET observacao = excluded.observacao',
+      ).run(frota, agora(), observacao, usuarioId);
+      repo.registrarLog(dono?.id ?? '', usuarioId, `colocou a FT${frota} na oficina${observacao ? `: ${observacao}` : ''}`, null, null, 'oficina');
+    },
+    tirarDaOficina(frota: string, usuarioId: number) {
+      const r = db.prepare('DELETE FROM oficina WHERE frota = ?').run(frota);
+      if (!r.changes) throw new NaoEncontrado(`A FT${frota} não está na oficina.`);
+      const dono = repo.listarClientes().find((c) => c.frotas.some((f) => f.numero === frota));
+      repo.registrarLog(dono?.id ?? '', usuarioId, `tirou a FT${frota} da oficina`, null, null, 'oficina');
     },
 
     listarLog(limite = 500): ItemLog[] {

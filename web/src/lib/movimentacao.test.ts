@@ -60,3 +60,17 @@ describe('lerTextoMovimentacao', () => {
     expect(lerTextoMovimentacao('DEVOLUÇÃO FT 7\n01/11/2026', [])).toMatchObject({ tipo: 'devolucao', frota: '7', data: '2026-11-01' });
   });
 });
+
+describe('término da locação', () => {
+  it('sugere o término pelo tempo de contrato', async () => {
+    const { fimSugerido } = await import('./movimentacao');
+    expect(fimSugerido('2026-10-20', '12 meses')).toBe('2027-10-19');
+    expect(fimSugerido('2026-10-20', '1 ano')).toBe('2027-10-19');
+    expect(fimSugerido('2026-10-01', '30 dias')).toBe('2026-10-30');
+    expect(fimSugerido('2026-01-31', '1 mês')).toBe('2026-02-27');
+    expect(fimSugerido('2026-10-20', 'indeterminado')).toBeNull();
+  });
+  it('lê "Término: dd/mm/aaaa" da mensagem', () => {
+    expect(lerTextoMovimentacao('NOVA LOCAÇÃO FT35\n20/10/2026\nFENIX\n- Término: 19/10/2027', []).fim).toBe('2027-10-19');
+  });
+});

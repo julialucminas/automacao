@@ -2,7 +2,7 @@
 
 /** Equipamento (frota) alugado. valor em centavos. */
 /** Equipamento (frota) alugado. valor em centavos. Os campos de locação vêm das movimentações. */
-export type Frota = { numero: string; valor: number; descricao: string; inicio?: string | null; contrato?: string; gas?: number; frete?: '' | 'lucminas' | 'cliente' };
+export type Frota = { numero: string; valor: number; descricao: string; inicio?: string | null; fim?: string | null; contrato?: string; gas?: number; frete?: '' | 'lucminas' | 'cliente' };
 
 export type Cliente = {
   id: string;
@@ -162,6 +162,8 @@ export type DadosMov = {
   frete: '' | 'lucminas' | 'cliente';
   gas: number;
   contrato: string;
+  /** término previsto da locação (AAAA-MM-DD) */
+  fim?: string | null;
   prazoPagamento: string;
   emails: string[];
   contatoNome: string;
@@ -214,3 +216,6 @@ export type Conferencia = {
   quando: string;
   usuario: string;
 };
+
+/** Frota parada na oficina (pode estar ou não com um cliente). */
+export type FrotaOficina = { frota: string; desde: string; observacao: string; usuario: string };

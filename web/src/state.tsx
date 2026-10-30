@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { api } from './api';
-import type { Cliente, ClienteInput, ConfigEmail, Envio, ItemLote, Lote, Movimentacao, Proposta, Solicitacao, Usuario } from './types';
+import type { Cliente, ClienteInput, ConfigEmail, Envio, FrotaOficina, ItemLote, Lote, Movimentacao, Proposta, Solicitacao, Usuario } from './types';
 import { hojeIso } from './lib/calendario';
 import { encontrarCliente, statusDoItem } from './lib/pareamento';
 
@@ -23,6 +23,8 @@ type Estado = {
 
   movimentacoes: Movimentacao[];
   propostas: Proposta[];
+  oficina: FrotaOficina[];
+  definirOficina(l: FrotaOficina[]): void;
   recarregarOperacoes(): Promise<void>;
   /** itens aguardando aprovação do financeiro */
   aguardandoAprovacao: number;
@@ -71,6 +73,7 @@ export function EstadoProvider({ children }: { children: ReactNode }) {
   const [aviso, setAviso] = useState<Aviso | null>(null);
   const [movimentacoes, setMovimentacoes] = useState<Movimentacao[]>([]);
   const [propostas, setPropostas] = useState<Proposta[]>([]);
+  const [oficina, setOficina] = useState<FrotaOficina[]>([]);
   const [config, setConfig] = useState<ConfigEmail | null>(null);
   const [envioAtivo, setEnvioAtivo] = useState(false);
 
@@ -86,9 +89,10 @@ export function EstadoProvider({ children }: { children: ReactNode }) {
 
   const recarregarOperacoes = useCallback(async () => {
     try {
-      const [m, p] = await Promise.all([api.listarMovimentacoes(), api.listarPropostas()]);
+      const [m, p, o] = await Promise.all([api.listarMovimentacoes(), api.listarPropostas(), api.listarOficina()]);
       setMovimentacoes(m);
       setPropostas(p);
+      setOficina(o);
     } catch {
       /* tenta de novo no próximo ciclo */
     }
@@ -179,6 +183,8 @@ export function EstadoProvider({ children }: { children: ReactNode }) {
       },
       movimentacoes,
       propostas,
+      oficina,
+      definirOficina: setOficina,
       async recarregarOperacoes() {
         await Promise.all([recarregarOperacoes(), recarregarClientes()]);
       },
@@ -258,7 +264,7 @@ export function EstadoProvider({ children }: { children: ReactNode }) {
       avisar,
       fecharAviso: () => setAviso(null),
     }),
-    [usuario, carregando, erroInicial, ehFinanceiro, movimentacoes, propostas, aguardandoAprovacao, config, envioAtivo, recarregarOperacoes, clientes, envios, solicitacoes, recarregarSolicitacoes, pendentesParaMim, naoLidas, lote, aviso, avisar, recarregarClientes, recarregarEnvios, reconciliarLote],
+    [usuario, carregando, erroInicial, ehFinanceiro, movimentacoes, propostas, oficina, aguardandoAprovacao, config, envioAtivo, recarregarOperacoes, clientes, envios, solicitacoes, recarregarSolicitacoes, pendentesParaMim, naoLidas, lote, aviso, avisar, recarregarClientes, recarregarEnvios, reconciliarLote],
   );
 
   return <Ctx.Provider value={valor}>{children}</Ctx.Provider>;

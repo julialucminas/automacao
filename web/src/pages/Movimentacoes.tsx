@@ -5,7 +5,7 @@ import { api } from '../api';
 import { dataBr, hojeIso } from '../lib/calendario';
 import { formatarReais, lerReais, reaisParaCampo } from '../lib/dinheiro';
 import { emailValido } from '../lib/normalizar';
-import { lerTextoMovimentacao, movVazia, NOMES_TIPO } from '../lib/movimentacao';
+import { fimSugerido, lerTextoMovimentacao, movVazia, NOMES_TIPO } from '../lib/movimentacao';
 import { dataHora } from '../lib/email';
 import { Chip, type Tom } from '../components/ui';
 import { IcBusca } from '../components/Icones';
@@ -25,6 +25,7 @@ export function detalhesMov(m: { tipo: TipoMov; frota: string; frotaNova?: strin
   if (d.frete) l.push(['Frete', d.frete === 'lucminas' ? 'Por conta da Lucminas' : 'Por conta do cliente']);
   if (d.gas) l.push(['Gás', `${d.gas} vasilhame${d.gas > 1 ? 's' : ''}`]);
   if (d.contrato) l.push(['Tempo de contrato', d.contrato]);
+  if (d.fim) l.push(['Término previsto', dataBr(d.fim)]);
   if (d.prazoPagamento) l.push(['Prazo de pagamento', d.prazoPagamento]);
   if (d.emails.length) l.push(['E-mails', d.emails.join(', ')]);
   if (d.contatoNome || d.contatoTelefone) l.push(['Contato', [d.contatoNome, d.contatoTelefone].filter(Boolean).join(' · ')]);
@@ -228,6 +229,20 @@ export function Movimentacoes() {
                 </label>
                 <input id="mov-contrato" className="input" value={m.contrato} onChange={(e) => mudar({ contrato: e.target.value })} placeholder="12 meses" />
               </div>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor="mov-fim" className="label">
+                Término previsto <span className="font-normal text-ink-3">(aparece no Calendário)</span>
+              </label>
+              <input id="mov-fim" type="date" className="input" value={m.fim ?? ''} onChange={(e) => mudar({ fim: e.target.value || null })} />
+              {(() => {
+                const sug = fimSugerido(m.data, m.contrato);
+                return sug && sug !== m.fim ? (
+                  <button type="button" className="self-start text-xs font-semibold text-ink-2 underline underline-offset-2" onClick={() => mudar({ fim: sug })}>
+                    Usar {dataBr(sug)} ({m.contrato} a partir de {dataBr(m.data)})
+                  </button>
+                ) : null;
+              })()}
             </div>
             <div className="flex flex-col gap-1.5">
               <label htmlFor="mov-prazo" className="label">

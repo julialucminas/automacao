@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../api';
 import { useEstado } from '../state';
-import type { Cliente, Faturamento } from '../types';
+import type { Cliente, Faturamento, Frota } from '../types';
 import { dataBr, datasNoIntervalo, descreverRegra, gradeDoMes, hojeIso, intervaloDoMes, regraDoCliente } from '../lib/calendario';
 import { formatarReais } from '../lib/dinheiro';
 import { chaveEmpresa } from '../lib/normalizar';
@@ -12,6 +12,11 @@ import { IcBusca, IcCheck, IcNota } from '../components/Icones';
 type Status = 'faturado' | 'atrasado' | 'hoje' | 'a_faturar';
 type Item = { cliente: Cliente; data: string; status: Status; marca?: Faturamento };
 type Filtro = 'todos' | 'a_faturar' | 'faturado' | 'atrasado';
+type Mostrar = 'ambos' | 'faturas' | 'locacoes';
+/** término de locação de uma frota (vem do cadastro: movimentação aprovada ou editado no cliente) */
+type FimLocacao = { cliente: Cliente; frota: Frota; data: string };
+const CHIP_LOCACAO = 'border-[#7C3AED]/30 bg-[#F3EEFF] text-[#5B21B6]';
+const CHIP_LOCACAO_PASSOU = 'border-[#7C3AED]/50 bg-[#7C3AED] text-white';
 
 const STATUS: Record<Status, { rotulo: string; tom: Tom; chip: string }> = {
   faturado: { rotulo: 'Faturado', tom: 'ok', chip: 'bg-ok-soft text-ok border-ok/20' },
@@ -24,6 +29,7 @@ const MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julh
 const SEMANA = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 
 const totalFrotas = (c: Cliente) => c.frotas.reduce((s, f) => s + f.valor, 0);
+const somarDias = (iso: string, n: number) => new Date(Date.parse(iso + 'T00:00:00Z') + n * 86400_000).toISOString().slice(0, 10);
 
 export function Calendario() {
   const { clientes, avisar, solicitacoes, ehFinanceiro } = useEstado();
@@ -36,6 +42,12 @@ export function Calendario() {
   const [busca, setBusca] = useState('');
   const [visao, setVisao] = useState<'calendario' | 'lista'>(() => (typeof window !== 'undefined' && window.innerWidth < 768 ? 'lista' : 'calendario'));
   const [aberto, setAberto] = useState<Item | null>(null);
+  const [mostrarEscolhido, setMostrar] = useState<Mostrar>('ambos');
+  // operações (Júnior) vê só as locações
+  const mostrar: Mostrar = ehFinanceiro ? mostrarEscolhido : 'locacoes';
+  const verFaturas = mostrar !== 'locacoes';
+  const verLocacoes = mostrar !== 'faturas';
+  const [locAberta, setLocAberta] = useState<FimLocacao | null>(null);
   const [salvando, setSalvando] = useState(false);
 
   const { de, ate } = intervaloDoMes(ano, mes);
@@ -81,6 +93,16 @@ export function Calendario() {
     if (q && !chaveEmpresa(i.cliente.nome).includes(q) && !i.cliente.frotas.some((f) => chaveEmpresa(f.numero).includes(q))) return false;
     return true;
   });
+
+  const fins: FimLocacao[] = verLocacoes
+    ? ativos
+        .flatMap((c) => c.frotas.filter((f) => f.fim && f.fim >= de && f.fim <= ate).map((f) => ({ cliente: c, frota: f, data: f.fim! })))
+        .filter((x) => !q || chaveEmpresa(x.cliente.nome).includes(q) || chaveEmpresa(x.frota.numero).includes(q))
+        .sort((a, b) => a.data.localeCompare(b.data))
+    : [];
+  const finsPorDia = new Map<string, FimLocacao[]>();
+  for (const x of fins) finsPorDia.set(x.data, [...(finsPorDia.get(x.data) ?? []), x]);
+  const proximos30 = ativos.flatMap((c) => c.frotas.filter((f) => f.fim && f.fim >= hoje && f.fim <= somarDias(hoje, 30))).length;
 
   const conta = (s: Status | 'pendente') => itens.filter((i) => (s === 'pendente' ? i.status !== 'faturado' : i.status === s)).length;
   const valorFaturado = itens.filter((i) => i.status === 'faturado').reduce((s, i) => s + totalFrotas(i.cliente), 0);
@@ -129,15 +151,18 @@ export function Calendario() {
     x.status === 'concluida' ? 'border-line bg-line-soft text-ink-3 line-through' : x.data < hoje ? 'border-bad/30 bg-bad-soft text-bad-strong' : 'border-info/30 bg-info-soft text-info';
 
   const porDia = new Map<string, Item[]>();
-  for (const i of visiveis) porDia.set(i.data, [...(porDia.get(i.data) ?? []), i]);
+  if (verFaturas) for (const i of visiveis) porDia.set(i.data, [...(porDia.get(i.data) ?? []), i]);
 
   return (
     <div>
       <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
         <div>
-          <div className="eyebrow">Faturamento</div>
-          <h1 className="mt-1 text-[26px] font-bold">Calendário de faturas</h1>
-          <p className="text-[13px] text-ink-3">Cada cliente aparece no dia em que deve ser faturado, pela regra cadastrada (dia fixo ou período), a partir da data em que foi cadastrado no sistema.</p>
+          <div className="eyebrow">{ehFinanceiro ? 'Faturamento e locações' : 'Locações'}</div>
+          <h1 className="mt-1 text-[26px] font-bold">{ehFinanceiro ? 'Calendário' : 'Calendário de locações'}</h1>
+          <p className="text-[13px] text-ink-3">
+            {ehFinanceiro && 'Faturas no dia de emissão de cada cliente. '}
+            Locações aparecem no dia em que o contrato termina (término cadastrado na movimentação ou no cliente).
+          </p>
         </div>
         <div className="flex items-center gap-2">
           <button type="button" className="btn-secondary h-11 w-11 px-0" aria-label="Mês anterior" onClick={() => mudarMes(-1)}>
@@ -162,15 +187,55 @@ export function Calendario() {
         </div>
       </div>
 
-      <div className="mb-5 grid grid-cols-[repeat(auto-fit,minmax(170px,1fr))] gap-3">
-        <Cartao rotulo="Faturas previstas no mês" valor={itens.length} />
-        <Cartao rotulo="Já faturadas" valor={`${conta('faturado')} de ${itens.length}`} cor="text-ok" />
-        <Cartao rotulo="Atrasadas" valor={conta('atrasado')} cor={conta('atrasado') ? 'text-bad' : ''} />
-        <Cartao rotulo="Valor já faturado" valor={formatarReais(valorFaturado)} />
-      </div>
-      {valorPrevisto > 0 && <p className="-mt-3 mb-4 text-right text-xs text-ink-3">Previsto no mês: {formatarReais(valorPrevisto)} (soma das frotas de cada fatura)</p>}
+      {ehFinanceiro && (
+        <div className="mb-4 flex flex-wrap items-center gap-2" role="group" aria-label="Mostrar no calendário">
+          {(
+            [
+              ['ambos', 'Faturas e locações'],
+              ['faturas', 'Só faturas'],
+              ['locacoes', 'Só locações'],
+            ] as const
+          ).map(([id, rotulo]) => (
+            <button
+              key={id}
+              type="button"
+              aria-pressed={mostrar === id}
+              onClick={() => setMostrar(id)}
+              className={`min-h-[40px] rounded-[10px] border px-3.5 text-[13px] font-semibold ${mostrar === id ? 'border-ink bg-ink text-white' : 'border-line-strong bg-white text-ink-2 hover:bg-canvas'}`}
+            >
+              {rotulo}
+            </button>
+          ))}
+          <span className="ml-1 flex flex-wrap items-center gap-3 text-xs text-ink-3">
+            <span className="flex items-center gap-1.5">
+              <span className="h-3 w-3 rounded border border-line-strong bg-white" /> fatura
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className={`h-3 w-3 rounded border ${CHIP_LOCACAO}`} /> fim de locação
+            </span>
+          </span>
+        </div>
+      )}
 
-      {semRegra.length > 0 && (
+      <div className="mb-5 grid grid-cols-[repeat(auto-fit,minmax(170px,1fr))] gap-3">
+        {verFaturas && (
+          <>
+            <Cartao rotulo="Faturas previstas no mês" valor={itens.length} />
+            <Cartao rotulo="Já faturadas" valor={`${conta('faturado')} de ${itens.length}`} cor="text-ok" />
+            <Cartao rotulo="Atrasadas" valor={conta('atrasado')} cor={conta('atrasado') ? 'text-bad' : ''} />
+            <Cartao rotulo="Valor já faturado" valor={formatarReais(valorFaturado)} />
+          </>
+        )}
+        {verLocacoes && (
+          <>
+            <Cartao rotulo="Locações terminando no mês" valor={fins.length} cor={fins.length ? 'text-[#5B21B6]' : ''} />
+            {!verFaturas && <Cartao rotulo="Terminam nos próximos 30 dias" valor={proximos30} cor={proximos30 ? 'text-[#5B21B6]' : ''} />}
+          </>
+        )}
+      </div>
+      {verFaturas && valorPrevisto > 0 && <p className="-mt-3 mb-4 text-right text-xs text-ink-3">Previsto no mês: {formatarReais(valorPrevisto)} (soma das frotas de cada fatura)</p>}
+
+      {verFaturas && semRegra.length > 0 && (
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-warn-line bg-warn-soft px-4 py-2.5 text-[13px] text-warn-strong">
           <span>
             {semRegra.length} cliente{semRegra.length > 1 ? 's' : ''} sem data de faturamento cadastrada não aparece{semRegra.length > 1 ? 'm' : ''} aqui.
@@ -182,7 +247,7 @@ export function Calendario() {
       )}
 
       <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap gap-1.5" role="group" aria-label="Filtrar">
+        <div className={`flex flex-wrap gap-1.5 ${verFaturas ? '' : 'invisible'}`} role="group" aria-label="Filtrar faturas">
           {filtros.map((f) => (
             <button
               key={f.id}
@@ -253,6 +318,18 @@ export function Calendario() {
                                 <span className="truncate">{i.cliente.nome}</span>
                               </button>
                             ))}
+                            {(finsPorDia.get(dia) ?? []).map((x) => (
+                              <button
+                                key={`fim|${x.cliente.id}|${x.frota.numero}`}
+                                type="button"
+                                onClick={() => setLocAberta(x)}
+                                title={`Fim da locação: FT${x.frota.numero} · ${x.cliente.nome}`}
+                                className={`flex w-full items-center gap-1 truncate rounded-md border px-1.5 py-1 text-left text-[11.5px] font-medium ${x.data < hoje ? CHIP_LOCACAO_PASSOU : CHIP_LOCACAO}`}
+                              >
+                                <span className="shrink-0 font-bold">Fim FT{x.frota.numero}</span>
+                                <span className="truncate">· {x.cliente.nome}</span>
+                              </button>
+                            ))}
                             {(solsPorDia.get(dia) ?? []).map((x) => (
                               <button
                                 key={x.id}
@@ -291,8 +368,35 @@ export function Calendario() {
               ))}
             </div>
           )}
-          {visiveis.length === 0 && <div className="px-4 py-6 text-ink-3">Nenhuma fatura neste filtro.</div>}
-          {visiveis.map((i) => (
+          {fins.length > 0 && (
+            <div className="border-b border-line">
+              {fins.map((x) => (
+                <button
+                  key={`fim|${x.cliente.id}|${x.frota.numero}`}
+                  type="button"
+                  onClick={() => setLocAberta(x)}
+                  className="flex w-full flex-wrap items-center gap-x-4 gap-y-1 border-b border-line-soft bg-[#F8F5FF] px-4 py-3 text-left text-[13px] last:border-b-0"
+                >
+                  <div className="w-[64px] font-mono font-semibold text-[#5B21B6]">
+                    {x.data.slice(8, 10)}/{x.data.slice(5, 7)}
+                  </div>
+                  <div className="min-w-[180px] flex-1">
+                    <div className="font-semibold">
+                      Fim da locação · FT{x.frota.numero} · {x.cliente.nome}
+                    </div>
+                    <div className="text-xs text-ink-3">
+                      {x.frota.inicio ? `desde ${dataBr(x.frota.inicio)}` : ''}
+                      {x.frota.contrato ? ` · contrato ${x.frota.contrato}` : ''}
+                    </div>
+                  </div>
+                  <span className={`rounded-full border px-2.5 py-[3px] text-xs font-semibold ${x.data < hoje ? CHIP_LOCACAO_PASSOU : CHIP_LOCACAO}`}>{x.data < hoje ? 'Terminou' : 'Termina'}</span>
+                </button>
+              ))}
+            </div>
+          )}
+          {verFaturas && visiveis.length === 0 && <div className="px-4 py-6 text-ink-3">Nenhuma fatura neste filtro.</div>}
+          {!verFaturas && fins.length === 0 && <div className="px-4 py-6 text-ink-3">Nenhuma locação terminando neste mês.</div>}
+          {(verFaturas ? visiveis : []).map((i) => (
             <div key={`${i.cliente.id}|${i.data}`} className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-line-soft px-4 py-3 text-[13px] last:border-b-0">
               <div className="w-[64px] font-mono font-semibold">{i.data.slice(8, 10)}/{i.data.slice(5, 7)}</div>
               <div className="min-w-[180px] flex-1">
@@ -315,6 +419,47 @@ export function Calendario() {
           ))}
         </section>
       )}
+
+      <Modal aberto={!!locAberta} fechar={() => setLocAberta(null)} titulo={locAberta ? `Fim da locação · FT${locAberta.frota.numero}` : ''}>
+        {locAberta && (
+          <>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className={`rounded-full border px-2.5 py-[3px] text-xs font-semibold ${locAberta.data < hoje ? CHIP_LOCACAO_PASSOU : CHIP_LOCACAO}`}>
+                {locAberta.data < hoje ? 'Terminou' : 'Termina'} em {dataBr(locAberta.data)}
+              </span>
+            </div>
+            <dl className="grid grid-cols-[130px_1fr] gap-x-3 gap-y-1.5 text-[13px]">
+              <dt className="text-ink-3">Cliente</dt>
+              <dd className="font-semibold">{locAberta.cliente.nome}</dd>
+              <dt className="text-ink-3">Início</dt>
+              <dd>{locAberta.frota.inicio ? dataBr(locAberta.frota.inicio) : '—'}</dd>
+              <dt className="text-ink-3">Contrato</dt>
+              <dd>{locAberta.frota.contrato || '—'}</dd>
+              {locAberta.frota.descricao && (
+                <>
+                  <dt className="text-ink-3">Equipamento</dt>
+                  <dd>{locAberta.frota.descricao}</dd>
+                </>
+              )}
+              {(locAberta.cliente.contato || locAberta.cliente.telefone) && (
+                <>
+                  <dt className="text-ink-3">Contato</dt>
+                  <dd>{[locAberta.cliente.contato, locAberta.cliente.telefone].filter(Boolean).join(' · ')}</dd>
+                </>
+              )}
+            </dl>
+            <p className="text-xs text-ink-3">Renovou ou vai devolver? Registre em Movimentações (devolução, troca ou nova locação com o novo término).</p>
+            <div className="flex flex-wrap justify-end gap-2.5">
+              <button type="button" className="btn-secondary" onClick={() => setLocAberta(null)}>
+                Fechar
+              </button>
+              <button type="button" className="btn-primary" onClick={() => navegar('/movimentacoes')}>
+                Ir para Movimentações
+              </button>
+            </div>
+          </>
+        )}
+      </Modal>
 
       <Modal aberto={!!aberto} fechar={() => setAberto(null)} titulo={aberto?.cliente.nome ?? ''}>
         {aberto && (

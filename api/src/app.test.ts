@@ -212,7 +212,7 @@ describe('operações (Júnior) e aprovação', () => {
     const clientes = (await req('GET', '/api/clientes')).json();
     const fenix = clientes.find((c: { nome: string }) => c.nome === 'FENIX NOVUS');
     expect(fenix).toMatchObject({ para: ['compras@fenixsa.com.br', 'comercial@fenixsa.com.br'], contato: 'João Pedro', telefone: '(31) 98808-9842', prazoPagamento: '30 dias após emissão da fatura' });
-    expect(fenix.frotas).toEqual([{ numero: '35', valor: 335000, descricao: '', inicio: '2026-10-20', contrato: '12 meses', gas: 1, frete: 'lucminas' }]);
+    expect(fenix.frotas).toEqual([{ numero: '35', valor: 335000, descricao: '', inicio: '2026-10-20', fim: null, contrato: '12 meses', gas: 1, frete: 'lucminas' }]);
     // a FT35 saiu da Panex
     expect(clientes.find((c: { nome: string }) => c.nome === 'PANEX').frotas).toEqual([]);
     // decidida não decide de novo
@@ -283,6 +283,25 @@ describe('operações (Júnior) e aprovação', () => {
       'apontou correção na FT13 na conferência de 10/2026: valor é 1.800',
       expect.stringMatching(/^conferiu FT12 \(R\$\s2\.500,00\) como correta em 10\/2026$/),
     ]);
+  });
+
+  it('término da locação e frotas na oficina', async () => {
+    const jr = await comoJunior();
+    await req('POST', '/api/movimentacoes', { tipo: 'locacao', frota: 'FT35', clienteNome: 'Fenix', data: '2026-10-20', contrato: '12 meses', fim: '2027-10-19', valor: 335000 });
+    const fenix = (await req('GET', '/api/clientes')).json().find((c: { nome: string }) => c.nome === 'FENIX');
+    expect(fenix.frotas[0]).toMatchObject({ numero: '35', inicio: '2026-10-20', fim: '2027-10-19' });
+    // editar o cliente mantém o término
+    await req('PUT', `/api/clientes/${fenix.id}`, { ...fenix, observacoes: 'x' });
+    expect((await req('GET', '/api/clientes')).json().find((c: { nome: string }) => c.nome === 'FENIX').frotas[0].fim).toBe('2027-10-19');
+
+    // oficina: Júnior e financeiro podem marcar; fica no registro
+    expect((await jr('POST', '/api/oficina', { frota: 'FT59', observacao: 'motor' })).statusCode).toBe(201);
+    await req('POST', '/api/oficina', { frota: '35' });
+    expect((await jr('GET', '/api/oficina')).json().map((o: { frota: string }) => o.frota).sort()).toEqual(['35', '59']);
+    expect((await jr('DELETE', '/api/oficina/59')).json().map((o: { frota: string }) => o.frota)).toEqual(['35']);
+    expect((await jr('DELETE', '/api/oficina/59')).statusCode).toBe(404);
+    const log = (await req('GET', '/api/registro')).json().filter((l: { area: string }) => l.area === 'oficina').map((l: { acao: string }) => l.acao);
+    expect(log).toEqual(['tirou a FT59 da oficina', 'colocou a FT35 na oficina', 'colocou a FT59 na oficina: motor']);
   });
 
   it('configuração do e-mail: só financeiro altera, fica no registro', async () => {
