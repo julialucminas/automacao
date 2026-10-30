@@ -67,7 +67,8 @@ function mapearCabecalho(linha: Celula[]): Partial<Record<Coluna, number>> | nul
     const achado = PADROES.find(([col, re]) => mapa[col] === undefined && re.test(t));
     if (achado) mapa[achado[0]] = i;
   });
-  return mapa.nome !== undefined && mapa.para !== undefined ? mapa : null;
+  // cabeçalho = coluna de cliente + pelo menos mais uma conhecida (e-mail, frotas, datas...)
+  return mapa.nome !== undefined && Object.keys(mapa).length >= 2 ? mapa : null;
 }
 
 export function separarEmails(c: Celula): string[] {
@@ -197,7 +198,7 @@ export function lerPlanilha(linhas: Celula[][]): Leitura {
     if (c.inicioLocacao && c.periodoDias) c.regra = 'periodo';
     else if (c.inicioLocacao || c.periodoDias) c.avisos.push('Para faturar por período, informe a data de início E o período em dias.');
     else if (c.diaEmissao) c.regra = 'dia';
-    if (!c.para.length && !c.cc.length) c.avisos.push('Nenhum e-mail válido.');
+    if (!c.para.length && !c.cc.length) c.avisos.push('Sem e-mail na planilha: serve só para atualizar cliente que já está cadastrado.');
     c.avisos.push(...avisosDeDominio([...c.para, ...c.cc]));
   }
 
@@ -255,7 +256,8 @@ export function proporImportacao(leitura: Leitura, clientes: Cliente[], dist: Di
     const existente =
       clientes.find((c) => chaveEmpresa(c.nome) === k) ?? clientes.find((c) => c.apelidos.some((a) => chaveEmpresa(a) === k)) ?? null;
 
-    if (!para.length && !cc.length) {
+    // sem e-mail só é problema para cliente novo; para cliente existente, a planilha pode trazer só frotas/datas
+    if (!existente && !para.length && !cc.length) {
       return { lido, acao: 'invalido', existente, novosEmails: [], input: { nome: lido.nome, apelidos: lido.apelidos, cnpj: lido.cnpj, para, cc, observacoes: lido.observacoes } };
     }
     if (!para.length) {

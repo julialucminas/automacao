@@ -27,7 +27,7 @@ describe('lerPlanilha (formato simples)', () => {
   it('aponta repetição, e-mail inválido e domínios suspeitos', () => {
     expect(r.clientes[0].avisos.join()).toMatch(/Aparece de novo na linha 9/);
     expect(r.clientes[2].avisos.join()).toMatch(/não é um e-mail válido/);
-    expect(r.clientes[2].avisos.join()).toMatch(/Nenhum e-mail válido/);
+    expect(r.clientes[2].avisos.join()).toMatch(/Sem e-mail na planilha/);
     const beta = r.clientes[1].avisos.join(' ');
     expect(beta).toMatch(/muito parecidos: betalog\.com\.br × betlaog\.com\.br/);
     expect(beta).toMatch(/finais diferentes: betalog\.com\.br × betalog\.com/);
@@ -153,5 +153,18 @@ describe('regra por período na planilha', () => {
     const volta = lerPlanilha(lerCsv(exportarCsv([c])));
     expect(volta.clientes[0]).toMatchObject({ regra: 'periodo', inicioLocacao: '2026-10-10', periodoDias: 30 });
     expect(proporImportacao(volta, [c], 'todos_para')[0].acao).toBe('igual');
+  });
+});
+
+describe('planilha só de frotas', () => {
+  it('atualiza frotas de cliente existente sem precisar de e-mail; cliente novo sem e-mail continua inválido', () => {
+    const existente: Cliente = { id: 'x', nome: 'HIGRA', apelidos: [], cnpj: '', para: ['f@higra.com'], cc: [], observacoes: '', regra: 'dia', diaEmissao: null, inicioLocacao: null, periodoDias: null, frotas: [], ativo: true, atualizadoEm: '' };
+    const r = lerPlanilha([['Cliente', 'Outros nomes', 'Frotas'], ['HIGRA', 'HIGRA MINING', '9; 45'], ['NOVA EMPRESA', '', '20']]);
+    const p = proporImportacao(r, [existente], 'todos_para');
+    expect(p[0].acao).toBe('atualizar');
+    expect(p[0].input.para).toEqual(['f@higra.com']);
+    expect(p[0].input.frotas?.map((f) => f.numero)).toEqual(['9', '45']);
+    expect(p[0].input.apelidos).toEqual(['HIGRA MINING']);
+    expect(p[1].acao).toBe('invalido');
   });
 });
