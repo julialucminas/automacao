@@ -113,7 +113,7 @@ export function naFilaImap<T>(f: () => Promise<T>): Promise<T> {
 const NOMES_ENVIADOS = /^(sent|sent items|sent messages|sent mail|enviados|enviadas|itens enviados|mensagens enviadas)$/i;
 
 function conectarImap(conta: ContaEmail) {
-  return new ImapFlow({
+  const c = new ImapFlow({
     host: conta.imapHost,
     port: conta.imapPorta,
     secure: true,
@@ -123,6 +123,23 @@ function conectarImap(conta: ContaEmail) {
     connectionTimeout: 20_000,
     greetingTimeout: 20_000,
   });
+  semQuedas(c);
+  return c;
+}
+
+/**
+ * A biblioteca de IMAP avisa queda/tempo esgotado como evento 'error'. Sem quem escute,
+ * o Node derruba o servidor inteiro. Aqui o erro só fecha aquela conexão.
+ */
+export function semQuedas(c: ImapFlow) {
+  c.on('error', () => {
+    try {
+      c.close();
+    } catch {
+      /* já fechada */
+    }
+  });
+  return c;
 }
 
 /** Fecha sem esperar resposta (logout pode ficar pendurado se o servidor não responder). */

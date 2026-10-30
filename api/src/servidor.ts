@@ -15,6 +15,9 @@ const encerrar = async () => {
   process.exit(0);
 };
 process.on('SIGTERM', encerrar);
+// rede de segurança: um erro solto (ex.: queda de conexão com o e-mail) não pode derrubar o sistema
+process.on('uncaughtException', (e) => app.log.error({ err: e }, 'erro não tratado (servidor continua no ar)'));
+process.on('unhandledRejection', (e) => app.log.error({ err: e }, 'promessa rejeitada sem tratamento (servidor continua no ar)'));
 process.on('SIGINT', encerrar);
 
 await app.listen({ host: '0.0.0.0', port: Number(process.env.PORTA ?? 3333) });

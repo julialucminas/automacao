@@ -1,6 +1,6 @@
 import { ImapFlow } from 'imapflow';
 import type { Banco, Repositorio } from './db.js';
-import { comPrazo, naFilaImap, type ContaEmail } from './email.js';
+import { comPrazo, naFilaImap, semQuedas, type ContaEmail } from './email.js';
 
 /*
  * Acompanha a caixa de entrada do e-mail da empresa (só leitura) e reconhece:
@@ -179,6 +179,7 @@ export function monitorCaixa(db: Banco, repo: Repositorio, lerConta: () => Conta
           connectionTimeout: 20_000,
           greetingTimeout: 20_000,
         });
+        semQuedas(c);
         try {
           await comPrazo(
             (async () => {
