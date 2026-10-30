@@ -2,6 +2,7 @@ import Fastify, { type FastifyReply, type FastifyRequest } from 'fastify';
 import cookie from '@fastify/cookie';
 import { Conflito, NaoEncontrado, repositorio, type Banco, type ClienteInput, type Frota, type Usuario } from './db.js';
 import { CONFIG_PADRAO, Conflito2, operacoes, type NovaMov, type TipoMov } from './operacoes.js';
+import { carteiroReal, servicoEnvio, type Anexo, type Carteiro } from './envio.js';
 import { conferirSenha, gerarHash, hashToken, novoToken, problemaSenha } from './senha.js';
 
 const COOKIE = 'sessao';
@@ -137,7 +138,7 @@ function limitador(max: number, janelaMs: number) {
   };
 }
 
-export function criarApp(db: Banco, opcoes: { cookieSeguro: boolean; logger?: boolean }) {
+export function criarApp(db: Banco, opcoes: { cookieSeguro: boolean; logger?: boolean; pastaDados?: string; carteiro?: Carteiro }) {
   const repo = repositorio(db);
   const ops = operacoes(db, repo);
   const app = Fastify({ logger: opcoes.logger ?? false, trustProxy: true, bodyLimit: 1_000_000 });
@@ -404,10 +405,72 @@ export function criarApp(db: Banco, opcoes: { cookieSeguro: boolean; logger?: bo
   // ---------- envios ----------
   app.get('/api/envios', { preHandler: exigirLogin }, async () => repo.listarEnvios());
 
-  const envioDesligado = async (_req: FastifyRequest, reply: FastifyReply) =>
-    reply.code(503).send({ erro: 'O envio pelo e-mail da empresa ainda não foi ativado. Nenhum e-mail foi enviado.' });
-  app.post('/api/envios', { preHandler: exigirFinanceiro }, envioDesligado);
-  app.post('/api/envios/:id/reenviar', { preHandler: exigirFinanceiro }, envioDesligado);
+  const envio = servicoEnvio(db, repo, opcoes.pastaDados ?? '/dados', opcoes.carteiro ?? carteiroReal);
+  const SEM_CONTA = 'O e-mail da empresa ainda não foi configurado no servidor. Nenhum e-mail foi enviado.';
+  const remetente = () => ops.lerConfig()['email.remetente'];
+
+  app.get('/api/envio/situacao', { preHandler: exigirLogin }, async () => ({ configurado: envio.configurado(), conta: envio.contaUsuario() }));
+
+  const lerAnexos = (v: unknown): Anexo[] => {
+    if (!Array.isArray(v) || v.length < 1 || v.length > 4) throw new Invalido('Envie a fatura e o boleto em PDF.');
+    let total = 0;
+    return v.map((a: Record<string, unknown>) => {
+      const nome = texto(a?.nome, 'nome do arquivo', 200);
+      if (!/\.pdf$/i.test(nome)) throw new Invalido(`O arquivo "${nome}" não é PDF.`);
+      const conteudo = Buffer.from(typeof a.base64 === 'string' ? a.base64 : '', 'base64');
+      if (conteudo.subarray(0, 4).toString('latin1') !== '%PDF') throw new Invalido(`O arquivo "${nome}" não parece ser um PDF válido.`);
+      total += conteudo.length;
+      if (total > 25 * 1024 * 1024) throw new Invalido('Os anexos passam de 25 MB, o limite do e-mail.');
+      return { nome, conteudo };
+    });
+  };
+  const lerPedido = (b: Record<string, unknown>) => {
+    const referencia = typeof b.referencia === 'string' && /^\d{4}-(0[1-9]|1[0-2])$/.test(b.referencia) ? b.referencia : invalido('Mês de referência inválido.');
+    const numero = texto(b.numero, 'número da fatura', 30);
+    if (!numero) throw new Invalido('Informe o número da fatura.');
+    const assunto = texto(b.assunto, 'assunto', 300);
+    if (!assunto) throw new Invalido('O e-mail está sem assunto.');
+    const corpo = texto(b.corpo, 'texto do e-mail', 20000);
+    const dataFaturamento = lerDataIso(b.dataFaturamento, 'Data de faturamento') ?? null;
+    if (dataFaturamento && !dataFaturamento.startsWith(referencia)) throw new Invalido('A data de faturamento não é do mês de referência.');
+    return { referencia: referencia as string, numero, assunto, corpo, anexos: lerAnexos(b.anexos), pediuLeitura: b.pediuLeitura === true, observacao: texto(b.observacao, 'observação', 2000), dataFaturamento };
+  };
+  const limite = { bodyLimit: 40 * 1024 * 1024 };
+
+  app.post('/api/envios', { preHandler: exigirFinanceiro, ...limite }, async (req, reply) => {
+    if (!envio.configurado()) return reply.code(503).send({ erro: SEM_CONTA });
+    const b = (req.body ?? {}) as Record<string, unknown>;
+    const p = lerPedido(b);
+    const cliente = repo.buscarCliente(typeof b.clienteId === 'string' ? b.clienteId : '');
+    if (!cliente.para.length) throw new Invalido(`${cliente.nome} não tem e-mail cadastrado.`);
+    const anterior = envio.jaEnviada(p.referencia, p.numero);
+    if (anterior && b.repetir !== true) {
+      const d = new Date(anterior.enviadoEm).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+      throw new Conflito(`A fatura ${p.numero} já foi enviada em ${d}. Para mandar de novo, use Reenviar no Histórico.`);
+    }
+    return envio.enviar({ ...p, cliente }, remetente(), req.usuario.id);
+  });
+
+  app.post('/api/envios/teste', { preHandler: exigirFinanceiro, ...limite }, async (req, reply) => {
+    if (!envio.configurado()) return reply.code(503).send({ erro: SEM_CONTA });
+    const p = lerPedido((req.body ?? {}) as Record<string, unknown>);
+    const r = await envio.testar(req.usuario.email, p.assunto, p.corpo, p.anexos, remetente(), p.numero);
+    if (!r.ok) return reply.code(502).send({ erro: r.detalhe });
+    return r;
+  });
+
+  app.post<{ Params: { id: string } }>('/api/envios/:id/reenviar', { preHandler: exigirFinanceiro }, async (req, reply) => {
+    if (!envio.configurado()) return reply.code(503).send({ erro: SEM_CONTA });
+    try {
+      return await envio.reenviar(req.params.id, remetente(), req.usuario.id);
+    } catch (e) {
+      const m = e instanceof Error ? e.message : '';
+      if (m === 'NAO_ACHOU') throw new NaoEncontrado('Envio não encontrado.');
+      if (m === 'SEM_ARQUIVOS') throw new Conflito('Os PDFs desse envio não estão guardados no servidor. Carregue a pasta do mês de novo e envie por lá.');
+      if (m === 'SEM_EMAIL') throw new Invalido('O cliente está sem e-mail no cadastro.');
+      throw e;
+    }
+  });
 
   return app;
 }

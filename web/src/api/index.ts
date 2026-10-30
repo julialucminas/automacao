@@ -16,7 +16,12 @@ export type EnvioPedido = {
   anexos: { nome: string; blob: Blob }[];
   pediuLeitura: boolean;
   observacao: string;
+  /** dia do Calendário a marcar como faturado quando o envio der certo */
+  dataFaturamento?: string | null;
 };
+
+export type ResultadoTeste = { ok: boolean; para: string; copiaEmEnviados: boolean; detalhe: string };
+export type SituacaoEnvio = { configurado: boolean; conta: string | null };
 
 export interface Api {
   login(email: string, senha: string): Promise<Usuario>;
@@ -57,6 +62,9 @@ export interface Api {
   /** Envia um e-mail (SMTP) e salva a cópia em Enviados (IMAP). */
   enviar(pedido: EnvioPedido): Promise<Envio>;
   reenviar(envioId: string): Promise<Envio>;
+  /** manda a fatura só para quem está logado, para conferir como chega */
+  testarEnvio(pedido: EnvioPedido): Promise<ResultadoTeste>;
+  situacaoEnvio(): Promise<SituacaoEnvio>;
 }
 
 export const MODO_DEMO = import.meta.env.VITE_API !== 'http';

@@ -116,3 +116,12 @@ export function descreverRegra(r: RegraFaturamento | null): string {
   if (r.tipo === 'dia') return `Todo dia ${r.dia} do mês`;
   return `A cada ${r.dias} dias desde ${dataBr(r.inicio)}`;
 }
+
+/** Dia em que o cliente fatura no mês de referência ("2026-10"), pela regra do cadastro. */
+export function dataFaturamentoNoMes(c: Parameters<typeof regraDoCliente>[0], referencia: string): string | null {
+  const r = regraDoCliente(c);
+  if (!r) return null;
+  const [a, m] = referencia.split('-').map(Number);
+  const { de, ate } = intervaloDoMes(a, m);
+  return datasNoIntervalo(r, de, ate)[0] ?? null;
+}

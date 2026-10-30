@@ -13,6 +13,9 @@ import { Writable } from 'node:stream';
 import { abrirBanco, repositorio } from './db.js';
 import { gerarHash, problemaSenha, senhaAleatoria } from './senha.js';
 import { CONTA_PADRAO, enviarSmtp, listarPastas, montar, pdfDeTeste, salvarEmEnviados, type ContaEmail } from './email.js';
+import { salvarConta } from './envio.js';
+import { dirname } from 'node:path';
+import nodemailer from 'nodemailer';
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -32,6 +35,40 @@ const [cmd, email, ...resto] = args;
 
 const ok = (m: string) => console.log('  ✔ ' + m);
 const falha = (m: string) => console.log('  ✖ ' + m);
+
+/** Guarda a senha do e-mail da empresa no servidor (só depois de conferir que ela funciona). */
+async function configurarEmail() {
+  const usuario = (contaFlag ?? 'financeiro@lucminas.com.br').trim();
+  console.log('Configurar o e-mail que envia as faturas');
+  console.log(`  Conta: ${usuario}`);
+  console.log('');
+  const senha = await lerEscondido(`Digite a senha de ${usuario} e aperte Enter (não aparece na tela): `);
+  if (!senha) sair('Nenhuma senha digitada. Nada foi alterado.');
+  const conta: ContaEmail = { ...CONTA_PADRAO, usuario, senha };
+  console.log('');
+  console.log('1/2 Conferindo a senha no envio (SMTP)…');
+  try {
+    const t = nodemailer.createTransport({ host: conta.smtpHost, port: conta.smtpPorta, secure: conta.smtpPorta === 465, auth: { user: usuario, pass: senha }, connectionTimeout: 20_000 });
+    await t.verify();
+    t.close();
+    ok('Senha aceita pelo UOL');
+  } catch (e) {
+    falha(e instanceof Error ? e.message : String(e));
+    sair('O UOL não aceitou essa senha. Nada foi alterado. Rode o comando de novo com a senha certa.');
+  }
+  console.log('2/2 Conferindo a pasta Enviados (IMAP)…');
+  try {
+    const ps = await listarPastas(conta);
+    ok('Pastas: ' + ps.map((p) => p.caminho).join(', '));
+  } catch (e) {
+    falha(e instanceof Error ? e.message : String(e));
+    sair('Não conseguiu abrir as pastas da conta. Nada foi alterado. Me mande um print desta tela.');
+  }
+  salvarConta(dirname(process.env.BANCO ?? '/dados/faturas.db'), usuario, senha);
+  console.log('');
+  console.log('PRONTO. O sistema já pode enviar as faturas por ' + usuario + '.');
+  console.log('A senha ficou guardada só neste servidor. Se ela for trocada no UOL, rode este comando de novo.');
+}
 
 /** Teste de envio real pelo UOL: envia para um endereço de teste e grava a cópia em Enviados. Não guarda a senha. */
 async function testarEmail() {
@@ -194,6 +231,8 @@ if (cmd === 'criar') {
   if (!email || (p !== 'financeiro' && p !== 'operacoes')) sair('Uso: perfil email@lucminas.com.br financeiro|operacoes');
   if (!repo.definirPerfil(email, p as 'financeiro' | 'operacoes')) sair(`Usuário ${email} não encontrado.`);
   console.log(`Perfil de ${email}: ${p}`);
+} else if (cmd === 'configurar-email') {
+  await configurarEmail();
 } else if (cmd === 'testar-email') {
   await testarEmail();
 } else if (cmd === 'listar') {
@@ -201,7 +240,7 @@ if (cmd === 'criar') {
   if (!us.length) console.log('Nenhum usuário ainda.');
   for (const u of us) console.log(`${u.ativo ? 'ativo     ' : 'desativado'}  ${u.perfil.padEnd(10)}  ${u.email}  (${u.nome}${u.chamar ? `, "Oi ${u.chamar}!"` : ''})`);
 } else {
-  sair('Comandos: criar, senha, chamar, perfil, desativar, reativar, listar, testar-email');
+  sair('Comandos: criar, senha, chamar, perfil, desativar, reativar, listar, testar-email, configurar-email');
 }
 leitor.rl?.close();
   db.close();

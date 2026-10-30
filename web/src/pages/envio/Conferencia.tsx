@@ -5,6 +5,7 @@ import type { Cliente, ItemLote } from '../../types';
 import { chaveItem, useEstado } from '../../state';
 import { STATUS_ITEM, statusDoItem, temAviso } from '../../lib/pareamento';
 import { montarEmail, referenciaTitulo } from '../../lib/email';
+import { dataFaturamentoNoMes } from '../../lib/calendario';
 import { chaveEmpresa } from '../../lib/normalizar';
 import { Cartao, Chip, Modal } from '../../components/ui';
 import { ClienteForm, rascunhoVazio, type Rascunho } from '../../components/ClienteForm';
@@ -78,6 +79,7 @@ export function Conferencia() {
           anexos: [item.fatura!, item.boleto!].map((a) => ({ nome: a.nome, blob: a.blob })),
           pediuLeitura,
           observacao: item.observacao,
+          dataFaturamento: dataFaturamentoNoMes(cliente, lote.referencia),
         });
         atualizarItem(chaveItem(item), (i) => ({ ...i, enviado: true, marcado: false }));
         setProgresso((p) => p && { ...p, feitos: [...p.feitos, { numero: item.numero, cliente: cliente.nome, ok: envio.status !== 'falhou', detalhe: envio.detalhe }] });
@@ -261,7 +263,7 @@ export function Conferencia() {
                   <span className={`mt-0.5 ${f.ok ? 'text-ok' : 'text-bad'}`}>{f.ok ? <IcCheck /> : <IcAlerta />}</span>
                   <span>
                     <b className="font-mono">{f.numero}</b> {f.cliente}
-                    {!f.ok || f.detalhe.includes('não existe') ? <span className="block text-xs text-bad">{f.detalhe}</span> : null}
+                    {!f.ok || f.detalhe.includes('não existe') || f.detalhe.includes('não conseguiu guardar') ? <span className={`block text-xs ${f.ok ? 'text-warn-strong' : 'text-bad'}`}>{f.detalhe}</span> : null}
                   </span>
                 </li>
               ))}

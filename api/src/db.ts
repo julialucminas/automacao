@@ -253,6 +253,8 @@ const MIGRACOES = [
    );`,
   // 8: cliente da solicitação pode ser texto livre (não cadastrado)
   `ALTER TABLE solicitacoes ADD COLUMN cliente_texto TEXT NOT NULL DEFAULT '';`,
+  // 9: texto do e-mail enviado (para reenviar igual)
+  `ALTER TABLE envios ADD COLUMN corpo TEXT NOT NULL DEFAULT '';`,
 ];
 
 export function abrirBanco(caminho: string) {

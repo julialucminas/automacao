@@ -10,7 +10,7 @@ import { TrocarSenha } from './TrocarSenha';
 import { useVersaoNova } from '../lib/versao';
 
 export function Layout() {
-  const { usuario, sair, lote, clientes, envios, aviso, fecharAviso, pendentesParaMim, naoLidas, solicitacoes, ehFinanceiro, aguardandoAprovacao, propostas, movimentacoes } =
+  const { usuario, sair, lote, clientes, envios, aviso, fecharAviso, pendentesParaMim, naoLidas, solicitacoes, ehFinanceiro, envioAtivo, aguardandoAprovacao, propostas, movimentacoes } =
     useEstado();
   const local = useLocation();
   const avisosLote = lote ? lote.itens.filter((i) => temAviso(i, clientes)).length : 0;
@@ -73,8 +73,8 @@ export function Layout() {
           <div className="flex flex-wrap items-center gap-2">
             {ehFinanceiro && (
               <span className="flex items-center gap-2 rounded-full bg-white/10 px-3 py-1.5 text-xs text-white/80">
-                <span className="h-2 w-2 rounded-full bg-brand" aria-hidden="true" />
-                {REMETENTE} · {MODO_DEMO ? 'demonstração (nenhum e-mail sai)' : 'envio ainda não ativado'}
+                <span className={`h-2 w-2 rounded-full ${envioAtivo ? 'bg-[#3DDC84]' : 'bg-brand'}`} aria-hidden="true" />
+                {REMETENTE} · {MODO_DEMO ? 'demonstração (nenhum e-mail sai)' : envioAtivo ? 'envio ativo' : 'envio não configurado'}
               </span>
             )}
             {comoChamar && <span className="px-1 text-[15px] font-bold text-brand">Oi {comoChamar}! :)</span>}

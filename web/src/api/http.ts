@@ -1,4 +1,4 @@
-import type { Api } from './index';
+import type { Api, EnvioPedido } from './index';
 
 /** Implementação real: conversa com o servidor em /api. */
 
@@ -29,6 +29,28 @@ async function chamar<T>(metodo: string, url: string, corpo?: unknown): Promise<
     throw new ErroApi(r.status, dados?.erro ?? `Erro ${r.status}`);
   }
   return dados as T;
+}
+
+/** Blob → base64 (sem o prefixo data:). */
+async function paraBase64(b: Blob): Promise<string> {
+  const bytes = new Uint8Array(await b.arrayBuffer());
+  let s = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(s);
+}
+
+async function corpoEnvio(p: EnvioPedido) {
+  return {
+    referencia: p.referencia,
+    numero: p.numero,
+    clienteId: p.clienteId,
+    assunto: p.assunto,
+    corpo: p.corpo,
+    pediuLeitura: p.pediuLeitura,
+    observacao: p.observacao,
+    dataFaturamento: p.dataFaturamento ?? null,
+    anexos: await Promise.all(p.anexos.map(async (a) => ({ nome: a.nome, base64: await paraBase64(a.blob) }))),
+  };
 }
 
 export const httpApi: Api = {
@@ -92,6 +114,8 @@ export const httpApi: Api = {
 
   listarEnvios: () => chamar('GET', '/api/envios'),
   // o envio real (SMTP + cópia em Enviados) entra na próxima etapa; o servidor responde com a explicação
-  enviar: (pedido) => chamar('POST', '/api/envios', { referencia: pedido.referencia, numero: pedido.numero, clienteId: pedido.clienteId }),
+  enviar: async (pedido) => chamar('POST', '/api/envios', await corpoEnvio(pedido)),
+  testarEnvio: async (pedido) => chamar('POST', '/api/envios/teste', await corpoEnvio(pedido)),
+  situacaoEnvio: () => chamar('GET', '/api/envio/situacao'),
   reenviar: (id) => chamar('POST', `/api/envios/${id}/reenviar`),
 };

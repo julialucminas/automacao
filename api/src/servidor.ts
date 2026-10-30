@@ -7,7 +7,7 @@ const caminho = process.env.BANCO ?? '/dados/faturas.db';
 mkdirSync(dirname(caminho), { recursive: true });
 
 const db = abrirBanco(caminho);
-const app = criarApp(db, { cookieSeguro: process.env.COOKIE_SEGURO !== '0', logger: true });
+const app = criarApp(db, { cookieSeguro: process.env.COOKIE_SEGURO !== '0', logger: true, pastaDados: dirname(caminho) });
 
 const encerrar = async () => {
   await app.close();

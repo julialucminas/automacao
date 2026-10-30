@@ -305,6 +305,14 @@ export const mockApi: Api = {
     salvar({ ...b, envios: [envio, ...b.envios] });
     return envio;
   },
+  async testarEnvio(p) {
+    await espera(600);
+    const u = carregar().usuario;
+    return { ok: true, para: u?.email ?? 'voce@exemplo.com', copiaEmEnviados: true, detalhe: `Demonstração: nada foi enviado de verdade (${p.anexos.length} anexos).` };
+  },
+  async situacaoEnvio() {
+    return { configurado: false, conta: null };
+  },
   async reenviar(envioId) {
     await espera(500);
     const b = carregar();

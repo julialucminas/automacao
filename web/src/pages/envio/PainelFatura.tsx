@@ -1,4 +1,6 @@
+import { useState } from 'react';
 import type { Cliente, Envio, ItemLote } from '../../types';
+import { api, MODO_DEMO } from '../../api';
 import { chaveItem, useEstado } from '../../state';
 import { STATUS_ITEM, statusDoItem } from '../../lib/pareamento';
 import { dataHora, montarEmail, REMETENTE } from '../../lib/email';
@@ -27,7 +29,8 @@ export function PainelFatura({
   envioAnterior: Envio | undefined;
   cadastrarNovo: (item: ItemLote) => void;
 }) {
-  const { clientes, atualizarItem, config } = useEstado();
+  const { clientes, atualizarItem, config, usuario, envioAtivo, avisar } = useEstado();
+  const [testando, setTestando] = useState(false);
 
   if (!item) {
     return (
@@ -130,6 +133,42 @@ export function PainelFatura({
               ))}
             </div>
           </div>
+
+          {item.fatura && item.boleto && (
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-[10px] border border-dashed border-line-strong px-3.5 py-2.5 text-[13px]">
+              <span className="text-ink-2">
+                Ver como chega? Manda esta fatura só para <b>{usuario?.email}</b>.
+              </span>
+              <button
+                type="button"
+                className="btn-secondary btn-sm"
+                disabled={testando || (!envioAtivo && !MODO_DEMO)}
+                title={!envioAtivo && !MODO_DEMO ? 'O e-mail da empresa ainda não foi configurado no servidor' : undefined}
+                onClick={async () => {
+                  setTestando(true);
+                  try {
+                    const r = await api.testarEnvio({
+                      referencia,
+                      numero: item.numero,
+                      clienteId: cliente.id,
+                      assunto: email.assunto,
+                      corpo: email.corpo,
+                      anexos: [item.fatura!, item.boleto!].map((a) => ({ nome: a.nome, blob: a.blob })),
+                      pediuLeitura: false,
+                      observacao: '',
+                    });
+                    avisar(`Teste enviado para ${r.para}.${r.copiaEmEnviados ? ' A cópia está em Itens Enviados.' : ''} Nada foi para o cliente.`);
+                  } catch (e) {
+                    avisar(e instanceof Error ? e.message : 'Não foi possível enviar o teste.', 'bad');
+                  } finally {
+                    setTestando(false);
+                  }
+                }}
+              >
+                {testando ? 'Enviando teste…' : 'Enviar teste para mim'}
+              </button>
+            </div>
+          )}
 
           <div className="flex flex-col gap-2 text-[13px]">
             <label className="flex items-center gap-2 text-ink-2">

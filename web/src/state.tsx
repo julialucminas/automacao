@@ -28,6 +28,8 @@ type Estado = {
   aguardandoAprovacao: number;
 
   config: ConfigEmail | null;
+  /** o servidor tem a senha do e-mail da empresa configurada */
+  envioAtivo: boolean;
   salvarConfig(c: Partial<ConfigEmail>): Promise<void>;
 
   salvarCliente(input: ClienteInput): Promise<Cliente>;
@@ -70,6 +72,7 @@ export function EstadoProvider({ children }: { children: ReactNode }) {
   const [movimentacoes, setMovimentacoes] = useState<Movimentacao[]>([]);
   const [propostas, setPropostas] = useState<Proposta[]>([]);
   const [config, setConfig] = useState<ConfigEmail | null>(null);
+  const [envioAtivo, setEnvioAtivo] = useState(false);
 
   const recarregarClientes = useCallback(async () => setClientes(await api.listarClientes()), []);
   const recarregarEnvios = useCallback(async () => setEnvios(await api.listarEnvios()), []);
@@ -100,6 +103,7 @@ export function EstadoProvider({ children }: { children: ReactNode }) {
     };
     tudo();
     api.lerConfig().then(setConfig, () => undefined);
+    api.situacaoEnvio().then((s) => setEnvioAtivo(s.configurado), () => undefined);
     const t = setInterval(tudo, 60_000);
     const foco = () => document.visibilityState === 'visible' && tudo();
     document.addEventListener('visibilitychange', foco);
@@ -180,6 +184,7 @@ export function EstadoProvider({ children }: { children: ReactNode }) {
       },
       aguardandoAprovacao,
       config,
+      envioAtivo,
       async salvarConfig(c) {
         setConfig(await api.salvarConfig(c));
       },
@@ -253,7 +258,7 @@ export function EstadoProvider({ children }: { children: ReactNode }) {
       avisar,
       fecharAviso: () => setAviso(null),
     }),
-    [usuario, carregando, erroInicial, ehFinanceiro, movimentacoes, propostas, aguardandoAprovacao, config, recarregarOperacoes, clientes, envios, solicitacoes, recarregarSolicitacoes, pendentesParaMim, naoLidas, lote, aviso, avisar, recarregarClientes, recarregarEnvios, reconciliarLote],
+    [usuario, carregando, erroInicial, ehFinanceiro, movimentacoes, propostas, aguardandoAprovacao, config, envioAtivo, recarregarOperacoes, clientes, envios, solicitacoes, recarregarSolicitacoes, pendentesParaMim, naoLidas, lote, aviso, avisar, recarregarClientes, recarregarEnvios, reconciliarLote],
   );
 
   return <Ctx.Provider value={valor}>{children}</Ctx.Provider>;
