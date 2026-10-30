@@ -238,6 +238,19 @@ const MIGRACOES = [
      atualizado_em TEXT NOT NULL,
      atualizado_por INTEGER REFERENCES usuarios(id)
    );`,
+  // 7: conferência mensal das frotas (operações marca o que está certo)
+  `CREATE TABLE conferencias (
+     referencia TEXT NOT NULL,
+     cliente_id TEXT NOT NULL REFERENCES clientes(id) ON DELETE CASCADE,
+     frota TEXT NOT NULL,
+     status TEXT NOT NULL,
+     valor INTEGER NOT NULL,
+     descricao TEXT NOT NULL DEFAULT '',
+     observacao TEXT NOT NULL DEFAULT '',
+     quando TEXT NOT NULL,
+     usuario_id INTEGER REFERENCES usuarios(id),
+     PRIMARY KEY (referencia, cliente_id, frota)
+   );`,
 ];
 
 export function abrirBanco(caminho: string) {
@@ -497,7 +510,7 @@ export function repositorio(db: Banco) {
 
     // ---------- usuários (para escolher destinatário) ----------
     listarUsuariosAtivos(): { id: number; nome: string; chamar: string; email: string }[] {
-      return db.prepare('SELECT id, nome, chamar, email FROM usuarios WHERE ativo = 1 ORDER BY nome').all() as {
+      return db.prepare("SELECT id, nome, chamar, email FROM usuarios WHERE ativo = 1 AND perfil = 'financeiro' ORDER BY nome").all() as {
         id: number;
         nome: string;
         chamar: string;

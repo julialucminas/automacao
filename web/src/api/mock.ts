@@ -1,5 +1,5 @@
 import type { Api } from './index';
-import type { Cliente, Envio, Faturamento, Solicitacao, Usuario } from '../types';
+import type { Cliente, Conferencia, Envio, Faturamento, Solicitacao, Usuario } from '../types';
 import { REMETENTE } from '../lib/email';
 
 /*
@@ -259,6 +259,21 @@ export const mockApi: Api = {
   async listarRegistro() {
     return [];
   },
+  async listarConferencia(ref) {
+    return CONFERENCIAS_DEMO.filter((c) => c.referencia === ref);
+  },
+  async marcarConferencia(ref, c) {
+    const i = CONFERENCIAS_DEMO.findIndex((x) => x.referencia === ref && x.clienteId === c.clienteId && x.frota === c.frota);
+    if (i >= 0) CONFERENCIAS_DEMO.splice(i, 1);
+    const f = carregar().clientes.find((x) => x.id === c.clienteId)?.frotas.find((x) => x.numero === c.frota);
+    const nova = { referencia: ref, clienteId: c.clienteId, frota: c.frota, status: c.status, valor: f?.valor ?? 0, descricao: f?.descricao ?? '', observacao: c.observacao ?? '', quando: new Date().toISOString(), usuario: 'Demonstração' };
+    CONFERENCIAS_DEMO.push(nova);
+    return nova;
+  },
+  async desmarcarConferencia(ref, clienteId, frota) {
+    const i = CONFERENCIAS_DEMO.findIndex((x) => x.referencia === ref && x.clienteId === clienteId && x.frota === frota);
+    if (i >= 0) CONFERENCIAS_DEMO.splice(i, 1);
+  },
   async listarEnvios() {
     await espera(120);
     return [...carregar().envios].sort((a, b) => b.enviadoEm.localeCompare(a.enviadoEm));
@@ -327,6 +342,8 @@ export function apagarExemplos() {
 export function temExemplos(): boolean {
   return carregar().clientes.some((c) => [...c.para, ...c.cc].every((e) => /\.exemplo\.br$/.test(e)));
 }
+
+const CONFERENCIAS_DEMO: Conferencia[] = [];
 
 const CONFIG_DEMO = {
   'email.remetente': 'Financeiro · Lucminas Empilhadeiras',

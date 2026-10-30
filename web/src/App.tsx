@@ -12,6 +12,7 @@ import { Movimentacoes } from './pages/Movimentacoes';
 import { Aprovacoes } from './pages/Aprovacoes';
 import { Registro } from './pages/Registro';
 import { Configuracoes } from './pages/Configuracoes';
+import { ConferenciaMes } from './pages/ConferenciaMes';
 
 function Rotas() {
   const { usuario, carregando, erroInicial, ehFinanceiro } = useEstado();
@@ -31,16 +32,21 @@ function Rotas() {
   return (
     <Routes>
       <Route element={<Layout />}>
-        {ehFinanceiro && <Route path="/envio" element={<Envio />} />}
-        <Route path="/clientes" element={<Clientes />} />
-        <Route path="/calendario" element={<Calendario />} />
+        {ehFinanceiro && (
+          <>
+            <Route path="/envio" element={<Envio />} />
+            <Route path="/clientes" element={<Clientes />} />
+            <Route path="/calendario" element={<Calendario />} />
+            <Route path="/solicitacoes" element={<Solicitacoes />} />
+            <Route path="/historico" element={<Historico />} />
+            <Route path="/registro" element={<Registro />} />
+            <Route path="/configuracoes" element={<Configuracoes />} />
+          </>
+        )}
         <Route path="/frotas" element={<Frotas />} />
-        <Route path="/solicitacoes" element={<Solicitacoes />} />
         <Route path="/movimentacoes" element={<Movimentacoes />} />
+        <Route path="/conferencia" element={<ConferenciaMes />} />
         <Route path="/aprovacoes" element={<Aprovacoes />} />
-        <Route path="/registro" element={<Registro />} />
-        <Route path="/configuracoes" element={<Configuracoes />} />
-        {ehFinanceiro && <Route path="/historico" element={<Historico />} />}
         <Route path="*" element={<Navigate to={ehFinanceiro ? '/envio' : '/movimentacoes'} replace />} />
       </Route>
     </Routes>

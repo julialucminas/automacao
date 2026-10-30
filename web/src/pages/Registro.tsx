@@ -13,6 +13,7 @@ const AREAS: Record<string, { rotulo: string; tom: Tom }> = {
   cliente: { rotulo: 'Cadastro', tom: 'neutro' },
   movimentacao: { rotulo: 'Movimentação', tom: 'info' },
   proposta: { rotulo: 'Aprovação', tom: 'warn' },
+  conferencia: { rotulo: 'Conferência', tom: 'ok' },
   configuracao: { rotulo: 'Configuração', tom: 'neutro' },
 };
 

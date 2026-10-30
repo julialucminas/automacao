@@ -196,3 +196,15 @@ export type Proposta = {
 };
 export type ItemLog = { id: number; quando: string; usuario: string; area: string; acao: string; clienteId: string; clienteNome: string; antes: unknown; depois: unknown };
 export type ConfigEmail = Record<'email.remetente' | 'email.assunto' | 'email.corpo', string>;
+
+export type Conferencia = {
+  referencia: string;
+  clienteId: string;
+  frota: string;
+  status: 'ok' | 'alterado';
+  valor: number;
+  descricao: string;
+  observacao: string;
+  quando: string;
+  usuario: string;
+};

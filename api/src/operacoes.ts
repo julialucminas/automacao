@@ -60,6 +60,19 @@ export type Proposta = {
   resultado: ClienteInput;
 };
 
+export type Conferencia = {
+  referencia: string;
+  clienteId: string;
+  frota: string;
+  status: 'ok' | 'alterado';
+  /** valor e descrição no momento em que foi conferido (se mudar depois, volta a ficar pendente) */
+  valor: number;
+  descricao: string;
+  observacao: string;
+  quando: string;
+  usuario: string;
+};
+
 export type ItemLog = {
   id: number;
   quando: string;
@@ -345,6 +358,53 @@ export function operacoes(db: Banco, repo: Repositorio) {
     },
 
     // ---------- registro geral ----------
+    // ---------- conferência mensal ----------
+    listarConferencia(referencia: string): Conferencia[] {
+      return (
+        db
+          .prepare(
+            `SELECT k.*, COALESCE(u.nome, '') AS usuario FROM conferencias k LEFT JOIN usuarios u ON u.id = k.usuario_id WHERE k.referencia = ? ORDER BY k.quando`,
+          )
+          .all(referencia) as Record<string, unknown>[]
+      ).map((r) => ({
+        referencia: r.referencia as string,
+        clienteId: r.cliente_id as string,
+        frota: r.frota as string,
+        status: r.status as Conferencia['status'],
+        valor: r.valor as number,
+        descricao: r.descricao as string,
+        observacao: r.observacao as string,
+        quando: r.quando as string,
+        usuario: r.usuario as string,
+      }));
+    },
+
+    marcarConferencia(c: { referencia: string; clienteId: string; frota: string; status: Conferencia['status']; observacao: string }, usuarioId: number) {
+      const cli = repo.buscarCliente(c.clienteId);
+      const f = cli.frotas.find((x) => x.numero === c.frota);
+      if (!f) throw new NaoEncontrado(`A frota ${c.frota} não está em ${cli.nome}.`);
+      db.prepare(
+        `INSERT INTO conferencias (referencia, cliente_id, frota, status, valor, descricao, observacao, quando, usuario_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT (referencia, cliente_id, frota) DO UPDATE SET status = excluded.status, valor = excluded.valor, descricao = excluded.descricao,
+           observacao = excluded.observacao, quando = excluded.quando, usuario_id = excluded.usuario_id`,
+      ).run(c.referencia, c.clienteId, c.frota, c.status, f.valor, f.descricao, c.observacao, agora(), usuarioId);
+      const [a, m] = c.referencia.split('-');
+      repo.registrarLog(
+        c.clienteId,
+        usuarioId,
+        c.status === 'ok' ? `conferiu FT${c.frota} (${brl(f.valor)}) como correta em ${m}/${a}` : `apontou correção na FT${c.frota} na conferência de ${m}/${a}${c.observacao ? `: ${c.observacao}` : ''}`,
+        null,
+        null,
+        'conferencia',
+      );
+      return this.listarConferencia(c.referencia).find((x) => x.clienteId === c.clienteId && x.frota === c.frota)!;
+    },
+
+    desmarcarConferencia(referencia: string, clienteId: string, frota: string, usuarioId: number) {
+      const r = db.prepare('DELETE FROM conferencias WHERE referencia = ? AND cliente_id = ? AND frota = ?').run(referencia, clienteId, frota);
+      if (r.changes) repo.registrarLog(clienteId, usuarioId, `desmarcou a conferência da FT${frota} (${referencia.split('-').reverse().join('/')})`, null, null, 'conferencia');
+    },
+
     listarLog(limite = 500): ItemLog[] {
       return (
         db

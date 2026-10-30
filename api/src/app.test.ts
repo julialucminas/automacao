@@ -155,7 +155,7 @@ describe('solicitações', () => {
       app.inject({ method, url, payload: payload as object, headers: { cookie: cookieAngeli } });
 
     const usuarios = (await req('GET', '/api/usuarios')).json();
-    expect(usuarios.map((u: { nome: string }) => u.nome)).toEqual(['Angelise', 'Júlia', 'Júnior']);
+    expect(usuarios.map((u: { nome: string }) => u.nome)).toEqual(['Angelise', 'Júlia']);
     const idAngeli = usuarios.find((u: { nome: string }) => u.nome === 'Angelise').id;
     const cli = (await req('POST', '/api/clientes', { nome: 'Minasbev', para: ['g@minasbev.com'] })).json();
 
@@ -263,6 +263,26 @@ describe('operações (Júnior) e aprovação', () => {
     await req('POST', `/api/propostas/${id}/aprovar`);
     const t = (await req('GET', '/api/clientes')).json().find((x: { id: string }) => x.id === c.id);
     expect(t).toMatchObject({ observacoes: 'boleto dia 10', para: ['novo@a.com'], frotas: [{ numero: '7', valor: 900 }] });
+  });
+
+  it('conferência do mês: Júnior marca, desmarca, aponta correção; registro só para o financeiro', async () => {
+    const jr = await comoJunior();
+    const c = (await req('POST', '/api/clientes', { nome: 'Gerdau', para: ['g@g.com'], frotas: [{ numero: '12', valor: 250000, descricao: '' }, { numero: '13', valor: 0, descricao: '' }] })).json();
+    expect((await jr('POST', '/api/conferencia/2026-10', { clienteId: c.id, frota: '12', status: 'ok' })).json()).toMatchObject({ status: 'ok', valor: 250000, usuario: 'Júnior' });
+    expect((await jr('POST', '/api/conferencia/2026-10', { clienteId: c.id, frota: '13', status: 'alterado', observacao: 'valor é 1.800' })).statusCode).toBe(200);
+    expect((await jr('POST', '/api/conferencia/2026-10', { clienteId: c.id, frota: '99', status: 'ok' })).statusCode).toBe(404);
+    expect((await jr('GET', '/api/conferencia/2026-13')).statusCode).toBe(400);
+    expect((await jr('GET', '/api/conferencia/2026-10')).json()).toHaveLength(2);
+    expect((await jr('GET', '/api/conferencia/2026-11')).json()).toHaveLength(0);
+    await jr('POST', '/api/conferencia/2026-10/desmarcar', { clienteId: c.id, frota: '12' });
+    expect((await req('GET', '/api/conferencia/2026-10')).json().map((x: { frota: string }) => x.frota)).toEqual(['13']);
+    expect((await jr('GET', '/api/registro')).statusCode).toBe(403);
+    const log = (await req('GET', '/api/registro')).json();
+    expect(log.filter((l: { area: string }) => l.area === 'conferencia').map((l: { acao: string }) => l.acao)).toEqual([
+      'desmarcou a conferência da FT12 (10/2026)',
+      'apontou correção na FT13 na conferência de 10/2026: valor é 1.800',
+      expect.stringMatching(/^conferiu FT12 \(R\$\s2\.500,00\) como correta em 10\/2026$/),
+    ]);
   });
 
   it('configuração do e-mail: só financeiro altera, fica no registro', async () => {

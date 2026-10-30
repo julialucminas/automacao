@@ -84,6 +84,11 @@ export const httpApi: Api = {
   lerConfig: () => chamar('GET', '/api/config'),
   salvarConfig: (c) => chamar('PUT', '/api/config', c),
   listarRegistro: () => chamar('GET', '/api/registro'),
+  listarConferencia: (ref) => chamar('GET', `/api/conferencia/${ref}`),
+  marcarConferencia: (ref, c) => chamar('POST', `/api/conferencia/${ref}`, c),
+  desmarcarConferencia: async (ref, clienteId, frota) => {
+    await chamar('POST', `/api/conferencia/${ref}/desmarcar`, { clienteId, frota });
+  },
 
   listarEnvios: () => chamar('GET', '/api/envios'),
   // o envio real (SMTP + cópia em Enviados) entra na próxima etapa; o servidor responde com a explicação

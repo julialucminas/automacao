@@ -335,7 +335,30 @@ export function criarApp(db: Banco, opcoes: { cookieSeguro: boolean; logger?: bo
     for (const k of Object.keys(CONFIG_PADRAO)) if (b[k] !== undefined) valores[k] = texto(b[k], k, 5000) || CONFIG_PADRAO[k];
     return ops.salvarConfig(valores, req.usuario.id);
   });
-  app.get('/api/registro', { preHandler: exigirLogin }, async () => ops.listarLog());
+  app.get('/api/registro', { preHandler: exigirFinanceiro }, async () => ops.listarLog());
+
+  // ---------- conferência mensal das frotas ----------
+  const lerRef = (v: unknown) => {
+    if (typeof v !== 'string' || !/^\d{4}-(0[1-9]|1[0-2])$/.test(v)) throw new Invalido('Mês de referência inválido.');
+    return v;
+  };
+  const lerItemConf = (b: Record<string, unknown>) => {
+    const clienteId = typeof b.clienteId === 'string' && b.clienteId ? b.clienteId : invalido('Informe o cliente.');
+    const frota = texto(b.frota, 'frota', 50).toUpperCase();
+    if (!frota) throw new Invalido('Informe a frota.');
+    return { clienteId: clienteId as string, frota };
+  };
+  app.get<{ Params: { ref: string } }>('/api/conferencia/:ref', { preHandler: exigirLogin }, async (req) => ops.listarConferencia(lerRef(req.params.ref)));
+  app.post<{ Params: { ref: string } }>('/api/conferencia/:ref', { preHandler: exigirLogin }, async (req) => {
+    const b = (req.body ?? {}) as Record<string, unknown>;
+    const status = b.status === 'alterado' ? 'alterado' : b.status === 'ok' ? 'ok' : invalido('Situação inválida.');
+    return ops.marcarConferencia({ referencia: lerRef(req.params.ref), ...lerItemConf(b), status: status as 'ok' | 'alterado', observacao: texto(b.observacao, 'observação', 500) }, req.usuario.id);
+  });
+  app.post<{ Params: { ref: string } }>('/api/conferencia/:ref/desmarcar', { preHandler: exigirLogin }, async (req) => {
+    const i = lerItemConf((req.body ?? {}) as Record<string, unknown>);
+    ops.desmarcarConferencia(lerRef(req.params.ref), i.clienteId, i.frota, req.usuario.id);
+    return { ok: true };
+  });
 
   // ---------- usuários e solicitações ----------
   app.get('/api/usuarios', { preHandler: exigirLogin }, async () => repo.listarUsuariosAtivos());
