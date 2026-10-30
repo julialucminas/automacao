@@ -26,6 +26,7 @@ const flag = (nome: string) => {
 };
 const chamarFlag = flag('--chamar');
 const pedirSenha = flag('--senha') !== undefined;
+const contaFlag = flag('--conta') || undefined;
 const [cmd, email, ...resto] = args;
 
 const ok = (m: string) => console.log('  ✔ ' + m);
@@ -36,10 +37,15 @@ async function testarEmail() {
   console.log('Teste de envio pelo e-mail da empresa');
   console.log(`  SMTP ${CONTA_PADRAO.smtpHost}:${CONTA_PADRAO.smtpPorta} · IMAP ${CONTA_PADRAO.imapHost}:${CONTA_PADRAO.imapPorta}`);
   console.log('');
-  const padrao = 'financeiro@lucminas.com.br';
-  const usuario = (await lerEscondido(`Conta que envia [${padrao}]: `, false)).trim() || padrao;
-  const senha = await lerEscondido('Senha dessa conta (não aparece na tela): ');
-  const destino = (await lerEscondido('Enviar o teste para qual e-mail? ', false)).trim();
+  // destino vem como argumento (perguntas visíveis se comportam mal em alguns terminais web);
+  // só a senha é perguntada, escondida
+  const destino = (email ?? '').trim();
+  const usuario = (contaFlag ?? 'financeiro@lucminas.com.br').trim();
+  if (!EMAIL.test(destino)) sair('Uso: testar-email seu-email@gmail.com   (o e-mail que vai receber o teste)');
+  console.log(`  Conta que envia: ${usuario}`);
+  console.log(`  Teste vai para:  ${destino}`);
+  console.log('');
+  const senha = await lerEscondido(`Digite a senha de ${usuario} e aperte Enter (não aparece na tela): `);
   if (!EMAIL.test(usuario) || !EMAIL.test(destino) || !senha) sair('Dados incompletos. Nada foi enviado.');
   const conta: ContaEmail = { ...CONTA_PADRAO, usuario, senha };
 
