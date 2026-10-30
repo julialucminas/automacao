@@ -198,7 +198,7 @@ export function lerPlanilha(linhas: Celula[][]): Leitura {
     if (c.inicioLocacao && c.periodoDias) c.regra = 'periodo';
     else if (c.inicioLocacao || c.periodoDias) c.avisos.push('Para faturar por período, informe a data de início E o período em dias.');
     else if (c.diaEmissao) c.regra = 'dia';
-    if (!c.para.length && !c.cc.length) c.avisos.push('Sem e-mail na planilha: serve só para atualizar cliente que já está cadastrado.');
+    if (!c.para.length && !c.cc.length) c.avisos.push('Sem e-mail: o cliente entra com a etiqueta "sem e-mail" e não recebe faturas até ser preenchido.');
     c.avisos.push(...avisosDeDominio([...c.para, ...c.cc]));
   }
 
@@ -256,10 +256,7 @@ export function proporImportacao(leitura: Leitura, clientes: Cliente[], dist: Di
     const existente =
       clientes.find((c) => chaveEmpresa(c.nome) === k) ?? clientes.find((c) => c.apelidos.some((a) => chaveEmpresa(a) === k)) ?? null;
 
-    // sem e-mail só é problema para cliente novo; para cliente existente, a planilha pode trazer só frotas/datas
-    if (!existente && !para.length && !cc.length) {
-      return { lido, acao: 'invalido', existente, novosEmails: [], input: { nome: lido.nome, apelidos: lido.apelidos, cnpj: lido.cnpj, para, cc, observacoes: lido.observacoes } };
-    }
+    // cliente sem e-mail pode ser cadastrado: fica com a etiqueta "sem e-mail" até alguém preencher
     if (!para.length) {
       para = cc.slice(0, 1);
       cc = cc.slice(1);

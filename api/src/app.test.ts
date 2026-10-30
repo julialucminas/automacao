@@ -61,7 +61,7 @@ describe('clientes', () => {
   it('valida e-mail, nome e duplicidade', async () => {
     expect((await req('POST', '/api/clientes', { ...base, para: ['nao-e-email'] })).statusCode).toBe(400);
     expect((await req('POST', '/api/clientes', { ...base, nome: '' })).statusCode).toBe(400);
-    expect((await req('POST', '/api/clientes', { ...base, para: [] })).statusCode).toBe(400);
+    expect((await req('POST', '/api/clientes', { ...base, nome: 'Sem Email', para: [] })).statusCode).toBe(201);
     await req('POST', '/api/clientes', base);
     const dup = await req('POST', '/api/clientes', base);
     expect(dup.statusCode).toBe(409);

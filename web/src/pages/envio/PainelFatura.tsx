@@ -37,10 +37,10 @@ export function PainelFatura({
     );
   }
 
-  const st = statusDoItem(item);
+  const st = statusDoItem(item, clientes);
   const meta = STATUS_ITEM[st];
   const cliente: Cliente | undefined = clientes.find((c) => c.id === item.clienteId);
-  const email = cliente && item.fatura ? montarEmail(item, cliente, referencia) : null;
+  const email = cliente && cliente.para.length && item.fatura ? montarEmail(item, cliente, referencia) : null;
   const anexos = [item.fatura, item.boleto].filter((a): a is NonNullable<typeof a> => !!a);
 
   return (
@@ -69,6 +69,11 @@ export function PainelFatura({
       {st === 'numero_duplicado' && (
         <div className="rounded-[10px] bg-bad-soft px-3.5 py-3 text-[13px] text-bad-strong">
           Existe mais de um arquivo com o número <b>{item.numero}</b>. Corrija os nomes na pasta e carregue de novo, para não mandar o boleto errado.
+        </div>
+      )}
+      {st === 'sem_email' && cliente && (
+        <div className="rounded-[10px] bg-warn-soft px-3.5 py-3 text-[13px] text-warn-strong">
+          <b>{cliente.nome}</b> está cadastrado, mas sem e-mail. Cadastre pelo menos um e-mail na aba Clientes para esta fatura poder ser enviada.
         </div>
       )}
       {st === 'sem_cadastro' && <VincularCliente key={chaveItem(item)} item={item} cadastrarNovo={cadastrarNovo} />}

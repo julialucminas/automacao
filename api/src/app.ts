@@ -84,7 +84,7 @@ export function lerCliente(corpo: unknown, id?: string): ClienteInput {
   const nome = texto(b.nome, 'nome', 200).toUpperCase().replace(/\s+/g, ' ');
   if (!nome) throw new Invalido('Informe o nome do cliente.');
   const para = listaEmails(b.para, 'para');
-  if (!para.length) throw new Invalido('Informe pelo menos um e-mail em Para.');
+  // e-mail pode ficar para depois: o cliente aparece com a etiqueta "sem e-mail" e não recebe envio
   return {
     id,
     nome,

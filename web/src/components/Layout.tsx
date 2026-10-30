@@ -9,7 +9,7 @@ import { TrocarSenha } from './TrocarSenha';
 
 export function Layout() {
   const { usuario, sair, lote, clientes, envios, aviso, fecharAviso } = useEstado();
-  const avisosLote = lote ? lote.itens.filter(temAviso).length : 0;
+  const avisosLote = lote ? lote.itens.filter((i) => temAviso(i, clientes)).length : 0;
   const [trocandoSenha, setTrocandoSenha] = useState(false);
   const comoChamar = usuario?.chamar?.trim() || usuario?.nome.trim().split(/\s+/)[0] || '';
   const devolvidos = envios.filter((e) => e.status === 'devolvido').length;

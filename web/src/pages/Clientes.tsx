@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import type { Cliente } from '../types';
 import { useEstado } from '../state';
 import { chaveEmpresa, semAcento } from '../lib/normalizar';
 import { data } from '../lib/email';
@@ -11,12 +12,30 @@ import { baixarModelo, exportarClientes, useImportacao } from '../components/Imp
 import { apagarExemplos, temExemplos } from '../api/mock';
 import { MODO_DEMO } from '../api';
 
+type Etiqueta = 'sem_email' | 'sem_frota' | 'sem_data';
+
+const ETIQUETAS: Record<Etiqueta, { rotulo: string; cor: string }> = {
+  sem_email: { rotulo: 'Sem e-mail', cor: 'bg-bad-soft text-bad-strong' },
+  sem_frota: { rotulo: 'Sem frota', cor: 'bg-warn-soft text-warn-strong' },
+  sem_data: { rotulo: 'Sem data de fatura', cor: 'bg-info-soft text-info' },
+};
+
+/** Pendências do cadastro, calculadas na hora: somem sozinhas quando a informação é preenchida. */
+export function etiquetasDe(c: Cliente): Etiqueta[] {
+  const l: Etiqueta[] = [];
+  if (!c.para.length) l.push('sem_email');
+  if (!c.frotas.length) l.push('sem_frota');
+  if (!regraDoCliente(c)) l.push('sem_data');
+  return l;
+}
+
 const COLUNAS = 'grid grid-cols-[minmax(200px,1.2fr)_minmax(190px,1.1fr)_minmax(170px,1fr)_minmax(170px,1fr)_minmax(180px,1.1fr)_90px_80px] gap-3';
 
 export function Clientes() {
   const { clientes } = useEstado();
   const [busca, setBusca] = useState('');
   const [mostrarInativos, setMostrarInativos] = useState(false);
+  const [etiqueta, setEtiqueta] = useState<Etiqueta | 'todos' | 'completos'>('todos');
   const [editando, setEditando] = useState<Rascunho | null>(null);
   const importacao = useImportacao();
 
@@ -25,6 +44,9 @@ export function Clientes() {
     const qk = chaveEmpresa(busca);
     return clientes.filter((c) => {
       if (!mostrarInativos && !c.ativo) return false;
+      const et = etiquetasDe(c);
+      if (etiqueta === 'completos' && et.length) return false;
+      if (etiqueta !== 'todos' && etiqueta !== 'completos' && !et.includes(etiqueta)) return false;
       if (!q) return true;
       return (
         chaveEmpresa(c.nome).includes(qk) ||
@@ -33,7 +55,7 @@ export function Clientes() {
         c.cnpj.replace(/\D/g, '').includes(q.replace(/\D/g, '') || '§')
       );
     });
-  }, [clientes, busca, mostrarInativos]);
+  }, [clientes, busca, mostrarInativos, etiqueta]);
 
   const inativos = clientes.filter((c) => !c.ativo).length;
 
@@ -93,6 +115,30 @@ export function Clientes() {
           </button>
         </div>
       )}
+      <div className="mb-3 flex flex-wrap gap-1.5" role="group" aria-label="Filtrar por etiqueta">
+        {(
+          [
+            ['todos', 'Todos'],
+            ['sem_email', ETIQUETAS.sem_email.rotulo],
+            ['sem_frota', ETIQUETAS.sem_frota.rotulo],
+            ['sem_data', ETIQUETAS.sem_data.rotulo],
+            ['completos', 'Completos'],
+          ] as const
+        ).map(([id, rotulo]) => {
+          const n = clientes.filter((c) => (mostrarInativos || c.ativo) && (id === 'todos' || (id === 'completos' ? !etiquetasDe(c).length : etiquetasDe(c).includes(id)))).length;
+          return (
+            <button
+              key={id}
+              type="button"
+              aria-pressed={etiqueta === id}
+              onClick={() => setEtiqueta(id)}
+              className={`min-h-[40px] rounded-full border px-3.5 text-[13px] font-semibold ${etiqueta === id ? 'border-ink bg-ink text-white' : 'border-line-strong bg-white text-ink-2 hover:bg-canvas'}`}
+            >
+              {rotulo} ({n})
+            </button>
+          );
+        })}
+      </div>
       {inativos > 0 && (
         <label className="mb-3 flex items-center gap-2 text-[13px] text-ink-2">
           <input type="checkbox" checked={mostrarInativos} onChange={(e) => setMostrarInativos(e.target.checked)} className="h-[18px] w-[18px] accent-ink" />
@@ -119,6 +165,13 @@ export function Clientes() {
                     {c.nome}
                     {!c.ativo && <Chip tom="neutro">Desativado</Chip>}
                   </div>
+                  <div className="mt-1 flex flex-wrap gap-1">
+                    {etiquetasDe(c).map((e) => (
+                      <span key={e} className={`inline-flex rounded-md px-1.5 py-0.5 text-[11px] font-semibold ${ETIQUETAS[e].cor}`}>
+                        {ETIQUETAS[e].rotulo}
+                      </span>
+                    ))}
+                  </div>
                   {c.apelidos.length > 0 && <div className="text-xs text-ink-3">Também aparece como: {c.apelidos.join(', ')}</div>}
                   {c.cnpj && <div className="font-mono text-xs text-ink-3">{c.cnpj}</div>}
                 </div>
@@ -136,7 +189,7 @@ export function Clientes() {
                       {regraDoCliente(c) && <div>{descreverRegra(regraDoCliente(c))}</div>}
                       {c.frotas.length > 0 && (
                         <div title={c.frotas.map((f) => `${f.numero}: ${formatarReais(f.valor)}${f.descricao ? ` (${f.descricao})` : ''}`).join('\n')}>
-                          {c.frotas.length === 1 ? `Frota ${c.frotas[0].numero}` : `${c.frotas.length} frotas`} · <b>{formatarReais(c.frotas.reduce((s, f) => s + f.valor, 0))}</b>
+                          {c.frotas.length === 1 ? `Frota ${c.frotas[0].numero}` : `${c.frotas.length} frotas`} · {c.frotas.some((f) => f.valor) ? <b>{formatarReais(c.frotas.reduce((s, f) => s + f.valor, 0))}</b> : <span className="text-warn">sem valor</span>}
                         </div>
                       )}
                     </>

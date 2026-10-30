@@ -158,7 +158,6 @@ function Formulario({ inicial, fechar, aoSalvar }: { inicial: Rascunho; fechar: 
 
     const nome = d.nome.trim().toUpperCase().replace(/\s+/g, ' ');
     if (!nome) return setErro('Informe o nome como aparece no arquivo da fatura.');
-    if (!para.length) return setErro('Adicione pelo menos um e-mail em Para.');
     const repetido = clientes.find((c) => c.id !== d.id && c.nome === nome);
     if (repetido) return setErro(`Já existe um cliente chamado ${nome}.`);
 

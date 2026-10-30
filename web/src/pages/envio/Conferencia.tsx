@@ -44,11 +44,11 @@ export function Conferencia() {
   if (!lote) return null;
 
   const itens = lote.itens;
-  const prontos = itens.filter((i) => statusDoItem(i) === 'pronto');
+  const prontos = itens.filter((i) => statusDoItem(i, clientes) === 'pronto');
   const aEnviar = prontos.filter((i) => i.marcado);
   const visiveis = itens.filter((i) => {
-    if (filtro === 'prontos') return statusDoItem(i) === 'pronto';
-    if (filtro === 'avisos') return temAviso(i);
+    if (filtro === 'prontos') return statusDoItem(i, clientes) === 'pronto';
+    if (filtro === 'avisos') return temAviso(i, clientes);
     if (filtro === 'enviados') return i.enviado;
     return true;
   });
@@ -92,7 +92,7 @@ export function Conferencia() {
   const filtros: { id: Filtro; rotulo: string; n: number }[] = [
     { id: 'todos', rotulo: 'Todos', n: itens.length },
     { id: 'prontos', rotulo: 'Prontos', n: prontos.length },
-    { id: 'avisos', rotulo: 'Com aviso', n: itens.filter(temAviso).length },
+    { id: 'avisos', rotulo: 'Com aviso', n: itens.filter((i) => temAviso(i, clientes)).length },
     { id: 'enviados', rotulo: 'Enviados', n: itens.filter((i) => i.enviado).length },
   ];
 
@@ -125,7 +125,7 @@ export function Conferencia() {
       <div className="mb-5 grid grid-cols-[repeat(auto-fit,minmax(180px,1fr))] gap-3">
         <Cartao rotulo="Faturas encontradas" valor={itens.filter((i) => i.fatura).length} />
         <Cartao rotulo="Prontas para envio" valor={prontos.length} cor="text-ok" />
-        <Cartao rotulo="Precisam de atenção" valor={itens.filter(temAviso).length} cor="text-warn" />
+        <Cartao rotulo="Precisam de atenção" valor={itens.filter((i) => temAviso(i, clientes)).length} cor="text-warn" />
         <Cartao rotulo="Enviadas neste lote" valor={itens.filter((i) => i.enviado).length} cor="text-info" />
       </div>
 
@@ -322,7 +322,7 @@ function Linha({
   selecionar: () => void;
   alternar: () => void;
 }) {
-  const st = statusDoItem(item);
+  const st = statusDoItem(item, cliente ? [cliente] : undefined);
   const meta = STATUS_ITEM[st];
   let info = '';
   if (st === 'boleto_sem_fatura') info = 'Não há fatura com esse número';
@@ -352,7 +352,7 @@ function Linha({
         <span className={item.boleto ? '' : 'font-medium text-warn'}>{item.boleto?.nome ?? '— boleto não encontrado —'}</span>
       </div>
       <div className="min-w-0 text-[12.5px] text-ink-2">
-        {cliente ? (
+        {cliente && cliente.para.length ? (
           <>
             <span className="block truncate">
               {cliente.para[0]}

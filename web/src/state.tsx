@@ -70,7 +70,8 @@ export function EstadoProvider({ children }: { children: ReactNode }) {
           if (i.enviado || i.vinculo === 'manual' || !i.fatura) return i;
           const achado = encontrarCliente(i.empresaNoArquivo, lista);
           const novo: ItemLote = { ...i, clienteId: achado?.clienteId ?? null, vinculo: achado?.vinculo ?? null };
-          if (!i.clienteId && novo.clienteId) novo.marcado = statusDoItem(novo) === 'pronto';
+          if (!i.clienteId && novo.clienteId) novo.marcado = statusDoItem(novo, lista) === 'pronto';
+          if (statusDoItem(novo, lista) !== 'pronto') novo.marcado = false;
           if (!novo.clienteId) novo.marcado = false;
           return novo;
         }),
@@ -140,7 +141,8 @@ export function EstadoProvider({ children }: { children: ReactNode }) {
         if (!item) return;
         // o sistema aprende: esse nome de arquivo passa a ser apelido do cliente
         await api.adicionarApelido(clienteId, item.empresaNoArquivo);
-        setClientes(await api.listarClientes());
+        const lista = await api.listarClientes();
+        setClientes(lista);
         setLote((l) =>
           l
             ? {
@@ -148,7 +150,7 @@ export function EstadoProvider({ children }: { children: ReactNode }) {
                 itens: l.itens.map((i) => {
                   if (chaveItem(i) !== chave) return i;
                   const novo: ItemLote = { ...i, clienteId, vinculo: 'manual' };
-                  return { ...novo, marcado: statusDoItem(novo) === 'pronto' };
+                  return { ...novo, marcado: statusDoItem(novo, lista) === 'pronto' };
                 }),
               }
             : l,

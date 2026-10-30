@@ -81,7 +81,7 @@ export function parear(arquivos: ArquivoLido[], clientes: Cliente[]): ResultadoP
       enviado: false,
       observacao: '',
     };
-    item.marcado = statusDoItem(item) === 'pronto';
+    item.marcado = statusDoItem(item, clientes) === 'pronto';
     return item;
   });
 
@@ -106,12 +106,14 @@ export function parear(arquivos: ArquivoLido[], clientes: Cliente[]): ResultadoP
   return { itens, naoReconhecidos };
 }
 
-export function statusDoItem(i: ItemLote): StatusItem {
+/** clientes: quando informado, também confere se o cliente tem e-mail para envio. */
+export function statusDoItem(i: ItemLote, clientes?: Cliente[]): StatusItem {
   if (i.enviado) return 'enviado';
   if (!i.fatura) return 'boleto_sem_fatura';
   if (i.duplicado) return 'numero_duplicado';
   if (!i.boleto) return 'sem_boleto';
   if (!i.clienteId) return 'sem_cadastro';
+  if (clientes && !(clientes.find((c) => c.id === i.clienteId)?.para.length)) return 'sem_email';
   return 'pronto';
 }
 
@@ -119,13 +121,14 @@ export const STATUS_ITEM: Record<StatusItem, { rotulo: string; tom: 'ok' | 'warn
   pronto: { rotulo: 'Pronto', tom: 'ok' },
   sem_boleto: { rotulo: 'Fatura sem boleto', tom: 'warn' },
   sem_cadastro: { rotulo: 'Empresa sem cadastro', tom: 'warn' },
+  sem_email: { rotulo: 'Cliente sem e-mail', tom: 'warn' },
   boleto_sem_fatura: { rotulo: 'Boleto sem fatura', tom: 'bad' },
   numero_duplicado: { rotulo: 'Número repetido', tom: 'bad' },
   enviado: { rotulo: 'Enviado', tom: 'info' },
 };
 
-export function temAviso(i: ItemLote): boolean {
-  const s = statusDoItem(i);
+export function temAviso(i: ItemLote, clientes?: Cliente[]): boolean {
+  const s = statusDoItem(i, clientes);
   return s !== 'pronto' && s !== 'enviado';
 }
 

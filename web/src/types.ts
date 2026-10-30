@@ -52,6 +52,7 @@ export type StatusItem =
   | 'pronto'
   | 'sem_boleto'
   | 'sem_cadastro'
+  | 'sem_email'
   | 'boleto_sem_fatura'
   | 'numero_duplicado'
   | 'enviado';
