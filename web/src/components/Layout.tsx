@@ -1,14 +1,17 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 import { useEstado } from '../state';
 import { temAviso } from '../lib/pareamento';
 import { EMPRESA, REMETENTE } from '../lib/email';
 import { IcEmail, IcFechar, IcSair } from './Icones';
 import { MODO_DEMO } from '../api';
+import { TrocarSenha } from './TrocarSenha';
 
 export function Layout() {
   const { usuario, sair, lote, clientes, envios, aviso, fecharAviso } = useEstado();
   const avisosLote = lote ? lote.itens.filter(temAviso).length : 0;
+  const [trocandoSenha, setTrocandoSenha] = useState(false);
+  const comoChamar = usuario?.chamar?.trim() || usuario?.nome.trim().split(/\s+/)[0] || '';
   const devolvidos = envios.filter((e) => e.status === 'devolvido').length;
 
   useEffect(() => {
@@ -41,7 +44,10 @@ export function Layout() {
               <span className="h-2 w-2 rounded-full bg-brand" aria-hidden="true" />
               {REMETENTE} · {MODO_DEMO ? 'demonstração (nenhum e-mail sai)' : 'envio ainda não ativado'}
             </span>
-            <span className="hidden text-xs text-white/70 sm:inline">{usuario?.nome}</span>
+            {comoChamar && <span className="px-1 text-[15px] font-bold text-brand">Oi {comoChamar}! :)</span>}
+            <button type="button" onClick={() => setTrocandoSenha(true)} className="btn btn-sm text-white/75 hover:bg-white/10 hover:text-white">
+              Trocar senha
+            </button>
             <button type="button" onClick={sair} className="btn btn-sm border border-white/25 text-white hover:bg-white/10" title={usuario?.email}>
               <IcSair tamanho={14} /> Sair
             </button>
@@ -89,6 +95,7 @@ export function Layout() {
         )}
         <Outlet />
       </main>
+      <TrocarSenha aberto={trocandoSenha} fechar={() => setTrocandoSenha(false)} />
     </div>
   );
 }

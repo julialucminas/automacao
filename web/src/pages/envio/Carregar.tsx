@@ -4,6 +4,7 @@ import { lerArquivos, lerSoltura, origemDosArquivos, type ResultadoLeitura } fro
 import { parear } from '../../lib/pareamento';
 import { referenciaAtual } from '../../lib/email';
 import { arquivosDeExemplo } from '../../lib/exemplo';
+import { MODO_DEMO } from '../../api';
 import { IcPasta, IcUpload } from '../../components/Icones';
 
 export function Carregar() {
@@ -128,6 +129,7 @@ export function Carregar() {
         </div>
       )}
 
+      {MODO_DEMO && (
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-warn-line bg-warn-soft px-4 py-3 text-[13px] text-warn-strong">
         <span>Demonstração: carregue um lote fictício que mostra todos os casos da conferência.</span>
         <button
@@ -141,6 +143,7 @@ export function Carregar() {
           Usar arquivos de exemplo
         </button>
       </div>
+      )}
     </div>
   );
 }

@@ -34,7 +34,7 @@ export type Envio = {
   observacao: string;
 };
 
-export type Usuario = { id: number; email: string; nome: string };
+export type Usuario = { id: number; email: string; nome: string; chamar: string };
 
 /** Versões do banco. Cada item roda uma vez, em ordem. Nunca editar um item já publicado: só acrescentar. */
 const MIGRACOES = [
@@ -95,6 +95,8 @@ const MIGRACOES = [
      antes TEXT,
      depois TEXT
    );`,
+  // como a pessoa é chamada na saudação do topo (ex.: "Angeli")
+  `ALTER TABLE usuarios ADD COLUMN chamar TEXT NOT NULL DEFAULT '';`,
 ];
 
 export function abrirBanco(caminho: string) {
@@ -160,11 +162,22 @@ export function repositorio(db: Banco) {
 
   return {
     // ---------- usuários e sessões ----------
-    criarUsuario(email: string, nome: string, senhaHash: string): Usuario {
+    criarUsuario(email: string, nome: string, senhaHash: string, chamar = ''): Usuario {
       const r = db
-        .prepare('INSERT INTO usuarios (email, nome, senha_hash, criado_em) VALUES (?, ?, ?, ?)')
-        .run(email.toLowerCase(), nome, senhaHash, agora());
-      return { id: Number(r.lastInsertRowid), email: email.toLowerCase(), nome };
+        .prepare('INSERT INTO usuarios (email, nome, senha_hash, criado_em, chamar) VALUES (?, ?, ?, ?, ?)')
+        .run(email.toLowerCase(), nome, senhaHash, agora(), chamar);
+      return { id: Number(r.lastInsertRowid), email: email.toLowerCase(), nome, chamar };
+    },
+    definirChamar(email: string, chamar: string): boolean {
+      return db.prepare('UPDATE usuarios SET chamar = ? WHERE email = ?').run(chamar, email.toLowerCase()).changes > 0;
+    },
+    hashDaSenha(usuarioId: number): string | undefined {
+      return (db.prepare('SELECT senha_hash FROM usuarios WHERE id = ?').get(usuarioId) as { senha_hash: string } | undefined)?.senha_hash;
+    },
+    /** Troca a senha e encerra as outras sessões (mantém a atual). */
+    trocarSenhaPorId(usuarioId: number, senhaHash: string, manterSessao: string) {
+      db.prepare('UPDATE usuarios SET senha_hash = ? WHERE id = ?').run(senhaHash, usuarioId);
+      db.prepare('DELETE FROM sessoes WHERE usuario_id = ? AND token_hash != ?').run(usuarioId, manterSessao);
     },
     trocarSenha(email: string, senhaHash: string): boolean {
       const r = db.prepare('UPDATE usuarios SET senha_hash = ? WHERE email = ?').run(senhaHash, email.toLowerCase());
@@ -174,7 +187,7 @@ export function repositorio(db: Banco) {
       return r.changes > 0;
     },
     listarUsuarios(): (Usuario & { ativo: boolean })[] {
-      return (db.prepare('SELECT id, email, nome, ativo FROM usuarios ORDER BY id').all() as (Usuario & { ativo: number })[]).map((u) => ({
+      return (db.prepare('SELECT id, email, nome, chamar, ativo FROM usuarios ORDER BY id').all() as (Usuario & { ativo: number })[]).map((u) => ({
         ...u,
         ativo: !!u.ativo,
       }));
@@ -185,7 +198,7 @@ export function repositorio(db: Banco) {
       return r.changes > 0;
     },
     usuarioParaLogin(email: string) {
-      return db.prepare('SELECT id, email, nome, senha_hash FROM usuarios WHERE email = ? AND ativo = 1').get(email.toLowerCase()) as
+      return db.prepare('SELECT id, email, nome, chamar, senha_hash FROM usuarios WHERE email = ? AND ativo = 1').get(email.toLowerCase()) as
         | (Usuario & { senha_hash: string })
         | undefined;
     },
@@ -197,7 +210,7 @@ export function repositorio(db: Banco) {
     usuarioDaSessao(tokenHash: string): Usuario | undefined {
       return db
         .prepare(
-          `SELECT u.id, u.email, u.nome FROM sessoes s JOIN usuarios u ON u.id = s.usuario_id
+          `SELECT u.id, u.email, u.nome, u.chamar FROM sessoes s JOIN usuarios u ON u.id = s.usuario_id
            WHERE s.token_hash = ? AND s.expira_em > ? AND u.ativo = 1`,
         )
         .get(tokenHash, agora()) as Usuario | undefined;

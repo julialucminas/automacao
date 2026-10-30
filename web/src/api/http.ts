@@ -45,6 +45,10 @@ export const httpApi: Api = {
     }
   },
 
+  trocarSenha: async (atual, nova) => {
+    await chamar('PUT', '/api/sessao/senha', { atual, nova });
+  },
+
   listarClientes: () => chamar('GET', '/api/clientes'),
   salvarCliente: (input) => (input.id ? chamar('PUT', `/api/clientes/${input.id}`, input) : chamar('POST', '/api/clientes', input)),
   definirAtivo: async (id, ativo) => {

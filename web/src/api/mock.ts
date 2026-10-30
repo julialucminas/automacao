@@ -113,6 +113,10 @@ export const mockApi: Api = {
   async logout() {
     salvar({ ...carregar(), usuario: null });
   },
+  async trocarSenha(_atual, nova) {
+    await espera(300);
+    if (nova.length < 8) throw new Error('A senha precisa ter pelo menos 8 caracteres.');
+  },
   async usuarioAtual() {
     return carregar().usuario;
   },

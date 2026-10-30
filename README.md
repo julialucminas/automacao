@@ -70,8 +70,10 @@ npm run dev      # API em http://localhost:3333 (banco em api/dados-dev)
 cd ../web && VITE_API=http npm run dev   # interface usando a API
 ```
 
-Usuários (no servidor): `bash /opt/faturas/deploy/usuario.sh criar email "Nome"` — gera e mostra a senha uma vez.
-Outros comandos: `senha`, `desativar`, `reativar`, `listar`.
+Usuários (no servidor):
+`bash /opt/faturas/deploy/usuario.sh criar email "Nome" --chamar Apelido --senha`
+(`--senha` pede a senha escondida; sem ela, o sistema gera uma). Outros comandos: `senha`, `chamar`,
+`desativar`, `reativar`, `listar`. Cada pessoa também troca a própria senha no sistema (“Trocar senha”).
 
 ## Servidor (faturas.lucminas.com.br)
 

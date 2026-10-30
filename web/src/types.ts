@@ -87,4 +87,5 @@ export type Envio = {
   observacao: string;
 };
 
-export type Usuario = { nome: string; email: string };
+/** chamar: como a pessoa é chamada na saudação do topo (ex.: "Angeli"). */
+export type Usuario = { nome: string; email: string; chamar?: string };

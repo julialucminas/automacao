@@ -26,5 +26,12 @@ export function senhaAleatoria(): string {
   return s.match(/.{4}/g)!.join('-');
 }
 
+/** Regra mínima de senha. Devolve o problema, ou null se estiver ok. */
+export function problemaSenha(s: string): string | null {
+  if (s.length < 8) return 'A senha precisa ter pelo menos 8 caracteres.';
+  if (s.length > 200) return 'Senha muito longa.';
+  return null;
+}
+
 export const novoToken = () => randomBytes(32).toString('base64url');
 export const hashToken = (t: string) => createHash('sha256').update(t).digest('hex');

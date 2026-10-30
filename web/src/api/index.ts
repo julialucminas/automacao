@@ -22,6 +22,7 @@ export interface Api {
   login(email: string, senha: string): Promise<Usuario>;
   logout(): Promise<void>;
   usuarioAtual(): Promise<Usuario | null>;
+  trocarSenha(atual: string, nova: string): Promise<void>;
 
   listarClientes(): Promise<Cliente[]>;
   salvarCliente(input: ClienteInput): Promise<Cliente>;

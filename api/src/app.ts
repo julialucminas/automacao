@@ -1,7 +1,7 @@
 import Fastify, { type FastifyReply, type FastifyRequest } from 'fastify';
 import cookie from '@fastify/cookie';
 import { Conflito, NaoEncontrado, repositorio, type Banco, type ClienteInput, type Usuario } from './db.js';
-import { conferirSenha, hashToken, novoToken } from './senha.js';
+import { conferirSenha, gerarHash, hashToken, novoToken, problemaSenha } from './senha.js';
 
 const COOKIE = 'sessao';
 const VALIDADE_DIAS = 30;
@@ -112,10 +112,24 @@ export function criarApp(db: Banco, opcoes: { cookieSeguro: boolean; logger?: bo
       sameSite: 'strict',
       maxAge: VALIDADE_DIAS * 86_400,
     });
-    return { email: u.email, nome: u.nome };
+    return { email: u.email, nome: u.nome, chamar: u.chamar };
   });
 
-  app.get('/api/sessao', { preHandler: exigirLogin }, async (req) => ({ email: req.usuario.email, nome: req.usuario.nome }));
+  app.get('/api/sessao', { preHandler: exigirLogin }, async (req) => ({ email: req.usuario.email, nome: req.usuario.nome, chamar: req.usuario.chamar }));
+
+  app.put('/api/sessao/senha', { preHandler: exigirLogin }, async (req, reply) => {
+    if (!podeTentar(req.ip)) return reply.code(429).send({ erro: 'Muitas tentativas. Espere 15 minutos.' });
+    const b = (req.body ?? {}) as Record<string, unknown>;
+    const atual = typeof b.atual === 'string' ? b.atual : '';
+    const nova = typeof b.nova === 'string' ? b.nova : '';
+    if (!(await conferirSenha(atual, repo.hashDaSenha(req.usuario.id) ?? 'scrypt$00$00'))) {
+      return reply.code(400).send({ erro: 'A senha atual não confere.' });
+    }
+    const problema = problemaSenha(nova);
+    if (problema) return reply.code(400).send({ erro: problema });
+    repo.trocarSenhaPorId(req.usuario.id, await gerarHash(nova), hashToken(req.cookies[COOKIE]!));
+    return { ok: true };
+  });
 
   app.delete('/api/sessao', async (req, reply) => {
     const token = req.cookies[COOKIE];

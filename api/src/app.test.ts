@@ -32,7 +32,7 @@ describe('login', () => {
   });
 
   it('logout derruba a sessão', async () => {
-    expect((await req('GET', '/api/sessao')).json()).toEqual({ email: 'julia@lucminas.com.br', nome: 'Júlia' });
+    expect((await req('GET', '/api/sessao')).json()).toEqual({ email: 'julia@lucminas.com.br', nome: 'Júlia', chamar: '' });
     await req('DELETE', '/api/sessao');
     expect((await req('GET', '/api/sessao')).statusCode).toBe(401);
   });
@@ -82,5 +82,20 @@ describe('envios', () => {
     const r = await req('POST', '/api/envios', {});
     expect(r.statusCode).toBe(503);
     expect(r.json().erro).toMatch(/Nenhum e-mail foi enviado/);
+  });
+});
+
+describe('trocar senha', () => {
+  it('confere a atual, valida a nova e mantém a sessão atual', async () => {
+    expect((await req('PUT', '/api/sessao/senha', { atual: 'errada', nova: 'nova-senha-1' })).statusCode).toBe(400);
+    expect((await req('PUT', '/api/sessao/senha', { atual: 'senha-certa', nova: 'curta' })).json().erro).toMatch(/8 caracteres/);
+    expect((await req('PUT', '/api/sessao/senha', { atual: 'senha-certa', nova: 'nova-senha-1' })).statusCode).toBe(200);
+    expect((await req('GET', '/api/sessao')).statusCode).toBe(200);
+    expect((await req('POST', '/api/sessao', { email: 'julia@lucminas.com.br', senha: 'senha-certa' }, false)).statusCode).toBe(401);
+    expect((await req('POST', '/api/sessao', { email: 'julia@lucminas.com.br', senha: 'nova-senha-1' }, false)).statusCode).toBe(200);
+  });
+
+  it('a sessão devolve como chamar a pessoa', async () => {
+    expect((await req('GET', '/api/sessao')).json()).toHaveProperty('chamar', '');
   });
 });
