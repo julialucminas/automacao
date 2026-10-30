@@ -12,7 +12,7 @@ import { dataHora, referenciaAtual } from '../lib/email';
 import type { FrotaOficina } from '../types';
 import { IcAlerta, IcBusca, IcMais, IcNota, IcUpload } from '../components/Icones';
 import { gerarExcelOperacoes } from '../lib/exportarExcel';
-import { gerarPdfLocacoes, montarRelatorio } from '../lib/relatorioLocacoes';
+import { gerarPdfLocacoes, montarRelatorio, type ModeloRelatorio } from '../lib/relatorioLocacoes';
 
 type Linha = { frota: Frota; cliente: Cliente; proxima: string | null; duplicada: boolean };
 type Ordem = 'frota' | 'cliente' | 'valor' | 'proxima';
@@ -421,10 +421,32 @@ function RelatorioPdf({ aberto, fechar }: { aberto: boolean; fechar: () => void 
   const { clientes, oficina, ehFinanceiro, usuario, avisar } = useEstado();
   const [ref, setRef] = useState(referenciaAtual());
   const [gerando, setGerando] = useState(false);
+  const [modelo, setModelo] = useState<ModeloRelatorio>('completo');
   const r = useMemo(() => (/^\d{4}-\d{2}$/.test(ref) ? montarRelatorio(clientes, oficina, ref) : null), [clientes, oficina, ref]);
   return (
     <Modal aberto={aberto} fechar={fechar} titulo="Relatório de locações ativas">
-      <p className="text-[13px] text-ink-2">PDF com a logo, as frotas locadas no mês agrupadas por cliente, as locações que terminam no mês e as frotas na oficina.</p>
+      <p className="text-[13px] text-ink-2">PDF com a logo da Lucminas e as locações ativas no mês escolhido.</p>
+      <fieldset className="flex flex-col gap-1.5">
+        <legend className="mb-1 text-[13px] font-semibold">Modelo</legend>
+        {(
+          [
+            ['completo', 'Completo', 'por cliente, com equipamento, início, término, contrato, gás e frete; locações que terminam e oficina'],
+            ['por_frota', 'Simplificado por frota', ehFinanceiro ? 'frota, cliente e valor da locação, em ordem de frota' : 'frota e cliente, em ordem de frota'],
+            ['por_cliente', 'Simplificado por cliente', ehFinanceiro ? 'cliente, frotas e valor total da locação do cliente' : 'cliente e frotas'],
+          ] as const
+        ).map(([id, rotulo, dica]) => (
+          <label
+            key={id}
+            className={`flex cursor-pointer items-start gap-2.5 rounded-[10px] border px-3 py-2.5 text-[13px] ${modelo === id ? 'border-ink bg-white' : 'border-line-strong bg-white/60'}`}
+          >
+            <input type="radio" name="modelo-relatorio" checked={modelo === id} onChange={() => setModelo(id)} className="mt-0.5 h-[18px] w-[18px] accent-ink" />
+            <span>
+              <b>{rotulo}</b>
+              <span className="block text-xs text-ink-3">{dica}</span>
+            </span>
+          </label>
+        ))}
+      </fieldset>
       <label className="flex w-fit flex-col gap-1.5 text-[13px] font-semibold">
         Mês
         <input type="month" className="input w-auto" value={ref} onChange={(e) => setRef(e.target.value)} />
@@ -449,7 +471,7 @@ function RelatorioPdf({ aberto, fechar }: { aberto: boolean; fechar: () => void 
             if (!r) return;
             setGerando(true);
             try {
-              await gerarPdfLocacoes(r, { comValores: ehFinanceiro, geradoPor: usuario?.chamar || usuario?.nome || '' });
+              await gerarPdfLocacoes(r, { comValores: ehFinanceiro, geradoPor: usuario?.chamar || usuario?.nome || '', modelo });
               fechar();
             } catch {
               avisar('Não foi possível gerar o PDF.', 'bad');

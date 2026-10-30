@@ -83,8 +83,11 @@ async function carregarImagem(url: string): Promise<{ dado: string; w: number; h
 
 const frete = (f: Frota) => (f.frete === 'lucminas' ? 'Lucminas' : f.frete === 'cliente' ? 'Cliente' : '');
 
+export type ModeloRelatorio = 'completo' | 'por_frota' | 'por_cliente';
+
 /** Gera e baixa o PDF. comValores = false esconde valores e somas (perfil de operações). */
-export async function gerarPdfLocacoes(r: Relatorio, opcoes: { comValores: boolean; geradoPor: string }) {
+export async function gerarPdfLocacoes(r: Relatorio, opcoes: { comValores: boolean; geradoPor: string; modelo?: ModeloRelatorio }) {
+  const modelo = opcoes.modelo ?? 'completo';
   const [{ jsPDF }, { default: autoTable }] = await Promise.all([import('jspdf'), import('jspdf-autotable')]);
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
   const L = doc.internal.pageSize.getWidth();
@@ -98,9 +101,17 @@ export async function gerarPdfLocacoes(r: Relatorio, opcoes: { comValores: boole
     const h = 11;
     doc.addImage(logo.dado, 'PNG', M, 10, (logo.w / logo.h) * h, h);
   } else {
-    doc.setFont('helvetica', 'bold').setFontSize(16).setTextColor(...PRETO).text('Lucminas', M, 18);
+    doc
+      .setFont('helvetica', 'bold')
+      .setFontSize(16)
+      .setTextColor(...PRETO)
+      .text('Lucminas', M, 18);
   }
-  doc.setFont('helvetica', 'bold').setFontSize(17).setTextColor(...PRETO).text('Relatório de locações ativas', L - M, 15, { align: 'right' });
+  doc
+    .setFont('helvetica', 'bold')
+    .setFontSize(17)
+    .setTextColor(...PRETO)
+    .text(modelo === 'completo' ? 'Relatório de locações ativas' : `Locações ativas · ${modelo === 'por_frota' ? 'por frota' : 'por cliente'}`, L - M, 15, { align: 'right' });
   const agora = new Date().toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
   doc
     .setFont('helvetica', 'normal')
@@ -110,112 +121,166 @@ export async function gerarPdfLocacoes(r: Relatorio, opcoes: { comValores: boole
   doc.setFillColor(...AMARELO).rect(M, 25, L - 2 * M, 1.4, 'F');
 
   // ---- resumo ----
-  const cartoes: [string, string, [number, number, number]?][] = [
-    ['Frotas locadas', String(r.resumo.frotas)],
-    ['Clientes', String(r.resumo.clientes)],
-    ['Terminam no mês', String(r.resumo.terminando), r.resumo.terminando ? ROXO : undefined],
-    ['Na oficina', String(r.resumo.naOficina), r.resumo.naOficina ? LARANJA : undefined],
-  ];
+  const cartoes: [string, string, [number, number, number]?][] =
+    modelo === 'completo'
+      ? [
+          ['Frotas locadas', String(r.resumo.frotas)],
+          ['Clientes', String(r.resumo.clientes)],
+          ['Terminam no mês', String(r.resumo.terminando), r.resumo.terminando ? ROXO : undefined],
+          ['Na oficina', String(r.resumo.naOficina), r.resumo.naOficina ? LARANJA : undefined],
+        ]
+      : [
+          ['Frotas locadas', String(r.resumo.frotas)],
+          ['Clientes', String(r.resumo.clientes)],
+        ];
   if (opcoes.comValores) cartoes.push(['Valor mensal das locações', formatarReais(r.resumo.valorTotal)]);
   const gap = 4;
   const w = (L - 2 * M - gap * (cartoes.length - 1)) / cartoes.length;
   cartoes.forEach(([rot, val, cor], i) => {
     const x = M + i * (w + gap);
     doc.setDrawColor(225, 222, 212).setFillColor(250, 249, 245).roundedRect(x, 30, w, 17, 2, 2, 'FD');
-    doc.setFont('helvetica', 'normal').setFontSize(8).setTextColor(...CINZA).text(rot.toUpperCase(), x + 4, 35.5);
-    doc.setFont('helvetica', 'bold').setFontSize(14).setTextColor(...(cor ?? PRETO)).text(val, x + 4, 43);
+    doc
+      .setFont('helvetica', 'normal')
+      .setFontSize(8)
+      .setTextColor(...CINZA)
+      .text(rot.toUpperCase(), x + 4, 35.5);
+    doc
+      .setFont('helvetica', 'bold')
+      .setFontSize(14)
+      .setTextColor(...(cor ?? PRETO))
+      .text(val, x + 4, 43);
   });
 
-  // ---- tabela principal (agrupada por cliente) ----
-  const cab = ['Frota', 'Equipamento', 'Início', 'Término', 'Contrato', 'Gás', 'Frete', ...(opcoes.comValores ? ['Valor mensal'] : [])];
-  type Celula = string | { content: string; colSpan?: number; styles?: Record<string, unknown> };
-  const corpo: Celula[][] = [];
-  for (const g of r.grupos) {
-    const extra = [g.cliente.contato, g.cliente.telefone].filter(Boolean).join(' · ');
-    corpo.push([
-      {
-        content: `${g.cliente.nome}${extra ? `   ${extra}` : ''}`,
-        colSpan: opcoes.comValores ? cab.length - 1 : cab.length,
-        styles: { fontStyle: 'bold', fillColor: [255, 244, 204], textColor: PRETO },
-      },
-      ...(opcoes.comValores ? [{ content: formatarReais(g.total), styles: { fontStyle: 'bold', fillColor: [255, 244, 204], halign: 'right' } }] : []),
-    ]);
-    for (const l of g.linhas) {
-      const f = l.frota;
-      corpo.push([
-        { content: `FT${f.numero}${l.oficina ? '  OFICINA' : ''}`, styles: l.oficina ? { textColor: LARANJA, fontStyle: 'bold' } : { fontStyle: 'bold' } },
-        f.descricao || '',
-        f.inicio ? dataBr(f.inicio) : '',
-        { content: f.fim ? dataBr(f.fim) : '', styles: l.terminaNoMes ? { textColor: ROXO, fontStyle: 'bold' } : {} },
-        f.contrato || '',
-        f.gas ? String(f.gas) : '',
-        frete(f),
-        ...(opcoes.comValores ? [{ content: f.valor ? formatarReais(f.valor) : 'sem valor', styles: { halign: 'right', textColor: f.valor ? PRETO : LARANJA } }] : []),
-      ]);
-    }
-  }
-  const estilo = {
+  const estiloBase = {
     theme: 'grid' as const,
     margin: { left: M, right: M, top: 18, bottom: 16 },
-    styles: { font: 'helvetica', fontSize: 8.5, cellPadding: 1.8, lineColor: [232, 229, 220] as [number, number, number], lineWidth: 0.2, textColor: PRETO },
+    styles: { font: 'helvetica', fontSize: 9.5, cellPadding: 2.2, lineColor: [232, 229, 220] as [number, number, number], lineWidth: 0.2, textColor: PRETO },
     headStyles: { fillColor: PRETO, textColor: [255, 255, 255] as [number, number, number], fontStyle: 'bold' as const },
+    alternateRowStyles: { fillColor: [250, 249, 245] as [number, number, number] },
   };
-  autoTable(doc, {
-    ...estilo,
-    startY: 53,
-    head: [cab],
-    body: corpo as never,
-    columnStyles: { 0: { cellWidth: 26 }, 2: { cellWidth: 22 }, 3: { cellWidth: 22 }, 4: { cellWidth: 26 }, 5: { cellWidth: 12, halign: 'center' }, 6: { cellWidth: 20 } },
-  });
+  const comparaNum = (a: string, b: string) => a.localeCompare(b, 'pt-BR', { numeric: true, sensitivity: 'base' });
+  if (modelo === 'por_frota') {
+    const linhas = r.grupos.flatMap((g) => g.linhas).sort((a, b) => comparaNum(a.frota.numero, b.frota.numero));
+    autoTable(doc, {
+      ...estiloBase,
+      startY: 53,
+      head: [['Frota', 'Cliente', ...(opcoes.comValores ? ['Valor da locação'] : [])]],
+      body: linhas.map((l) => [`FT${l.frota.numero}`, l.cliente.nome, ...(opcoes.comValores ? [l.frota.valor ? formatarReais(l.frota.valor) : 'sem valor'] : [])]),
+      foot: opcoes.comValores ? [[{ content: 'Total', colSpan: 2 }, formatarReais(r.resumo.valorTotal)]] : undefined,
+      footStyles: { fillColor: AMARELO, textColor: PRETO, fontStyle: 'bold', halign: 'right' },
+      columnStyles: { 0: { cellWidth: 30, fontStyle: 'bold' }, 2: { cellWidth: 45, halign: 'right' } },
+    });
+  } else if (modelo === 'por_cliente') {
+    autoTable(doc, {
+      ...estiloBase,
+      startY: 53,
+      head: [['Cliente', 'Frotas', ...(opcoes.comValores ? ['Valor da locação'] : [])]],
+      body: r.grupos.map((g) => [g.cliente.nome, g.linhas.map((l) => `FT${l.frota.numero}`).join(', '), ...(opcoes.comValores ? [formatarReais(g.total)] : [])]),
+      foot: opcoes.comValores ? [[{ content: 'Total', colSpan: 2 }, formatarReais(r.resumo.valorTotal)]] : undefined,
+      footStyles: { fillColor: AMARELO, textColor: PRETO, fontStyle: 'bold', halign: 'right' },
+      columnStyles: { 0: { cellWidth: 80, fontStyle: 'bold' }, 2: { cellWidth: 45, halign: 'right' } },
+    });
+  }
 
-  const proximoY = () => (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 9;
-  const secao = (t: string, y: number) => {
-    if (y > A - 40) {
-      doc.addPage();
-      y = 20;
+  // ---- tabela principal (agrupada por cliente) ----
+  if (modelo === 'completo') {
+    const cab = ['Frota', 'Equipamento', 'Início', 'Término', 'Contrato', 'Gás', 'Frete', ...(opcoes.comValores ? ['Valor mensal'] : [])];
+    type Celula = string | { content: string; colSpan?: number; styles?: Record<string, unknown> };
+    const corpo: Celula[][] = [];
+    for (const g of r.grupos) {
+      const extra = [g.cliente.contato, g.cliente.telefone].filter(Boolean).join(' · ');
+      corpo.push([
+        {
+          content: `${g.cliente.nome}${extra ? `   ${extra}` : ''}`,
+          colSpan: opcoes.comValores ? cab.length - 1 : cab.length,
+          styles: { fontStyle: 'bold', fillColor: [255, 244, 204], textColor: PRETO },
+        },
+        ...(opcoes.comValores ? [{ content: formatarReais(g.total), styles: { fontStyle: 'bold', fillColor: [255, 244, 204], halign: 'right' } }] : []),
+      ]);
+      for (const l of g.linhas) {
+        const f = l.frota;
+        corpo.push([
+          { content: `FT${f.numero}${l.oficina ? '  OFICINA' : ''}`, styles: l.oficina ? { textColor: LARANJA, fontStyle: 'bold' } : { fontStyle: 'bold' } },
+          f.descricao || '',
+          f.inicio ? dataBr(f.inicio) : '',
+          { content: f.fim ? dataBr(f.fim) : '', styles: l.terminaNoMes ? { textColor: ROXO, fontStyle: 'bold' } : {} },
+          f.contrato || '',
+          f.gas ? String(f.gas) : '',
+          frete(f),
+          ...(opcoes.comValores ? [{ content: f.valor ? formatarReais(f.valor) : 'sem valor', styles: { halign: 'right', textColor: f.valor ? PRETO : LARANJA } }] : []),
+        ]);
+      }
     }
-    doc.setFont('helvetica', 'bold').setFontSize(11.5).setTextColor(...PRETO).text(t, M, y);
-    return y + 3;
-  };
-
-  if (r.terminando.length) {
-    const y = secao(`Locações que terminam em ${referenciaTitulo(r.referencia).toLowerCase()}`, proximoY());
+    const estilo = {
+      theme: 'grid' as const,
+      margin: { left: M, right: M, top: 18, bottom: 16 },
+      styles: { font: 'helvetica', fontSize: 8.5, cellPadding: 1.8, lineColor: [232, 229, 220] as [number, number, number], lineWidth: 0.2, textColor: PRETO },
+      headStyles: { fillColor: PRETO, textColor: [255, 255, 255] as [number, number, number], fontStyle: 'bold' as const },
+    };
     autoTable(doc, {
       ...estilo,
-      startY: y,
-      headStyles: { ...estilo.headStyles, fillColor: ROXO },
-      head: [['Término', 'Frota', 'Cliente', 'Contato', 'Início', 'Contrato']],
-      body: r.terminando.map((l) => [
-        l.frota.fim ? dataBr(l.frota.fim) : '',
-        `FT${l.frota.numero}`,
-        l.cliente.nome,
-        [l.cliente.contato, l.cliente.telefone].filter(Boolean).join(' · '),
-        l.frota.inicio ? dataBr(l.frota.inicio) : '',
-        l.frota.contrato || '',
-      ]),
+      startY: 53,
+      head: [cab],
+      body: corpo as never,
+      columnStyles: { 0: { cellWidth: 26 }, 2: { cellWidth: 22 }, 3: { cellWidth: 22 }, 4: { cellWidth: 26 }, 5: { cellWidth: 12, halign: 'center' }, 6: { cellWidth: 20 } },
     });
-  }
 
-  if (r.oficina.length) {
-    const y = secao('Frotas na oficina', proximoY());
-    autoTable(doc, {
-      ...estilo,
-      startY: y,
-      headStyles: { ...estilo.headStyles, fillColor: LARANJA },
-      head: [['Frota', 'Desde', 'Motivo', 'Cliente']],
-      body: r.oficina.map(({ o, cliente }) => [`FT${o.frota}`, dataBr(o.desde.slice(0, 10)), o.observacao || '', cliente?.nome ?? 'sem cliente']),
-    });
-  }
+    const proximoY = () => (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 9;
+    const secao = (t: string, y: number) => {
+      if (y > A - 40) {
+        doc.addPage();
+        y = 20;
+      }
+      doc
+        .setFont('helvetica', 'bold')
+        .setFontSize(11.5)
+        .setTextColor(...PRETO)
+        .text(t, M, y);
+      return y + 3;
+    };
+
+    if (r.terminando.length) {
+      const y = secao(`Locações que terminam em ${referenciaTitulo(r.referencia).toLowerCase()}`, proximoY());
+      autoTable(doc, {
+        ...estilo,
+        startY: y,
+        headStyles: { ...estilo.headStyles, fillColor: ROXO },
+        head: [['Término', 'Frota', 'Cliente', 'Contato', 'Início', 'Contrato']],
+        body: r.terminando.map((l) => [
+          l.frota.fim ? dataBr(l.frota.fim) : '',
+          `FT${l.frota.numero}`,
+          l.cliente.nome,
+          [l.cliente.contato, l.cliente.telefone].filter(Boolean).join(' · '),
+          l.frota.inicio ? dataBr(l.frota.inicio) : '',
+          l.frota.contrato || '',
+        ]),
+      });
+    }
+
+    if (r.oficina.length) {
+      const y = secao('Frotas na oficina', proximoY());
+      autoTable(doc, {
+        ...estilo,
+        startY: y,
+        headStyles: { ...estilo.headStyles, fillColor: LARANJA },
+        head: [['Frota', 'Desde', 'Motivo', 'Cliente']],
+        body: r.oficina.map(({ o, cliente }) => [`FT${o.frota}`, dataBr(o.desde.slice(0, 10)), o.observacao || '', cliente?.nome ?? 'sem cliente']),
+      });
+    }
+  } // fim do modelo completo
 
   // ---- rodapé em todas as páginas ----
   const total = doc.getNumberOfPages();
   for (let i = 1; i <= total; i++) {
     doc.setPage(i);
     doc.setDrawColor(225, 222, 212).line(M, A - 11, L - M, A - 11);
-    doc.setFont('helvetica', 'normal').setFontSize(8).setTextColor(...CINZA);
+    doc
+      .setFont('helvetica', 'normal')
+      .setFontSize(8)
+      .setTextColor(...CINZA);
     doc.text(`Lucminas Empilhadeiras  ·  ${titulo}`, M, A - 6.5);
     doc.text(`Página ${i} de ${total}`, L - M, A - 6.5, { align: 'right' });
   }
 
-  doc.save(`locacoes-ativas-${r.referencia}.pdf`);
+  doc.save(`locacoes-ativas-${modelo === 'completo' ? '' : modelo === 'por_frota' ? 'por-frota-' : 'por-cliente-'}${r.referencia}.pdf`);
 }
