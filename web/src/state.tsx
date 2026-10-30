@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { api } from './api';
-import type { Cliente, ClienteInput, Envio, ItemLote, Lote, Usuario } from './types';
+import type { Cliente, ClienteInput, Envio, ItemLote, Lote, Solicitacao, Usuario } from './types';
+import { hojeIso } from './lib/calendario';
 import { encontrarCliente, statusDoItem } from './lib/pareamento';
 
 type Aviso = { id: number; texto: string; tom: 'ok' | 'bad' };
@@ -19,6 +20,12 @@ type Estado = {
 
   envios: Envio[];
   recarregarEnvios(): Promise<void>;
+
+  solicitacoes: Solicitacao[];
+  recarregarSolicitacoes(): Promise<void>;
+  /** abertas, para o usuário logado, com data até hoje */
+  pendentesParaMim: Solicitacao[];
+  naoLidas: number;
 
   lote: Lote | null;
   definirLote(l: Lote | null): void;
@@ -41,11 +48,32 @@ export function EstadoProvider({ children }: { children: ReactNode }) {
   const [erroInicial, setErroInicial] = useState('');
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [envios, setEnvios] = useState<Envio[]>([]);
+  const [solicitacoes, setSolicitacoes] = useState<Solicitacao[]>([]);
   const [lote, setLote] = useState<Lote | null>(null);
   const [aviso, setAviso] = useState<Aviso | null>(null);
 
   const recarregarClientes = useCallback(async () => setClientes(await api.listarClientes()), []);
   const recarregarEnvios = useCallback(async () => setEnvios(await api.listarEnvios()), []);
+  const recarregarSolicitacoes = useCallback(async () => {
+    try {
+      setSolicitacoes(await api.listarSolicitacoes());
+    } catch {
+      /* sem conexão: tenta de novo no próximo ciclo */
+    }
+  }, []);
+
+  // novidades de solicitações a cada minuto (e quando a janela volta ao foco)
+  useEffect(() => {
+    if (!usuario) return;
+    recarregarSolicitacoes();
+    const t = setInterval(recarregarSolicitacoes, 60_000);
+    const foco = () => document.visibilityState === 'visible' && recarregarSolicitacoes();
+    document.addEventListener('visibilitychange', foco);
+    return () => {
+      clearInterval(t);
+      document.removeEventListener('visibilitychange', foco);
+    };
+  }, [usuario, recarregarSolicitacoes]);
 
   useEffect(() => {
     api
@@ -78,6 +106,13 @@ export function EstadoProvider({ children }: { children: ReactNode }) {
       };
     });
   }, []);
+
+  const hoje = hojeIso();
+  const pendentesParaMim = useMemo(
+    () => solicitacoes.filter((x) => x.status === 'aberta' && x.paraUsuario === usuario?.id && x.data <= hoje),
+    [solicitacoes, usuario, hoje],
+  );
+  const naoLidas = solicitacoes.reduce((n, x) => n + (x.naoLidas > 0 ? 1 : 0), 0);
 
   const valor = useMemo<Estado>(
     () => ({
@@ -131,6 +166,11 @@ export function EstadoProvider({ children }: { children: ReactNode }) {
       envios,
       recarregarEnvios,
 
+      solicitacoes,
+      recarregarSolicitacoes,
+      pendentesParaMim,
+      naoLidas,
+
       lote,
       definirLote: setLote,
       atualizarItem(chave, mudar) {
@@ -161,7 +201,7 @@ export function EstadoProvider({ children }: { children: ReactNode }) {
       avisar,
       fecharAviso: () => setAviso(null),
     }),
-    [usuario, carregando, erroInicial, clientes, envios, lote, aviso, avisar, recarregarClientes, recarregarEnvios, reconciliarLote],
+    [usuario, carregando, erroInicial, clientes, envios, solicitacoes, recarregarSolicitacoes, pendentesParaMim, naoLidas, lote, aviso, avisar, recarregarClientes, recarregarEnvios, reconciliarLote],
   );
 
   return <Ctx.Provider value={valor}>{children}</Ctx.Provider>;

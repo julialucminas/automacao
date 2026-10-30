@@ -3,11 +3,12 @@ import { Link } from 'react-router-dom';
 import { useEstado } from '../state';
 import type { Cliente, Frota } from '../types';
 import { formatarReais } from '../lib/dinheiro';
-import { dataCurta, descreverRegra, proximasDatas, regraDoCliente } from '../lib/calendario';
+import { dataCurta, descreverRegra, hojeIso, proximasDatas, regraDoCliente } from '../lib/calendario';
 import { chaveEmpresa } from '../lib/normalizar';
 import { ClienteForm, rascunhoDe, type Rascunho } from '../components/ClienteForm';
 import { Cartao, Chip } from '../components/ui';
-import { IcAlerta, IcBusca } from '../components/Icones';
+import { IcAlerta, IcBusca, IcUpload } from '../components/Icones';
+import { gerarExcelOperacoes } from '../lib/exportarExcel';
 
 type Linha = { frota: Frota; cliente: Cliente; proxima: string | null; duplicada: boolean };
 type Ordem = 'frota' | 'cliente' | 'valor' | 'proxima';
@@ -19,7 +20,8 @@ const comparaNumero = (a: string, b: string) => a.localeCompare(b, 'pt-BR', { nu
 const COLUNAS = 'grid grid-cols-[120px_minmax(200px,1.4fr)_minmax(160px,1fr)_120px_minmax(170px,1fr)_90px] items-center gap-3';
 
 export function Frotas() {
-  const { clientes } = useEstado();
+  const { clientes, avisar } = useEstado();
+  const [exportando, setExportando] = useState(false);
   const [busca, setBusca] = useState('');
   const [ordem, setOrdem] = useState<Ordem>('frota');
   const [visao, setVisao] = useState<Visao>('frotas');
@@ -81,11 +83,30 @@ export function Frotas() {
           <h1 className="mt-1 text-[26px] font-bold">Frotas e clientes</h1>
           <p className="text-[13px] text-ink-3">Cada frota e o cliente com quem está. Para mudar, edite o cliente (as frotas ficam no cadastro dele).</p>
         </div>
+        <div className="flex flex-wrap items-center gap-2.5">
+        <button
+          type="button"
+          className="btn-primary"
+          disabled={exportando}
+          onClick={async () => {
+            setExportando(true);
+            try {
+              await gerarExcelOperacoes(clientes, hojeIso());
+            } catch {
+              avisar('Não foi possível gerar o Excel.', 'bad');
+            } finally {
+              setExportando(false);
+            }
+          }}
+        >
+          <IcUpload className="rotate-180" /> {exportando ? 'Gerando…' : 'Exportar Excel'}
+        </button>
         <label className="flex min-h-[44px] items-center gap-2 rounded-[10px] border border-line-strong bg-white px-3 text-ink-3">
           <IcBusca />
           <span className="sr-only">Buscar frota ou cliente</span>
           <input type="search" value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Nº da frota, cliente ou descrição" className="w-[240px] bg-transparent text-ink outline-none" />
         </label>
+        </div>
       </div>
 
       <div className="mb-5 grid grid-cols-[repeat(auto-fit,minmax(170px,1fr))] gap-3">

@@ -159,10 +159,10 @@ export function criarApp(db: Banco, opcoes: { cookieSeguro: boolean; logger?: bo
       sameSite: 'strict',
       maxAge: VALIDADE_DIAS * 86_400,
     });
-    return { email: u.email, nome: u.nome, chamar: u.chamar };
+    return { id: u.id, email: u.email, nome: u.nome, chamar: u.chamar };
   });
 
-  app.get('/api/sessao', { preHandler: exigirLogin }, async (req) => ({ email: req.usuario.email, nome: req.usuario.nome, chamar: req.usuario.chamar }));
+  app.get('/api/sessao', { preHandler: exigirLogin }, async (req) => ({ id: req.usuario.id, email: req.usuario.email, nome: req.usuario.nome, chamar: req.usuario.chamar }));
 
   app.put('/api/sessao/senha', { preHandler: exigirLogin }, async (req, reply) => {
     if (!podeTentar(req.ip)) return reply.code(429).send({ erro: 'Muitas tentativas. Espere 15 minutos.' });
@@ -231,6 +231,46 @@ export function criarApp(db: Banco, opcoes: { cookieSeguro: boolean; logger?: bo
     if (!data) throw new Invalido('Data inválida.');
     repo.desmarcarFaturado(req.params.clienteId, data, req.usuario.id);
     return { ok: true };
+  });
+
+  // ---------- usuários e solicitações ----------
+  app.get('/api/usuarios', { preHandler: exigirLogin }, async () => repo.listarUsuariosAtivos());
+
+  app.get('/api/solicitacoes', { preHandler: exigirLogin }, async (req) => repo.listarSolicitacoes(req.usuario.id));
+
+  app.get<{ Params: { id: string } }>('/api/solicitacoes/:id', { preHandler: exigirLogin }, async (req) => {
+    const s = repo.buscarSolicitacao(req.params.id, req.usuario.id);
+    repo.marcarVista(req.params.id, req.usuario.id);
+    return { ...s, naoLidas: 0 };
+  });
+
+  app.post('/api/solicitacoes', { preHandler: exigirLogin }, async (req, reply) => {
+    const b = (req.body ?? {}) as Record<string, unknown>;
+    const data = lerDataIso(b.data, 'Data');
+    const titulo = texto(b.titulo, 'assunto', 120);
+    const msg = texto(b.texto, 'mensagem', 4000);
+    const para = Number(b.paraUsuario);
+    if (!data) throw new Invalido('Informe a data.');
+    if (!titulo) throw new Invalido('Informe o assunto.');
+    if (!Number.isInteger(para)) throw new Invalido('Escolha para quem é a solicitação.');
+    const clienteId = typeof b.clienteId === 'string' && b.clienteId ? b.clienteId : null;
+    const id = repo.criarSolicitacao({ criadaPor: req.usuario.id, paraUsuario: para, data, clienteId, titulo, texto: msg });
+    return reply.code(201).send(repo.buscarSolicitacao(id, req.usuario.id));
+  });
+
+  app.post<{ Params: { id: string } }>('/api/solicitacoes/:id/mensagens', { preHandler: exigirLogin }, async (req, reply) => {
+    const msg = texto((req.body as Record<string, unknown> | undefined)?.texto, 'mensagem', 4000);
+    if (!msg) throw new Invalido('Escreva a mensagem.');
+    repo.responder(req.params.id, req.usuario.id, msg);
+    return reply.code(201).send(repo.buscarSolicitacao(req.params.id, req.usuario.id));
+  });
+
+  app.patch<{ Params: { id: string } }>('/api/solicitacoes/:id', { preHandler: exigirLogin }, async (req) => {
+    const b = (req.body ?? {}) as Record<string, unknown>;
+    const status = b.status === undefined ? undefined : b.status === 'concluida' ? 'concluida' : b.status === 'aberta' ? 'aberta' : invalido('Situação inválida.');
+    const data = lerDataIso(b.data, 'Data') ?? undefined;
+    repo.alterarSolicitacao(req.params.id, req.usuario.id, { status, data });
+    return repo.buscarSolicitacao(req.params.id, req.usuario.id);
   });
 
   // ---------- envios ----------

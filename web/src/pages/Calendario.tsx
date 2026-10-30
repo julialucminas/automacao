@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../api';
 import { useEstado } from '../state';
 import type { Cliente, Faturamento } from '../types';
@@ -7,7 +7,7 @@ import { dataBr, datasNoIntervalo, descreverRegra, gradeDoMes, hojeIso, interval
 import { formatarReais } from '../lib/dinheiro';
 import { chaveEmpresa } from '../lib/normalizar';
 import { Cartao, Chip, Modal, type Tom } from '../components/ui';
-import { IcBusca, IcCheck } from '../components/Icones';
+import { IcBusca, IcCheck, IcNota } from '../components/Icones';
 
 type Status = 'faturado' | 'atrasado' | 'hoje' | 'a_faturar';
 type Item = { cliente: Cliente; data: string; status: Status; marca?: Faturamento };
@@ -26,7 +26,8 @@ const SEMANA = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 const totalFrotas = (c: Cliente) => c.frotas.reduce((s, f) => s + f.valor, 0);
 
 export function Calendario() {
-  const { clientes, avisar } = useEstado();
+  const { clientes, avisar, solicitacoes } = useEstado();
+  const navegar = useNavigate();
   const hoje = hojeIso();
   const [ano, setAno] = useState(Number(hoje.slice(0, 4)));
   const [mes, setMes] = useState(Number(hoje.slice(5, 7)));
@@ -120,6 +121,12 @@ export function Calendario() {
     { id: 'faturado', rotulo: 'Faturados', n: conta('faturado') },
     { id: 'atrasado', rotulo: 'Atrasados', n: conta('atrasado') },
   ];
+
+  const solsDoMes = solicitacoes.filter((x) => x.data >= de && x.data <= ate && (!q || chaveEmpresa(`${x.titulo} ${x.clienteNome ?? ''}`).includes(q)));
+  const solsPorDia = new Map<string, typeof solsDoMes>();
+  for (const x of solsDoMes) solsPorDia.set(x.data, [...(solsPorDia.get(x.data) ?? []), x]);
+  const chipSol = (x: (typeof solsDoMes)[number]) =>
+    x.status === 'concluida' ? 'border-line bg-line-soft text-ink-3 line-through' : x.data < hoje ? 'border-bad/30 bg-bad-soft text-bad-strong' : 'border-info/30 bg-info-soft text-info';
 
   const porDia = new Map<string, Item[]>();
   for (const i of visiveis) porDia.set(i.data, [...(porDia.get(i.data) ?? []), i]);
@@ -246,6 +253,21 @@ export function Calendario() {
                                 <span className="truncate">{i.cliente.nome}</span>
                               </button>
                             ))}
+                            {(solsPorDia.get(dia) ?? []).map((x) => (
+                              <button
+                                key={x.id}
+                                type="button"
+                                onClick={() => navegar(`/solicitacoes?id=${x.id}`)}
+                                title={`Solicitação: ${x.titulo}${x.clienteNome ? ` – ${x.clienteNome}` : ''} (para ${x.paraNome})`}
+                                className={`flex w-full items-center gap-1 truncate rounded-md border border-dashed px-1.5 py-1 text-left text-[11.5px] font-medium ${chipSol(x)}`}
+                              >
+                                <IcNota tamanho={11} className="shrink-0" />
+                                <span className="truncate">
+                                  {x.titulo}
+                                  {x.clienteNome ? ` · ${x.clienteNome}` : ''}
+                                </span>
+                              </button>
+                            ))}
                           </div>
                         </>
                       )}
@@ -258,6 +280,17 @@ export function Calendario() {
         </section>
       ) : (
         <section aria-label="Lista de faturas do mês" className="card overflow-hidden">
+          {solsDoMes.length > 0 && (
+            <div className="border-b border-line bg-info-soft/50 px-4 py-2.5 text-[13px]">
+              <div className="mb-1 text-xs font-semibold text-info">Solicitações no mês</div>
+              {solsDoMes.map((x) => (
+                <Link key={x.id} to={`/solicitacoes?id=${x.id}`} className={`mr-2 mt-1 inline-flex items-center gap-1 rounded-md border border-dashed px-2 py-1 text-xs ${chipSol(x)}`}>
+                  {x.data.slice(8, 10)}/{x.data.slice(5, 7)} · {x.titulo}
+                  {x.clienteNome ? ` · ${x.clienteNome}` : ''}
+                </Link>
+              ))}
+            </div>
+          )}
           {visiveis.length === 0 && <div className="px-4 py-6 text-ink-3">Nenhuma fatura neste filtro.</div>}
           {visiveis.map((i) => (
             <div key={`${i.cliente.id}|${i.data}`} className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-line-soft px-4 py-3 text-[13px] last:border-b-0">

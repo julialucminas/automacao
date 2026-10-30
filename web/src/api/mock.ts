@@ -1,5 +1,5 @@
 import type { Api } from './index';
-import type { Cliente, Envio, Faturamento, Usuario } from '../types';
+import type { Cliente, Envio, Faturamento, Solicitacao, Usuario } from '../types';
 import { REMETENTE } from '../lib/email';
 
 /*
@@ -11,7 +11,7 @@ const CHAVE = 'lucminas-faturas:v1';
 const espera = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const id = () => Math.random().toString(36).slice(2, 10);
 
-type Banco = { clientes: Cliente[]; envios: Envio[]; usuario: Usuario | null; faturamentos?: Faturamento[] };
+type Banco = { clientes: Cliente[]; envios: Envio[]; usuario: Usuario | null; faturamentos?: Faturamento[]; solicitacoes?: Solicitacao[] };
 
 function dias(n: number, h = 9, m = 0): string {
   const d = new Date();
@@ -106,7 +106,7 @@ export const mockApi: Api = {
   async login(email, senha) {
     await espera(400);
     if (!email.trim() || !senha) throw new Error('Informe e-mail e senha.');
-    const usuario = { nome: email.split('@')[0], email: email.trim().toLowerCase() };
+    const usuario = { id: 1, nome: email.split('@')[0], email: email.trim().toLowerCase() };
     salvar({ ...carregar(), usuario });
     return usuario;
   },
@@ -189,6 +189,50 @@ export const mockApi: Api = {
   async desmarcarFaturado(clienteId, data) {
     const b = carregar();
     salvar({ ...b, faturamentos: (b.faturamentos ?? []).filter((f) => !(f.clienteId === clienteId && f.data === data)) });
+  },
+  // demonstração: um único usuário "conversa" consigo mesmo
+  async listarUsuarios() {
+    const u = carregar().usuario;
+    return u ? [{ id: 1, nome: u.nome, chamar: u.chamar ?? '', email: u.email }] : [];
+  },
+  async listarSolicitacoes() {
+    return (carregar().solicitacoes ?? []).map((s) => ({ ...s, mensagens: undefined }));
+  },
+  async abrirSolicitacao(sid) {
+    const s = (carregar().solicitacoes ?? []).find((x) => x.id === sid);
+    if (!s) throw new Error('Solicitação não encontrada.');
+    return s;
+  },
+  async criarSolicitacao(n) {
+    const b = carregar();
+    const agora = new Date().toISOString();
+    const nome = b.usuario?.nome ?? '';
+    const cli = b.clientes.find((c) => c.id === n.clienteId);
+    const s: Solicitacao = {
+      id: id(), criadaEm: agora, criadaPor: 1, criadaPorNome: nome, paraUsuario: n.paraUsuario, paraNome: nome, data: n.data,
+      clienteId: n.clienteId, clienteNome: cli?.nome ?? null, titulo: n.titulo, status: 'aberta', concluidaEm: null, concluidaPorNome: null,
+      totalMensagens: n.texto ? 1 : 0, naoLidas: 0, ultimaMensagemEm: agora,
+      mensagens: n.texto ? [{ id: 1, usuarioId: 1, autor: nome, texto: n.texto, criadaEm: agora }] : [],
+    };
+    salvar({ ...b, solicitacoes: [...(b.solicitacoes ?? []), s] });
+    return s;
+  },
+  async responderSolicitacao(sid, texto) {
+    const b = carregar();
+    const agora = new Date().toISOString();
+    const l = (b.solicitacoes ?? []).map((s) =>
+      s.id === sid ? { ...s, totalMensagens: s.totalMensagens + 1, ultimaMensagemEm: agora, mensagens: [...(s.mensagens ?? []), { id: Date.now(), usuarioId: 1, autor: b.usuario?.nome ?? '', texto, criadaEm: agora }] } : s,
+    );
+    salvar({ ...b, solicitacoes: l });
+    return l.find((s) => s.id === sid)!;
+  },
+  async alterarSolicitacao(sid, m) {
+    const b = carregar();
+    const l = (b.solicitacoes ?? []).map((s) =>
+      s.id === sid ? { ...s, ...(m.data ? { data: m.data } : {}), ...(m.status ? { status: m.status, concluidaEm: m.status === 'concluida' ? new Date().toISOString() : null, concluidaPorNome: m.status === 'concluida' ? b.usuario?.nome ?? '' : null } : {}) } : s,
+    );
+    salvar({ ...b, solicitacoes: l });
+    return l.find((s) => s.id === sid)!;
   },
   async listarEnvios() {
     await espera(120);

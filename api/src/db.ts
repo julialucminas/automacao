@@ -57,6 +57,28 @@ export type Envio = {
 
 export type Usuario = { id: number; email: string; nome: string; chamar: string };
 
+export type Mensagem = { id: number; usuarioId: number; autor: string; texto: string; criadaEm: string };
+export type Solicitacao = {
+  id: string;
+  criadaEm: string;
+  criadaPor: number;
+  criadaPorNome: string;
+  paraUsuario: number;
+  paraNome: string;
+  data: string;
+  clienteId: string | null;
+  clienteNome: string | null;
+  titulo: string;
+  status: 'aberta' | 'concluida';
+  concluidaEm: string | null;
+  concluidaPorNome: string | null;
+  totalMensagens: number;
+  /** mensagens de outras pessoas que este usuário ainda não viu (inclui a solicitação nova) */
+  naoLidas: number;
+  ultimaMensagemEm: string;
+  mensagens?: Mensagem[];
+};
+
 /** Versões do banco. Cada item roda uma vez, em ordem. Nunca editar um item já publicado: só acrescentar. */
 const MIGRACOES = [
   `CREATE TABLE usuarios (
@@ -132,6 +154,34 @@ const MIGRACOES = [
      usuario_id INTEGER REFERENCES usuarios(id),
      origem TEXT NOT NULL DEFAULT 'manual',
      PRIMARY KEY (cliente_id, data)
+   );`,
+  // solicitações entre usuários (pedido + conversa) e controle de leitura
+  `CREATE TABLE solicitacoes (
+     id TEXT PRIMARY KEY,
+     criada_em TEXT NOT NULL,
+     criada_por INTEGER NOT NULL REFERENCES usuarios(id),
+     para_usuario INTEGER NOT NULL REFERENCES usuarios(id),
+     data TEXT NOT NULL,
+     cliente_id TEXT REFERENCES clientes(id) ON DELETE SET NULL,
+     titulo TEXT NOT NULL,
+     status TEXT NOT NULL DEFAULT 'aberta',
+     concluida_em TEXT,
+     concluida_por INTEGER REFERENCES usuarios(id)
+   );
+   CREATE INDEX solicitacoes_data ON solicitacoes(data);
+   CREATE TABLE mensagens (
+     id INTEGER PRIMARY KEY,
+     solicitacao_id TEXT NOT NULL REFERENCES solicitacoes(id) ON DELETE CASCADE,
+     usuario_id INTEGER NOT NULL REFERENCES usuarios(id),
+     texto TEXT NOT NULL,
+     criada_em TEXT NOT NULL
+   );
+   CREATE INDEX mensagens_solicitacao ON mensagens(solicitacao_id);
+   CREATE TABLE leituras (
+     solicitacao_id TEXT NOT NULL REFERENCES solicitacoes(id) ON DELETE CASCADE,
+     usuario_id INTEGER NOT NULL REFERENCES usuarios(id),
+     vista_em TEXT NOT NULL,
+     PRIMARY KEY (solicitacao_id, usuario_id)
    );`,
 ];
 
@@ -372,6 +422,118 @@ export function repositorio(db: Banco) {
     desmarcarFaturado(clienteId: string, data: string, usuarioId: number) {
       const r = db.prepare('DELETE FROM faturamentos WHERE cliente_id = ? AND data = ?').run(clienteId, data);
       if (r.changes) registrar(clienteId, usuarioId, `desmarcou faturado em ${data}`, null, null);
+    },
+
+    // ---------- usuários (para escolher destinatário) ----------
+    listarUsuariosAtivos(): { id: number; nome: string; chamar: string; email: string }[] {
+      return db.prepare('SELECT id, nome, chamar, email FROM usuarios WHERE ativo = 1 ORDER BY nome').all() as {
+        id: number;
+        nome: string;
+        chamar: string;
+        email: string;
+      }[];
+    },
+
+    // ---------- solicitações ----------
+    listarSolicitacoes(usuarioId: number): Solicitacao[] {
+      type L = Record<string, unknown>;
+      const linhas = db
+        .prepare(
+          `SELECT s.*, cu.nome AS criada_por_nome, pu.nome AS para_nome, c.nome AS cliente_nome, ku.nome AS concluida_por_nome,
+             (SELECT COUNT(*) FROM mensagens m WHERE m.solicitacao_id = s.id) AS total,
+             (SELECT MAX(m.criada_em) FROM mensagens m WHERE m.solicitacao_id = s.id) AS ultima,
+             (SELECT COUNT(*) FROM mensagens m WHERE m.solicitacao_id = s.id AND m.usuario_id != @u
+                AND m.criada_em > COALESCE((SELECT vista_em FROM leituras l WHERE l.solicitacao_id = s.id AND l.usuario_id = @u), '')) AS nao_lidas
+           FROM solicitacoes s
+           JOIN usuarios cu ON cu.id = s.criada_por
+           JOIN usuarios pu ON pu.id = s.para_usuario
+           LEFT JOIN clientes c ON c.id = s.cliente_id
+           LEFT JOIN usuarios ku ON ku.id = s.concluida_por
+           ORDER BY s.data, s.criada_em`,
+        )
+        .all({ u: usuarioId }) as L[];
+      return linhas.map((r) => ({
+        id: r.id as string,
+        criadaEm: r.criada_em as string,
+        criadaPor: r.criada_por as number,
+        criadaPorNome: r.criada_por_nome as string,
+        paraUsuario: r.para_usuario as number,
+        paraNome: r.para_nome as string,
+        data: r.data as string,
+        clienteId: (r.cliente_id as string) ?? null,
+        clienteNome: (r.cliente_nome as string) ?? null,
+        titulo: r.titulo as string,
+        status: r.status === 'concluida' ? 'concluida' : 'aberta',
+        concluidaEm: (r.concluida_em as string) ?? null,
+        concluidaPorNome: (r.concluida_por_nome as string) ?? null,
+        totalMensagens: r.total as number,
+        naoLidas: r.nao_lidas as number,
+        ultimaMensagemEm: (r.ultima as string) ?? (r.criada_em as string),
+      }));
+    },
+    buscarSolicitacao(id: string, usuarioId: number): Solicitacao {
+      const s = this.listarSolicitacoes(usuarioId).find((x) => x.id === id);
+      if (!s) throw new NaoEncontrado('Solicitação não encontrada.');
+      s.mensagens = (
+        db
+          .prepare(
+            `SELECT m.id, m.usuario_id, u.nome, m.texto, m.criada_em FROM mensagens m JOIN usuarios u ON u.id = m.usuario_id
+             WHERE m.solicitacao_id = ? ORDER BY m.criada_em, m.id`,
+          )
+          .all(id) as { id: number; usuario_id: number; nome: string; texto: string; criada_em: string }[]
+      ).map((m) => ({ id: m.id, usuarioId: m.usuario_id, autor: m.nome, texto: m.texto, criadaEm: m.criada_em }));
+      return s;
+    },
+    marcarVista(id: string, usuarioId: number) {
+      db.prepare(
+        `INSERT INTO leituras (solicitacao_id, usuario_id, vista_em) VALUES (?, ?, ?)
+         ON CONFLICT (solicitacao_id, usuario_id) DO UPDATE SET vista_em = excluded.vista_em`,
+      ).run(id, usuarioId, agora());
+    },
+    criarSolicitacao(d: { criadaPor: number; paraUsuario: number; data: string; clienteId: string | null; titulo: string; texto: string }): string {
+      return db.transaction(() => {
+        if (!db.prepare('SELECT 1 FROM usuarios WHERE id = ? AND ativo = 1').get(d.paraUsuario)) throw new NaoEncontrado('Usuário de destino não encontrado.');
+        if (d.clienteId) buscarCliente(d.clienteId);
+        const id = randomUUID();
+        const t = agora();
+        db.prepare(
+          'INSERT INTO solicitacoes (id, criada_em, criada_por, para_usuario, data, cliente_id, titulo) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        ).run(id, t, d.criadaPor, d.paraUsuario, d.data, d.clienteId, d.titulo);
+        if (d.texto) db.prepare('INSERT INTO mensagens (solicitacao_id, usuario_id, texto, criada_em) VALUES (?, ?, ?, ?)').run(id, d.criadaPor, d.texto, t);
+        db.prepare('INSERT INTO leituras (solicitacao_id, usuario_id, vista_em) VALUES (?, ?, ?)').run(id, d.criadaPor, t);
+        return id;
+      })();
+    },
+    responder(id: string, usuarioId: number, texto: string) {
+      if (!db.prepare('SELECT 1 FROM solicitacoes WHERE id = ?').get(id)) throw new NaoEncontrado('Solicitação não encontrada.');
+      const t = agora();
+      db.prepare('INSERT INTO mensagens (solicitacao_id, usuario_id, texto, criada_em) VALUES (?, ?, ?, ?)').run(id, usuarioId, texto, t);
+      this.marcarVista(id, usuarioId);
+    },
+    alterarSolicitacao(id: string, usuarioId: number, mudanca: { status?: 'aberta' | 'concluida'; data?: string }) {
+      const atual = db.prepare('SELECT status, data FROM solicitacoes WHERE id = ?').get(id) as { status: string; data: string } | undefined;
+      if (!atual) throw new NaoEncontrado('Solicitação não encontrada.');
+      const t = agora();
+      if (mudanca.status && mudanca.status !== atual.status) {
+        db.prepare('UPDATE solicitacoes SET status = ?, concluida_em = ?, concluida_por = ? WHERE id = ?').run(
+          mudanca.status,
+          mudanca.status === 'concluida' ? t : null,
+          mudanca.status === 'concluida' ? usuarioId : null,
+          id,
+        );
+        db.prepare('INSERT INTO mensagens (solicitacao_id, usuario_id, texto, criada_em) VALUES (?, ?, ?, ?)').run(
+          id,
+          usuarioId,
+          mudanca.status === 'concluida' ? '✔ Marcou como concluída.' : '↺ Reabriu a solicitação.',
+          t,
+        );
+      }
+      if (mudanca.data && mudanca.data !== atual.data) {
+        db.prepare('UPDATE solicitacoes SET data = ? WHERE id = ?').run(mudanca.data, id);
+        const [a, m, d] = mudanca.data.split('-');
+        db.prepare('INSERT INTO mensagens (solicitacao_id, usuario_id, texto, criada_em) VALUES (?, ?, ?, ?)').run(id, usuarioId, `Mudou a data para ${d}/${m}/${a}.`, t);
+      }
+      this.marcarVista(id, usuarioId);
     },
 
     // ---------- envios ----------

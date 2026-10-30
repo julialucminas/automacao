@@ -112,4 +112,31 @@ export type Envio = {
 };
 
 /** chamar: como a pessoa é chamada na saudação do topo (ex.: "Angeli"). */
-export type Usuario = { nome: string; email: string; chamar?: string };
+export type Usuario = { id?: number; nome: string; email: string; chamar?: string };
+
+export type Pessoa = { id: number; nome: string; chamar: string; email: string };
+
+export type Mensagem = { id: number; usuarioId: number; autor: string; texto: string; criadaEm: string };
+
+/** Pedido de um usuário para outro (ex.: "Nova fatura"), com data e conversa. */
+export type Solicitacao = {
+  id: string;
+  criadaEm: string;
+  criadaPor: number;
+  criadaPorNome: string;
+  paraUsuario: number;
+  paraNome: string;
+  data: string;
+  clienteId: string | null;
+  clienteNome: string | null;
+  titulo: string;
+  status: 'aberta' | 'concluida';
+  concluidaEm: string | null;
+  concluidaPorNome: string | null;
+  totalMensagens: number;
+  naoLidas: number;
+  ultimaMensagemEm: string;
+  mensagens?: Mensagem[];
+};
+
+export type NovaSolicitacao = { paraUsuario: number; data: string; clienteId: string | null; titulo: string; texto: string };

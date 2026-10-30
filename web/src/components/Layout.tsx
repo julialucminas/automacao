@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { NavLink, Outlet } from 'react-router-dom';
+import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
+import { hojeIso } from '../lib/calendario';
 import { useEstado } from '../state';
 import { temAviso } from '../lib/pareamento';
 import { EMPRESA, REMETENTE } from '../lib/email';
@@ -8,7 +9,8 @@ import { MODO_DEMO } from '../api';
 import { TrocarSenha } from './TrocarSenha';
 
 export function Layout() {
-  const { usuario, sair, lote, clientes, envios, aviso, fecharAviso } = useEstado();
+  const { usuario, sair, lote, clientes, envios, aviso, fecharAviso, pendentesParaMim, naoLidas, solicitacoes } = useEstado();
+  const local = useLocation();
   const avisosLote = lote ? lote.itens.filter((i) => temAviso(i, clientes)).length : 0;
   const [trocandoSenha, setTrocandoSenha] = useState(false);
   const comoChamar = usuario?.chamar?.trim() || usuario?.nome.trim().split(/\s+/)[0] || '';
@@ -25,6 +27,13 @@ export function Layout() {
     { para: '/calendario', rotulo: 'Calendário', badge: 0, alerta: false },
     { para: '/frotas', rotulo: 'Frotas', badge: 0, alerta: false },
     { para: '/clientes', rotulo: 'Clientes', badge: clientes.filter((c) => c.ativo).length, alerta: false },
+    {
+      para: '/solicitacoes',
+      rotulo: 'Solicitações',
+      // pendentes para mim até hoje + conversas com mensagem nova
+      badge: new Set([...pendentesParaMim.map((s) => s.id), ...solicitacoes.filter((s) => s.naoLidas > 0).map((s) => s.id)]).size,
+      alerta: true,
+    },
     { para: '/historico', rotulo: 'Histórico', badge: devolvidos, alerta: true },
   ];
 
@@ -80,6 +89,34 @@ export function Layout() {
       </header>
 
       <main className="mx-auto max-w-[1280px] px-4 py-6 sm:px-6">
+        {pendentesParaMim.length > 0 && !local.pathname.startsWith('/solicitacoes') && (
+          <div role="status" className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border-2 border-brand bg-brand-soft px-4 py-3">
+            <div className="text-[14px]">
+              <b>
+                {comoChamar ? `${comoChamar}, você` : 'Você'} tem {pendentesParaMim.length} solicitaç{pendentesParaMim.length > 1 ? 'ões' : 'ão'} para hoje
+                {pendentesParaMim.some((s) => s.data < hojeIso()) ? ' (com atraso)' : ''}:
+              </b>{' '}
+              {pendentesParaMim
+                .slice(0, 3)
+                .map((s) => `${s.titulo}${s.clienteNome ? ` – ${s.clienteNome}` : ''}`)
+                .join(' · ')}
+              {pendentesParaMim.length > 3 && ` e mais ${pendentesParaMim.length - 3}`}
+            </div>
+            <Link to={`/solicitacoes?id=${pendentesParaMim[0].id}`} className="btn-primary btn-sm">
+              Ver agora
+            </Link>
+          </div>
+        )}
+        {naoLidas > 0 && pendentesParaMim.length === 0 && !local.pathname.startsWith('/solicitacoes') && (
+          <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-white px-4 py-2.5 text-[13px]">
+            <span>
+              Mensagem nova em {naoLidas} solicitaç{naoLidas > 1 ? 'ões' : 'ão'}.
+            </span>
+            <Link to="/solicitacoes" className="btn-secondary btn-sm">
+              Abrir
+            </Link>
+          </div>
+        )}
         {aviso && (
           <div
             role="status"

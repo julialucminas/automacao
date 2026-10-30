@@ -12,6 +12,7 @@ const req = (method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE', url: string, p
 beforeEach(async () => {
   const db = abrirBanco(':memory:');
   repositorio(db).criarUsuario('julia@lucminas.com.br', 'Júlia', await gerarHash('senha-certa'));
+  repositorio(db).criarUsuario('angelise@lucminas.com.br', 'Angelise', await gerarHash('senha-angeli'), 'Angeli');
   app = criarApp(db, { cookieSeguro: false });
   const r = await req('POST', '/api/sessao', { email: 'JULIA@lucminas.com.br', senha: 'senha-certa' }, false);
   expect(r.statusCode).toBe(200);
@@ -32,7 +33,7 @@ describe('login', () => {
   });
 
   it('logout derruba a sessão', async () => {
-    expect((await req('GET', '/api/sessao')).json()).toEqual({ email: 'julia@lucminas.com.br', nome: 'Júlia', chamar: '' });
+    expect((await req('GET', '/api/sessao')).json()).toEqual({ id: 1, email: 'julia@lucminas.com.br', nome: 'Júlia', chamar: '' });
     await req('DELETE', '/api/sessao');
     expect((await req('GET', '/api/sessao')).statusCode).toBe(401);
   });
@@ -142,5 +143,38 @@ describe('regra por período e calendário', () => {
     await req('DELETE', `/api/faturamentos/${c.id}/2026-11-09`);
     expect((await req('GET', '/api/faturamentos?de=2026-11-01&ate=2026-11-30')).json()).toHaveLength(0);
     expect((await req('POST', '/api/faturamentos', { clienteId: 'nao-existe', data: '2026-11-09' })).statusCode).toBe(404);
+  });
+});
+
+describe('solicitações', () => {
+  it('Júlia pede, Angeli vê como não lida, responde e conclui', async () => {
+    const angeli = (await app.inject({ method: 'POST', url: '/api/sessao', payload: { email: 'angelise@lucminas.com.br', senha: 'senha-angeli' } }));
+    const cookieAngeli = String(angeli.headers['set-cookie']).split(';')[0];
+    const comAngeli = (method: 'GET' | 'POST' | 'PATCH', url: string, payload?: unknown) =>
+      app.inject({ method, url, payload: payload as object, headers: { cookie: cookieAngeli } });
+
+    const usuarios = (await req('GET', '/api/usuarios')).json();
+    expect(usuarios.map((u: { nome: string }) => u.nome)).toEqual(['Angelise', 'Júlia']);
+    const idAngeli = usuarios.find((u: { nome: string }) => u.nome === 'Angelise').id;
+    const cli = (await req('POST', '/api/clientes', { nome: 'Minasbev', para: ['g@minasbev.com'] })).json();
+
+    expect((await req('POST', '/api/solicitacoes', { paraUsuario: idAngeli, data: '2026-11-03', titulo: '' })).statusCode).toBe(400);
+    const s = (await req('POST', '/api/solicitacoes', { paraUsuario: idAngeli, data: '2026-11-03', clienteId: cli.id, titulo: 'Nova fatura', texto: 'Faturar a frota 12 extra' })).json();
+    expect(s).toMatchObject({ titulo: 'Nova fatura', clienteNome: 'MINASBEV', paraNome: 'Angelise', criadaPorNome: 'Júlia', status: 'aberta', naoLidas: 0 });
+
+    // para a Angeli aparece 1 não lida
+    expect((await comAngeli('GET', '/api/solicitacoes')).json()[0].naoLidas).toBe(1);
+    const aberta = (await comAngeli('GET', `/api/solicitacoes/${s.id}`)).json();
+    expect(aberta.mensagens.map((m: { texto: string }) => m.texto)).toEqual(['Faturar a frota 12 extra']);
+    expect((await comAngeli('GET', '/api/solicitacoes')).json()[0].naoLidas).toBe(0);
+
+    await new Promise((r) => setTimeout(r, 5));
+    await comAngeli('POST', `/api/solicitacoes/${s.id}/mensagens`, { texto: 'Ok, faço amanhã' });
+    expect((await req('GET', '/api/solicitacoes')).json()[0].naoLidas).toBe(1); // Júlia vê a resposta como nova
+
+    const concl = (await comAngeli('PATCH', `/api/solicitacoes/${s.id}`, { status: 'concluida', data: '2026-11-04' })).json();
+    expect(concl).toMatchObject({ status: 'concluida', concluidaPorNome: 'Angelise', data: '2026-11-04' });
+    expect(concl.mensagens.length).toBe(4);
+    expect((await req('GET', '/api/solicitacoes/inexistente')).statusCode).toBe(404);
   });
 });
