@@ -6,6 +6,7 @@ import { Envio } from './pages/Envio';
 import { Clientes } from './pages/Clientes';
 import { Historico } from './pages/Historico';
 import { Calendario } from './pages/Calendario';
+import { Frotas } from './pages/Frotas';
 
 function Rotas() {
   const { usuario, carregando, erroInicial } = useEstado();
@@ -28,6 +29,7 @@ function Rotas() {
         <Route path="/envio" element={<Envio />} />
         <Route path="/clientes" element={<Clientes />} />
         <Route path="/calendario" element={<Calendario />} />
+        <Route path="/frotas" element={<Frotas />} />
         <Route path="/historico" element={<Historico />} />
         <Route path="*" element={<Navigate to="/envio" replace />} />
       </Route>
