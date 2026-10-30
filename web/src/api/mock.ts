@@ -210,7 +210,7 @@ export const mockApi: Api = {
     const cli = b.clientes.find((c) => c.id === n.clienteId);
     const s: Solicitacao = {
       id: id(), criadaEm: agora, criadaPor: 1, criadaPorNome: nome, paraUsuario: n.paraUsuario, paraNome: nome, data: n.data,
-      clienteId: n.clienteId, clienteNome: cli?.nome ?? null, titulo: n.titulo, status: 'aberta', concluidaEm: null, concluidaPorNome: null,
+      clienteId: n.clienteId, clienteNome: cli?.nome ?? (n.clienteNome?.trim() || null), titulo: n.titulo, status: 'aberta', concluidaEm: null, concluidaPorNome: null,
       totalMensagens: n.texto ? 1 : 0, naoLidas: 0, ultimaMensagemEm: agora,
       mensagens: n.texto ? [{ id: 1, usuarioId: 1, autor: nome, texto: n.texto, criadaEm: agora }] : [],
     };

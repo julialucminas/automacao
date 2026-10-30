@@ -37,13 +37,13 @@ function Rotas() {
             <Route path="/envio" element={<Envio />} />
             <Route path="/clientes" element={<Clientes />} />
             <Route path="/calendario" element={<Calendario />} />
-            <Route path="/solicitacoes" element={<Solicitacoes />} />
             <Route path="/historico" element={<Historico />} />
             <Route path="/registro" element={<Registro />} />
             <Route path="/configuracoes" element={<Configuracoes />} />
           </>
         )}
         <Route path="/frotas" element={<Frotas />} />
+        <Route path="/solicitacoes" element={<Solicitacoes />} />
         <Route path="/movimentacoes" element={<Movimentacoes />} />
         <Route path="/conferencia" element={<ConferenciaMes />} />
         <Route path="/aprovacoes" element={<Aprovacoes />} />

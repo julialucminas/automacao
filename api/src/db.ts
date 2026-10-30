@@ -251,6 +251,8 @@ const MIGRACOES = [
      usuario_id INTEGER REFERENCES usuarios(id),
      PRIMARY KEY (referencia, cliente_id, frota)
    );`,
+  // 8: cliente da solicitação pode ser texto livre (não cadastrado)
+  `ALTER TABLE solicitacoes ADD COLUMN cliente_texto TEXT NOT NULL DEFAULT '';`,
 ];
 
 export function abrirBanco(caminho: string) {
@@ -510,7 +512,7 @@ export function repositorio(db: Banco) {
 
     // ---------- usuários (para escolher destinatário) ----------
     listarUsuariosAtivos(): { id: number; nome: string; chamar: string; email: string }[] {
-      return db.prepare("SELECT id, nome, chamar, email FROM usuarios WHERE ativo = 1 AND perfil = 'financeiro' ORDER BY nome").all() as {
+      return db.prepare("SELECT id, nome, chamar, email FROM usuarios WHERE ativo = 1 ORDER BY nome").all() as {
         id: number;
         nome: string;
         chamar: string;
@@ -523,7 +525,7 @@ export function repositorio(db: Banco) {
       type L = Record<string, unknown>;
       const linhas = db
         .prepare(
-          `SELECT s.*, cu.nome AS criada_por_nome, pu.nome AS para_nome, c.nome AS cliente_nome, ku.nome AS concluida_por_nome,
+          `SELECT s.*, cu.nome AS criada_por_nome, pu.nome AS para_nome, COALESCE(c.nome, NULLIF(s.cliente_texto, '')) AS cliente_nome, ku.nome AS concluida_por_nome,
              (SELECT COUNT(*) FROM mensagens m WHERE m.solicitacao_id = s.id) AS total,
              (SELECT MAX(m.criada_em) FROM mensagens m WHERE m.solicitacao_id = s.id) AS ultima,
              (SELECT COUNT(*) FROM mensagens m WHERE m.solicitacao_id = s.id AND m.usuario_id != @u
@@ -574,15 +576,15 @@ export function repositorio(db: Banco) {
          ON CONFLICT (solicitacao_id, usuario_id) DO UPDATE SET vista_em = excluded.vista_em`,
       ).run(id, usuarioId, agora());
     },
-    criarSolicitacao(d: { criadaPor: number; paraUsuario: number; data: string; clienteId: string | null; titulo: string; texto: string }): string {
+    criarSolicitacao(d: { criadaPor: number; paraUsuario: number; data: string; clienteId: string | null; clienteTexto?: string; titulo: string; texto: string }): string {
       return db.transaction(() => {
         if (!db.prepare('SELECT 1 FROM usuarios WHERE id = ? AND ativo = 1').get(d.paraUsuario)) throw new NaoEncontrado('Usuário de destino não encontrado.');
         if (d.clienteId) buscarCliente(d.clienteId);
         const id = randomUUID();
         const t = agora();
         db.prepare(
-          'INSERT INTO solicitacoes (id, criada_em, criada_por, para_usuario, data, cliente_id, titulo) VALUES (?, ?, ?, ?, ?, ?, ?)',
-        ).run(id, t, d.criadaPor, d.paraUsuario, d.data, d.clienteId, d.titulo);
+          'INSERT INTO solicitacoes (id, criada_em, criada_por, para_usuario, data, cliente_id, cliente_texto, titulo) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        ).run(id, t, d.criadaPor, d.paraUsuario, d.data, d.clienteId, d.clienteId ? '' : (d.clienteTexto ?? ''), d.titulo);
         if (d.texto) db.prepare('INSERT INTO mensagens (solicitacao_id, usuario_id, texto, criada_em) VALUES (?, ?, ?, ?)').run(id, d.criadaPor, d.texto, t);
         db.prepare('INSERT INTO leituras (solicitacao_id, usuario_id, vista_em) VALUES (?, ?, ?)').run(id, d.criadaPor, t);
         return id;

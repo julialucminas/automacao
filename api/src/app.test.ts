@@ -155,7 +155,7 @@ describe('solicitações', () => {
       app.inject({ method, url, payload: payload as object, headers: { cookie: cookieAngeli } });
 
     const usuarios = (await req('GET', '/api/usuarios')).json();
-    expect(usuarios.map((u: { nome: string }) => u.nome)).toEqual(['Angelise', 'Júlia']);
+    expect(usuarios.map((u: { nome: string }) => u.nome)).toEqual(['Angelise', 'Júlia', 'Júnior']);
     const idAngeli = usuarios.find((u: { nome: string }) => u.nome === 'Angelise').id;
     const cli = (await req('POST', '/api/clientes', { nome: 'Minasbev', para: ['g@minasbev.com'] })).json();
 

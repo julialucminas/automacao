@@ -381,7 +381,8 @@ export function criarApp(db: Banco, opcoes: { cookieSeguro: boolean; logger?: bo
     if (!titulo) throw new Invalido('Informe o assunto.');
     if (!Number.isInteger(para)) throw new Invalido('Escolha para quem é a solicitação.');
     const clienteId = typeof b.clienteId === 'string' && b.clienteId ? b.clienteId : null;
-    const id = repo.criarSolicitacao({ criadaPor: req.usuario.id, paraUsuario: para, data, clienteId, titulo, texto: msg });
+    const clienteTexto = texto(b.clienteNome, 'cliente', 200);
+    const id = repo.criarSolicitacao({ criadaPor: req.usuario.id, paraUsuario: para, data, clienteId, clienteTexto, titulo, texto: msg });
     return reply.code(201).send(repo.buscarSolicitacao(id, req.usuario.id));
   });
 

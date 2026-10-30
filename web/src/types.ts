@@ -147,7 +147,7 @@ export type Solicitacao = {
   mensagens?: Mensagem[];
 };
 
-export type NovaSolicitacao = { paraUsuario: number; data: string; clienteId: string | null; titulo: string; texto: string };
+export type NovaSolicitacao = { paraUsuario: number; data: string; clienteId: string | null; /** quando não é um cliente cadastrado */ clienteNome?: string; titulo: string; texto: string };
 
 export type TipoMov = 'locacao' | 'devolucao' | 'troca';
 export type DadosMov = {

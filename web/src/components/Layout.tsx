@@ -24,6 +24,8 @@ export function Layout() {
   }, [aviso, fecharAviso]);
 
   const meusPendentes = propostas.filter((p) => p.status === 'pendente').length + movimentacoes.filter((m) => m.status === 'pendente').length;
+  // pendentes para mim até hoje + conversas com mensagem nova
+  const badgeSolicitacoes = new Set([...pendentesParaMim.map((s) => s.id), ...solicitacoes.filter((s) => s.naoLidas > 0).map((s) => s.id)]).size;
   type Aba = { para: string; rotulo: string; badge: number; alerta: boolean };
   const abas: Aba[] = ehFinanceiro
     ? [
@@ -34,8 +36,7 @@ export function Layout() {
         {
           para: '/solicitacoes',
           rotulo: 'Solicitações',
-          // pendentes para mim até hoje + conversas com mensagem nova
-          badge: new Set([...pendentesParaMim.map((s) => s.id), ...solicitacoes.filter((s) => s.naoLidas > 0).map((s) => s.id)]).size,
+          badge: badgeSolicitacoes,
           alerta: true,
         },
         { para: '/movimentacoes', rotulo: 'Movimentações', badge: 0, alerta: false },
@@ -50,6 +51,7 @@ export function Layout() {
         { para: '/movimentacoes', rotulo: 'Movimentações', badge: 0, alerta: false },
         { para: '/conferencia', rotulo: 'Conferência', badge: 0, alerta: false },
         { para: '/frotas', rotulo: 'Frotas', badge: 0, alerta: false },
+        { para: '/solicitacoes', rotulo: 'Solicitações', badge: badgeSolicitacoes, alerta: true },
         { para: '/aprovacoes', rotulo: 'Minhas alterações', badge: meusPendentes, alerta: false },
       ];
 
@@ -109,7 +111,7 @@ export function Layout() {
       </header>
 
       <main className="mx-auto max-w-[1280px] px-4 py-6 sm:px-6">
-        {ehFinanceiro && pendentesParaMim.length > 0 && !local.pathname.startsWith('/solicitacoes') && (
+        {pendentesParaMim.length > 0 && !local.pathname.startsWith('/solicitacoes') && (
           <div role="status" className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border-2 border-brand bg-brand-soft px-4 py-3">
             <div className="text-[14px]">
               <b>
@@ -128,7 +130,7 @@ export function Layout() {
             </Link>
           </div>
         )}
-        {ehFinanceiro && naoLidas > 0 && pendentesParaMim.length === 0 && !local.pathname.startsWith('/solicitacoes') && (
+        {naoLidas > 0 && pendentesParaMim.length === 0 && !local.pathname.startsWith('/solicitacoes') && (
           <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-white px-4 py-2.5 text-[13px]">
             <span>
               Mensagem nova em {naoLidas} solicitaç

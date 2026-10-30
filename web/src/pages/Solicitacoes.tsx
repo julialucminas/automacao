@@ -285,7 +285,7 @@ function NovaSolicitacaoModal({
   const [pessoas, setPessoas] = useState<Pessoa[]>([]);
   const [para, setPara] = useState<number | ''>('');
   const [data, setData] = useState(hojeIso());
-  const [titulo, setTitulo] = useState('Nova fatura');
+  const [titulo, setTitulo] = useState('');
   const [cliente, setCliente] = useState('');
   const [texto, setTexto] = useState('');
   const [erro, setErro] = useState('');
@@ -308,11 +308,10 @@ function NovaSolicitacaoModal({
     e.preventDefault();
     if (para === '') return setErro('Escolha para quem é a solicitação.');
     if (!titulo.trim()) return setErro('Escreva o assunto.');
-    if (cliente.trim() && !clienteEscolhido) return setErro(`Cliente "${cliente}" não encontrado. Escolha da lista ou deixe em branco.`);
     setSalvando(true);
     try {
-      const s = await api.criarSolicitacao({ paraUsuario: para, data, clienteId: clienteEscolhido?.id ?? null, titulo: titulo.trim(), texto: texto.trim() });
-      setTitulo('Nova fatura');
+      const s = await api.criarSolicitacao({ paraUsuario: para, data, clienteId: clienteEscolhido?.id ?? null, clienteNome: clienteEscolhido ? undefined : cliente.trim(), titulo: titulo.trim(), texto: texto.trim() });
+      setTitulo('');
       setCliente('');
       setTexto('');
       setData(hojeIso());
@@ -352,13 +351,7 @@ function NovaSolicitacaoModal({
           <label htmlFor="sol-titulo" className="label">
             Assunto
           </label>
-          <input id="sol-titulo" value={titulo} onChange={(e) => setTitulo(e.target.value)} className="input" list="sol-assuntos" />
-          <datalist id="sol-assuntos">
-            <option value="Nova fatura" />
-            <option value="Fatura avulsa" />
-            <option value="Cancelar fatura" />
-            <option value="Conferir valores" />
-          </datalist>
+          <input id="sol-titulo" value={titulo} onChange={(e) => setTitulo(e.target.value)} className="input" placeholder="Ex.: Nova fatura" />
         </div>
         <div className="flex flex-col gap-1.5">
           <label htmlFor="sol-cliente" className="label">
