@@ -168,3 +168,21 @@ describe('planilha só de frotas', () => {
     expect(p[1].acao).toBe('novo');
   });
 });
+
+describe('planilha do faturamento: prazo e frotas sem perder os dados da locação', () => {
+  it('lê o prazo e atualiza o valor mantendo início, contrato, gás e frete', () => {
+    const l = lerPlanilha([
+      ['Nome no arquivo', 'Frotas', 'Prazo de pagamento'],
+      ['FENIX NOVUS', '35 = 3.350,00', '30 dias após emissão'],
+    ]);
+    expect(l.clientes[0].prazoPagamento).toBe('30 dias após emissão');
+    const existente = {
+      id: 'f', nome: 'FENIX NOVUS', apelidos: [], cnpj: '', para: ['a@f.com'], cc: [], observacoes: '', regra: 'dia', diaEmissao: null, inicioLocacao: null, periodoDias: null, ativo: true, atualizadoEm: '',
+      frotas: [{ numero: '35', valor: 0, descricao: 'Empilhadeira', inicio: '2026-10-20', contrato: '12 meses', gas: 1, frete: 'lucminas' }],
+    } as unknown as Cliente;
+    const [p] = proporImportacao(l, [existente], 'todos_para');
+    expect(p.acao).toBe('atualizar');
+    expect(p.input.prazoPagamento).toBe('30 dias após emissão');
+    expect(p.input.frotas).toEqual([{ numero: '35', valor: 335000, descricao: 'Empilhadeira', inicio: '2026-10-20', contrato: '12 meses', gas: 1, frete: 'lucminas' }]);
+  });
+});

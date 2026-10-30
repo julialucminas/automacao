@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState } from 'react';
+import { diferencas } from '../pages/Aprovacoes';
 import type { Cliente } from '../types';
 import { useEstado } from '../state';
 import { exportarCsv, lerCsv, lerPlanilha, modeloCsv, proporImportacao, type Celula, type Distribuicao, type Leitura } from '../lib/importacao';
@@ -212,6 +213,17 @@ export function useImportacao() {
                         </span>
                       ))}
                     </div>
+                    {p.acao === 'atualizar' && p.existente && (
+                      <ul className="flex flex-col gap-0.5 text-xs text-ink-2">
+                        {diferencas(p.existente, p.input)
+                          .filter((d) => d.rotulo !== 'Para' && d.rotulo !== 'Cópia (Cc)')
+                          .map((d) => (
+                            <li key={d.rotulo}>
+                              <span className="text-ink-3">{d.rotulo}:</span> <span className="line-through decoration-ink-3/50">{d.antes || '—'}</span> → <b>{d.depois || '—'}</b>
+                            </li>
+                          ))}
+                      </ul>
+                    )}
                     {p.lido.avisos.map((av) => (
                       <div key={av} className="flex items-start gap-1.5 text-xs text-warn-strong">
                         <IcAlerta tamanho={13} className="mt-px shrink-0" /> {av}

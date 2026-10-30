@@ -31,6 +31,8 @@ export type ClienteLido = {
   regra?: 'dia' | 'periodo';
   inicioLocacao?: string | null;
   periodoDias?: number | null;
+  /** "Vencimento dia 15", "28 dias"… (undefined = a planilha não informa) */
+  prazoPagamento?: string;
   avisos: string[];
 };
 
@@ -42,13 +44,14 @@ export type Leitura = {
   temColunaCopia: boolean;
 };
 
-type Coluna = 'nome' | 'apelidos' | 'cnpj' | 'para' | 'cc' | 'obs' | 'dia' | 'frotas' | 'inicio' | 'periodo';
+type Coluna = 'nome' | 'apelidos' | 'cnpj' | 'para' | 'cc' | 'obs' | 'dia' | 'frotas' | 'inicio' | 'periodo' | 'prazo';
 
 const PADROES: [Coluna, RegExp][] = [
   ['cc', /^(c[oó]pia|cc|com c[oó]pia)/],
   ['apelidos', /(outros nomes|apelido|tamb[eé]m aparece)/],
   ['cnpj', /cnpj/],
   ['obs', /observ|^obs/],
+  ['prazo', /(prazo|vencimento)/],
   ['dia', /(dia d[ae] emiss|emiss[aã]o|dia da fatura)/],
   ['frotas', /frota/],
   ['inicio', /in[ií]cio/],
@@ -141,7 +144,8 @@ export function lerPlanilha(linhas: Celula[][]): Leitura {
     const frotasTxt = cel(l, 'frotas');
     const inicioBruto = m.inicio === undefined ? '' : l[m.inicio];
     const periodoTxt = cel(l, 'periodo');
-    if (!nome && !para.length && !cc.length && !apelidos.length && !obs && !dia && !frotasTxt && !texto(inicioBruto) && !periodoTxt) continue;
+    const prazo = cel(l, 'prazo');
+    if (!nome && !para.length && !cc.length && !apelidos.length && !obs && !dia && !frotasTxt && !texto(inicioBruto) && !periodoTxt && !prazo) continue;
 
     if (nome) {
       const k = chaveEmpresa(nome);
@@ -192,6 +196,7 @@ export function lerPlanilha(linhas: Celula[][]): Leitura {
       c.avisos.push(...problemas.map((pr) => `Linha ${numLinha}: ${pr}`));
     }
     if (obs) c.observacoes = c.observacoes ? `${c.observacoes} ${obs}` : obs;
+    if (prazo) c.prazoPagamento = c.prazoPagamento && c.prazoPagamento !== prazo ? `${c.prazoPagamento}; ${prazo}` : prazo;
   }
 
   for (const c of ordem) {
@@ -280,6 +285,7 @@ export function proporImportacao(leitura: Leitura, clientes: Cliente[], dist: Di
           regra: lido.regra,
           inicioLocacao: lido.regra === 'periodo' ? lido.inicioLocacao : undefined,
           periodoDias: lido.regra === 'periodo' ? lido.periodoDias : undefined,
+          prazoPagamento: lido.prazoPagamento,
         },
       };
     }
@@ -290,12 +296,18 @@ export function proporImportacao(leitura: Leitura, clientes: Cliente[], dist: Di
     const novosApelidos = lido.apelidos.filter((a) => !existente.apelidos.includes(a) && chaveEmpresa(a) !== chaveEmpresa(existente.nome));
     const obsNova = lido.observacoes && !existente.observacoes.includes(lido.observacoes);
     const diaMuda = lido.diaEmissao !== undefined && lido.diaEmissao !== existente.diaEmissao;
-    const frotasMudam = lido.frotas !== undefined && JSON.stringify(lido.frotas) !== JSON.stringify(existente.frotas);
+    // frota que já existe mantém os dados da locação (início, contrato, gás, frete) e a descrição, se a planilha não trouxer
+    const frotas = lido.frotas?.map((f) => {
+      const atual = existente.frotas.find((x) => x.numero === f.numero);
+      return atual ? { ...atual, valor: f.valor || atual.valor, descricao: f.descricao || atual.descricao } : f;
+    });
+    const frotasMudam = frotas !== undefined && JSON.stringify(frotas) !== JSON.stringify(existente.frotas);
+    const prazoMuda = lido.prazoPagamento !== undefined && lido.prazoPagamento !== (existente.prazoPagamento ?? '');
     const regraMuda =
       lido.regra !== undefined &&
       (lido.regra !== existente.regra ||
         (lido.regra === 'periodo' && (lido.inicioLocacao !== existente.inicioLocacao || lido.periodoDias !== existente.periodoDias)));
-    const muda = novosPara.length || novosCc.length || novosApelidos.length || obsNova || (lido.cnpj && !existente.cnpj) || diaMuda || frotasMudam || regraMuda;
+    const muda = novosPara.length || novosCc.length || novosApelidos.length || obsNova || (lido.cnpj && !existente.cnpj) || diaMuda || frotasMudam || regraMuda || prazoMuda;
 
     return {
       lido,
@@ -312,10 +324,11 @@ export function proporImportacao(leitura: Leitura, clientes: Cliente[], dist: Di
         observacoes: obsNova ? [existente.observacoes, lido.observacoes].filter(Boolean).join(' ') : existente.observacoes,
         // a planilha manda no faturamento quando informa; se não informa, fica o que está cadastrado
         diaEmissao: lido.diaEmissao,
-        frotas: lido.frotas,
+        frotas,
         regra: lido.regra,
         inicioLocacao: lido.regra === 'periodo' ? lido.inicioLocacao : undefined,
         periodoDias: lido.regra === 'periodo' ? lido.periodoDias : undefined,
+        prazoPagamento: lido.prazoPagamento,
       },
     };
   });
