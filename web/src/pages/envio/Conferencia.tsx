@@ -116,7 +116,7 @@ export function Conferencia() {
           clienteId: cliente.id,
           assunto,
           corpo,
-          anexos: [item.fatura!, item.boleto!].map((a) => ({ nome: a.nome, blob: a.blob })),
+          anexos: [item.fatura, item.boleto].filter((a): a is NonNullable<typeof a> => !!a).map((a) => ({ nome: a.nome, blob: a.blob })),
           pediuLeitura,
           observacao: item.observacao,
           dataFaturamento: dataFaturamentoNoMes(cliente, lote.referencia),
@@ -331,7 +331,10 @@ export function Conferencia() {
           <b>{referenciaTitulo(lote.referencia)}</b>.
         </p>
         <ul className="flex list-disc flex-col gap-1 pl-[18px] text-ink-2">
-          <li>Cada e-mail sai de financeiro@lucminas.com.br, com a fatura e o boleto anexados.</li>
+          <li>
+            Cada e-mail sai de financeiro@lucminas.com.br, com a fatura e o boleto anexados
+            {aEnviar.some((i) => !i.boleto) ? ` (${aEnviar.filter((i) => !i.boleto).length} sem boleto: pagamento por outro meio)` : ''}.
+          </li>
           <li>Uma cópia de cada um fica na pasta Enviados.</li>
           <li>{pediuLeitura ? 'Com pedido de confirmação de leitura.' : 'Sem pedido de confirmação de leitura.'}</li>
           <li>Faturas com aviso não são enviadas.</li>
@@ -471,7 +474,13 @@ function Linha({
       </button>
       <div className="flex flex-col gap-0.5 font-mono text-[11.5px] text-ink-2">
         <span>{item.fatura?.nome ?? '— sem fatura —'}</span>
-        <span className={item.boleto ? '' : 'font-medium text-warn'}>{item.boleto?.nome ?? '— boleto não encontrado —'}</span>
+        {item.boleto ? (
+          <span>{item.boleto.nome}</span>
+        ) : st !== 'sem_boleto' && item.fatura ? (
+          <span className="font-sans text-info">sem boleto (outro pagamento)</span>
+        ) : (
+          <span className="font-medium text-warn">— boleto não encontrado —</span>
+        )}
       </div>
       <div className="min-w-0 text-[12.5px] text-ink-2">
         {cliente && cliente.para.length ? (

@@ -379,6 +379,7 @@ const OFICINA_DEMO: FrotaOficina[] = [];
 const CONFIG_DEMO = {
   'email.remetente': 'Financeiro · Lucminas Empilhadeiras',
   'email.assunto': 'Fatura de locação nº {numero} · Lucminas Empilhadeiras',
+  'email.corpoSemBoleto': 'Prezados,\n\nSegue em anexo a fatura de locação nº {numero}, referente a {mes}.\n\nAtenciosamente,\nFinanceiro · Lucminas Empilhadeiras',
   'email.corpo':
     'Prezados,\n\nSegue em anexo a fatura de locação nº {numero}, referente a {mes}, e o boleto para pagamento.\n\nEm caso de dúvida, é só responder este e-mail.\n\nAtenciosamente,\nFinanceiro · Lucminas Empilhadeiras',
 };

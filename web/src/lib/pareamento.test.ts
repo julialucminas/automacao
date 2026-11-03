@@ -167,3 +167,16 @@ describe('acrescentar arquivos a um lote aberto', () => {
     expect(r.lote.naoReconhecidos).toEqual([]);
   });
 });
+
+describe('fatura sem boleto (pagamento por outro meio)', () => {
+  const arq = (nome: string): ArquivoLido => ({ nome, caminho: nome, blob: new Blob(['%PDF']) });
+  const c = (semBoleto: boolean) => [{ id: 'p', nome: 'PIXLOG', apelidos: [], cnpj: '', para: ['a@p.com'], cc: [], observacoes: '', regra: 'dia', diaEmissao: 5, inicioLocacao: null, periodoDias: null, frotas: [], ativo: true, atualizadoEm: '', semBoleto }] as unknown as Cliente[];
+  it('marcado na fatura ou no cliente: fica pronta sem boleto', () => {
+    const [i] = parear([arq('1300 PIXLOG.pdf')], c(false)).itens;
+    expect(statusDoItem(i, c(false))).toBe('sem_boleto');
+    expect(statusDoItem({ ...i, semBoleto: true }, c(false))).toBe('pronto');
+    const [j] = parear([arq('1300 PIXLOG.pdf')], c(true)).itens;
+    expect(statusDoItem(j, c(true))).toBe('pronto');
+    expect(j.marcado).toBe(true);
+  });
+});

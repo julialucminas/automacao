@@ -31,7 +31,8 @@ export function PainelFatura({
   cadastrarNovo: (item: ItemLote) => void;
   anexar?: (item: ItemLote, tipo: 'boleto' | 'fatura') => void;
 }) {
-  const { clientes, atualizarItem, config, usuario, envioAtivo, avisar } = useEstado();
+  const { clientes, atualizarItem, config, usuario, envioAtivo, avisar, salvarCliente } = useEstado();
+  const [sempre, setSempre] = useState(false);
   const [testando, setTestando] = useState(false);
 
   if (!item) {
@@ -64,9 +65,46 @@ export function PainelFatura({
       {st === 'sem_boleto' && (
         <div className="rounded-[10px] bg-warn-soft px-3.5 py-3 text-[13px] text-warn-strong">
           Não encontrei o arquivo <b className="font-mono">BOLETO {item.numero}.PDF</b> na pasta. Confira se o boleto foi gerado e salvo com esse nome. Esta fatura fica fora do envio até o boleto aparecer.
-          {anexar && (
-            <button type="button" className="btn-primary btn-sm mt-2.5" onClick={() => anexar(item, 'boleto')}>
-              <IcMais tamanho={14} /> Anexar o boleto
+          <div className="mt-2.5 flex flex-wrap gap-2">
+            {anexar && (
+              <button type="button" className="btn-primary btn-sm" onClick={() => anexar(item, 'boleto')}>
+                <IcMais tamanho={14} /> Anexar o boleto
+              </button>
+            )}
+            <button
+              type="button"
+              className="btn-secondary btn-sm"
+              onClick={async () => {
+                atualizarItem(chaveItem(item), (i) => ({ ...i, semBoleto: true, marcado: true }));
+                if (sempre && cliente) {
+                  try {
+                    await salvarCliente({ ...cliente, semBoleto: true });
+                    avisar(`${cliente.nome} marcado como "paga sem boleto". Nos próximos lotes as faturas dele já vão só com a fatura.`);
+                  } catch (e) {
+                    avisar(e instanceof Error ? e.message : 'Não foi possível salvar no cadastro.', 'bad');
+                  }
+                } else avisar(`Fatura ${item.numero} vai sem boleto.`);
+              }}
+            >
+              Esta fatura não tem boleto
+            </button>
+          </div>
+          {cliente && (
+            <label className="mt-2 flex items-center gap-2 text-[12.5px] text-ink-2">
+              <input type="checkbox" checked={sempre} onChange={(e) => setSempre(e.target.checked)} className="h-[16px] w-[16px] accent-ink" />
+              Sempre para {cliente.nome} (paga por PIX, depósito…)
+            </label>
+          )}
+        </div>
+      )}
+      {st !== 'sem_boleto' && st !== 'enviado' && item.fatura && !item.boleto && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-[10px] bg-info-soft px-3.5 py-2.5 text-[13px] text-info">
+          <span>
+            <b>Vai sem boleto</b> (pagamento por outro meio){!item.semBoleto && cliente?.semBoleto ? ': marcado no cadastro do cliente' : ''}. O e-mail usa o texto sem boleto.
+          </span>
+          {item.semBoleto && (
+            <button type="button" className="btn-secondary btn-sm" onClick={() => atualizarItem(chaveItem(item), (i) => ({ ...i, semBoleto: false, marcado: false }))}>
+              Desfazer
             </button>
           )}
         </div>
@@ -146,7 +184,7 @@ export function PainelFatura({
             </div>
           </div>
 
-          {item.fatura && item.boleto && (
+          {item.fatura && (item.boleto || st !== 'sem_boleto') && (
             <div className="flex flex-wrap items-center justify-between gap-2 rounded-[10px] border border-dashed border-line-strong px-3.5 py-2.5 text-[13px]">
               <span className="text-ink-2">
                 Ver como chega? Manda esta fatura só para <b>{usuario?.email}</b>.
@@ -165,7 +203,7 @@ export function PainelFatura({
                       clienteId: cliente.id,
                       assunto: email.assunto,
                       corpo: email.corpo,
-                      anexos: [item.fatura!, item.boleto!].map((a) => ({ nome: a.nome, blob: a.blob })),
+                      anexos: [item.fatura, item.boleto].filter((a): a is NonNullable<typeof a> => !!a).map((a) => ({ nome: a.nome, blob: a.blob })),
                       pediuLeitura: false,
                       observacao: '',
                     });

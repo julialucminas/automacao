@@ -92,13 +92,16 @@ export const CONFIG_PADRAO: Record<string, string> = {
   'email.assunto': 'Fatura de locação nº {numero} · Lucminas Empilhadeiras',
   'email.corpo':
     'Prezados,\n\nSegue em anexo a fatura de locação nº {numero}, referente a {mes}, e o boleto para pagamento.\n\nEm caso de dúvida, é só responder este e-mail.\n\nAtenciosamente,\nFinanceiro · Lucminas Empilhadeiras',
+  // quando a fatura vai sem boleto (cliente paga por PIX, depósito…)
+  'email.corpoSemBoleto':
+    'Prezados,\n\nSegue em anexo a fatura de locação nº {numero}, referente a {mes}.\n\nEm caso de dúvida, é só responder este e-mail.\n\nAtenciosamente,\nFinanceiro · Lucminas Empilhadeiras',
 };
 
 const agora = () => new Date().toISOString();
 const NOMES_TIPO: Record<TipoMov, string> = { locacao: 'Nova locação', devolucao: 'Devolução', troca: 'Troca de frota' };
 const brl = (c: number) => (c / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
-const CAMPOS_CLIENTE = ['nome', 'apelidos', 'cnpj', 'para', 'cc', 'observacoes', 'diaEmissao', 'regra', 'inicioLocacao', 'periodoDias', 'contato', 'telefone', 'prazoPagamento'] as const;
+const CAMPOS_CLIENTE = ['nome', 'apelidos', 'cnpj', 'para', 'cc', 'observacoes', 'diaEmissao', 'regra', 'inicioLocacao', 'periodoDias', 'contato', 'telefone', 'prazoPagamento', 'semBoleto'] as const;
 const igual = (a: unknown, b: unknown) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
 
 /**

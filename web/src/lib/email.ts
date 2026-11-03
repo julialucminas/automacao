@@ -31,6 +31,11 @@ export const MODELO_PADRAO: ConfigEmail = {
     'Segue em anexo a fatura de locação nº {numero}, referente a {mes}, e o boleto para pagamento.\n\n' +
     'Em caso de dúvida, é só responder este e-mail.\n\n' +
     `Atenciosamente,\nFinanceiro · ${EMPRESA}`,
+  'email.corpoSemBoleto':
+    'Prezados,\n\n' +
+    'Segue em anexo a fatura de locação nº {numero}, referente a {mes}.\n\n' +
+    'Em caso de dúvida, é só responder este e-mail.\n\n' +
+    `Atenciosamente,\nFinanceiro · ${EMPRESA}`,
 };
 
 export const VARIAVEIS = [
@@ -46,9 +51,11 @@ export function preencher(modelo: string, v: { numero: string; cliente: string; 
 }
 
 export function montarEmail(item: ItemLote, cliente: Cliente, referencia: string, modelo: ConfigEmail | null = null) {
-  const m = modelo ?? MODELO_PADRAO;
+  const m = { ...MODELO_PADRAO, ...(modelo ?? {}) };
+  // sem boleto (pagamento por outro meio): usa o texto que não fala de boleto
+  const corpo = item.boleto ? m['email.corpo'] : m['email.corpoSemBoleto'];
   const v = { numero: item.numero, cliente: cliente.nome, mes: referenciaPorExtenso(referencia), frotas: cliente.frotas.map((f) => f.numero).join(', ') };
-  return { assunto: preencher(m['email.assunto'], v), corpo: preencher(m['email.corpo'], v), remetente: m['email.remetente'] };
+  return { assunto: preencher(m['email.assunto'], v), corpo: preencher(corpo, v), remetente: m['email.remetente'] };
 }
 
 export function dataHora(iso: string): string {

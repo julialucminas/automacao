@@ -24,11 +24,12 @@ export type Rascunho = {
   contato: string;
   telefone: string;
   prazoPagamento: string;
+  semBoleto: boolean;
   /** frotas com o valor como texto do campo, para permitir digitar à vontade; extra = dados da locação (vêm das movimentações) */
   frotas: { numero: string; valor: string; descricao: string; extra?: Pick<Frota, 'inicio' | 'fim' | 'contrato' | 'gas' | 'frete'> }[];
 };
 
-export const rascunhoVazio = (nome = ''): Rascunho => ({ nome, apelidos: '', cnpj: '', para: [], cc: [], observacoes: '', regra: 'dia', dia: '', inicio: '', periodo: '', contato: '', telefone: '', prazoPagamento: '', frotas: [] });
+export const rascunhoVazio = (nome = ''): Rascunho => ({ nome, apelidos: '', cnpj: '', para: [], cc: [], observacoes: '', regra: 'dia', dia: '', inicio: '', periodo: '', contato: '', telefone: '', prazoPagamento: '', semBoleto: false, frotas: [] });
 
 export const rascunhoDe = (c: Cliente): Rascunho => ({
   id: c.id,
@@ -46,6 +47,7 @@ export const rascunhoDe = (c: Cliente): Rascunho => ({
   contato: c.contato ?? '',
   telefone: c.telefone ?? '',
   prazoPagamento: c.prazoPagamento ?? '',
+  semBoleto: !!c.semBoleto,
   frotas: c.frotas.map((f) => ({
     numero: f.numero,
     valor: f.valor ? reaisParaCampo(f.valor) : '',
@@ -219,6 +221,7 @@ function Formulario({ inicial, fechar, aoSalvar }: { inicial: Rascunho; fechar: 
       contato: d.contato.trim(),
       telefone: d.telefone.trim(),
       prazoPagamento: d.prazoPagamento.trim(),
+      semBoleto: d.semBoleto,
     };
     setSalvando(true);
     try {
@@ -284,6 +287,13 @@ function Formulario({ inicial, fechar, aoSalvar }: { inicial: Rascunho; fechar: 
           </label>
           <input id="cad-prazo" className="input" value={d.prazoPagamento} onChange={(e) => setD({ ...d, prazoPagamento: e.target.value })} placeholder="Ex.: 30 dias após emissão da fatura" />
         </div>
+        <label className="flex items-start gap-2.5 text-[13px] sm:col-span-2">
+          <input type="checkbox" checked={d.semBoleto} onChange={(e) => setD({ ...d, semBoleto: e.target.checked })} className="mt-0.5 h-[18px] w-[18px] accent-ink" />
+          <span>
+            <b>Paga sem boleto</b> (PIX, depósito, transferência…)
+            <span className="block text-xs text-ink-3">No envio do mês, as faturas deste cliente vão só com a fatura, sem cobrar o boleto.</span>
+          </span>
+        </label>
       </div>
 
       <Faturamento d={d} setD={setD} />

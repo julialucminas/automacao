@@ -16,6 +16,8 @@ export type Cliente = {
   contato?: string;
   telefone?: string;
   prazoPagamento?: string;
+  /** paga por outro meio (PIX, depósito…): a fatura vai sem boleto */
+  semBoleto?: boolean;
   /** Nome como aparece no arquivo da fatura (MAIÚSCULO). */
   nome: string;
   /** Outros nomes que podem aparecer nos arquivos. */
@@ -41,6 +43,8 @@ export type ClienteInput = Omit<Cliente, 'id' | 'atualizadoEm' | 'ativo' | 'diaE
   contato?: string;
   telefone?: string;
   prazoPagamento?: string;
+  /** paga por outro meio (PIX, depósito…): a fatura vai sem boleto */
+  semBoleto?: boolean;
 };
 
 /** Faturamento marcado no calendário (cliente + data prevista). */
@@ -77,6 +81,8 @@ export type ItemLote = {
   marcado: boolean;
   enviado: boolean;
   observacao: string;
+  /** marcado na conferência: esta fatura vai sem boleto (pagamento por outro meio) */
+  semBoleto?: boolean;
 };
 
 export type Lote = {
@@ -203,7 +209,7 @@ export type Proposta = {
   resultado: ClienteInput;
 };
 export type ItemLog = { id: number; quando: string; usuario: string; area: string; acao: string; clienteId: string; clienteNome: string; antes: unknown; depois: unknown };
-export type ConfigEmail = Record<'email.remetente' | 'email.assunto' | 'email.corpo', string>;
+export type ConfigEmail = Record<'email.remetente' | 'email.assunto' | 'email.corpo' | 'email.corpoSemBoleto', string>;
 
 export type Conferencia = {
   referencia: string;

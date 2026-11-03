@@ -62,6 +62,19 @@ export function Configuracoes() {
             </label>
             <textarea id="cfg-corpo" rows={11} disabled={!ehFinanceiro} className="input resize-y py-2.5 text-[13.5px] leading-relaxed" value={c['email.corpo']} onChange={(e) => setC({ ...c, 'email.corpo': e.target.value })} />
           </div>
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="cfg-corpo-sem" className="label">
+              Texto do e-mail quando a fatura vai sem boleto <span className="font-normal text-ink-3">(pagamento por PIX, depósito…)</span>
+            </label>
+            <textarea
+              id="cfg-corpo-sem"
+              rows={8}
+              disabled={!ehFinanceiro}
+              className="input resize-y py-2.5 text-[13.5px] leading-relaxed"
+              value={c['email.corpoSemBoleto'] ?? MODELO_PADRAO['email.corpoSemBoleto']}
+              onChange={(e) => setC({ ...c, 'email.corpoSemBoleto': e.target.value })}
+            />
+          </div>
           <div className="rounded-[10px] bg-[#F8F7F3] p-3 text-[13px]">
             <div className="mb-1 font-semibold">Campos que o sistema preenche sozinho</div>
             <ul className="flex flex-col gap-0.5">

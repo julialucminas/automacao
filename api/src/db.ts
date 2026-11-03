@@ -27,6 +27,8 @@ export type Cliente = {
   contato: string;
   telefone: string;
   prazoPagamento: string;
+  /** paga por outro meio (PIX, depósito…): a fatura vai sem boleto */
+  semBoleto: boolean;
   nome: string;
   apelidos: string[];
   cnpj: string;
@@ -39,7 +41,7 @@ export type Cliente = {
 };
 
 /** diaEmissao/frotas ausentes = manter como está (ou vazio, se for cliente novo). */
-export type ClienteInput = Omit<Cliente, 'id' | 'ativo' | 'criadoEm' | 'atualizadoEm' | 'diaEmissao' | 'frotas' | 'regra' | 'inicioLocacao' | 'periodoDias' | 'contato' | 'telefone' | 'prazoPagamento'> & {
+export type ClienteInput = Omit<Cliente, 'id' | 'ativo' | 'criadoEm' | 'atualizadoEm' | 'diaEmissao' | 'frotas' | 'regra' | 'inicioLocacao' | 'periodoDias' | 'contato' | 'telefone' | 'prazoPagamento' | 'semBoleto'> & {
   id?: string;
   diaEmissao?: number | null;
   frotas?: Frota[];
@@ -49,6 +51,7 @@ export type ClienteInput = Omit<Cliente, 'id' | 'ativo' | 'criadoEm' | 'atualiza
   contato?: string;
   telefone?: string;
   prazoPagamento?: string;
+  semBoleto?: boolean;
 };
 
 export type Faturamento = { clienteId: string; data: string; marcadoEm: string; marcadoPor: string; origem: 'manual' | 'envio' };
@@ -274,6 +277,8 @@ const MIGRACOES = [
      observacao TEXT NOT NULL DEFAULT '',
      usuario_id INTEGER REFERENCES usuarios(id)
    );`,
+  // 12: cliente que paga sem boleto
+  `ALTER TABLE clientes ADD COLUMN sem_boleto INTEGER NOT NULL DEFAULT 0;`,
 ];
 
 export function abrirBanco(caminho: string) {
@@ -308,6 +313,7 @@ type LinhaCliente = {
   contato: string;
   telefone: string;
   prazo_pagamento: string;
+  sem_boleto: number;
   nome: string;
   apelidos: string;
   cnpj: string;
@@ -328,6 +334,7 @@ const deLinhaCliente = (r: LinhaCliente): Cliente => ({
   contato: r.contato ?? '',
   telefone: r.telefone ?? '',
   prazoPagamento: r.prazo_pagamento ?? '',
+  semBoleto: !!r.sem_boleto,
   frotas: JSON.parse(r.frotas),
   nome: r.nome,
   apelidos: lista(r.apelidos),
@@ -432,7 +439,7 @@ export function repositorio(db: Banco) {
           const antes = buscarCliente(input.id);
           db.prepare(
             `UPDATE clientes SET nome = ?, apelidos = ?, cnpj = ?, para = ?, cc = ?, observacoes = ?, dia_emissao = ?, frotas = ?,
-               regra = ?, inicio_locacao = ?, periodo_dias = ?, contato = ?, telefone = ?, prazo_pagamento = ?, atualizado_em = ?, atualizado_por = ?
+               regra = ?, inicio_locacao = ?, periodo_dias = ?, contato = ?, telefone = ?, prazo_pagamento = ?, sem_boleto = ?, atualizado_em = ?, atualizado_por = ?
              WHERE id = ?`,
           ).run(
             input.nome,
@@ -449,6 +456,7 @@ export function repositorio(db: Banco) {
             input.contato ?? antes.contato,
             input.telefone ?? antes.telefone,
             input.prazoPagamento ?? antes.prazoPagamento,
+            (input.semBoleto ?? antes.semBoleto) ? 1 : 0,
             t,
             usuarioId,
             input.id,
@@ -460,8 +468,8 @@ export function repositorio(db: Banco) {
         const id = randomUUID();
         db.prepare(
           `INSERT INTO clientes (id, nome, apelidos, cnpj, para, cc, observacoes, dia_emissao, frotas, regra, inicio_locacao, periodo_dias,
-             contato, telefone, prazo_pagamento, criado_em, atualizado_em, atualizado_por)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+             contato, telefone, prazo_pagamento, sem_boleto, criado_em, atualizado_em, atualizado_por)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         ).run(
           id,
           input.nome,
@@ -478,6 +486,7 @@ export function repositorio(db: Banco) {
           input.contato ?? '',
           input.telefone ?? '',
           input.prazoPagamento ?? '',
+          input.semBoleto ? 1 : 0,
           t,
           t,
           usuarioId,

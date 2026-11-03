@@ -125,6 +125,7 @@ export function lerCliente(corpo: unknown, id?: string): ClienteInput {
     contato: b.contato === undefined ? undefined : texto(b.contato, 'contato', 120),
     telefone: b.telefone === undefined ? undefined : texto(b.telefone, 'telefone', 40),
     prazoPagamento: b.prazoPagamento === undefined ? undefined : texto(b.prazoPagamento, 'prazo de pagamento', 100),
+    semBoleto: b.semBoleto === undefined ? undefined : b.semBoleto === true,
   };
 }
 

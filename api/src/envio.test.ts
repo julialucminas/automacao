@@ -167,4 +167,19 @@ describe('envio de verdade', () => {
     expect((await req('POST', `/api/envios/${e.id}/copiar`)).json().copiaEmEnviados).toBe(true);
     expect(guardados).toBe(antes + 1);
   });
+
+  it('fatura sem boleto: vai só com a fatura; cliente pode ficar marcado como "sem boleto"', async () => {
+    salvarConta(pasta, 'financeiro@lucminas.com.br', 'segredo');
+    const c = (await req('POST', '/api/clientes', { nome: 'PIXLOG', para: ['fin@pix.com'], semBoleto: true })).json();
+    expect(c.semBoleto).toBe(true);
+    const e = (await req('POST', '/api/envios', pedido(c.id, { anexos: [{ nome: '1234 PIXLOG.PDF', base64: pdf('FATURA') }] }))).json();
+    expect(e).toMatchObject({ status: 'enviado', anexos: ['1234 PIXLOG.PDF'] });
+    // editar sem mandar o campo mantém a marca
+    const atual = (await req('GET', '/api/clientes')).json().find((x: { id: string }) => x.id === c.id);
+    const { semBoleto: _, ...semCampo } = atual;
+    await req('PUT', `/api/clientes/${c.id}`, { ...semCampo, observacoes: 'paga por PIX' });
+    expect((await req('GET', '/api/clientes')).json().find((x: { id: string }) => x.id === c.id).semBoleto).toBe(true);
+    const cfg = (await req('GET', '/api/config')).json();
+    expect(cfg['email.corpoSemBoleto']).toMatch(/fatura de locação nº \{numero\}, referente a \{mes\}\./);
+  });
 });

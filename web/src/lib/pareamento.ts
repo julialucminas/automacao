@@ -111,7 +111,7 @@ export function statusDoItem(i: ItemLote, clientes?: Cliente[]): StatusItem {
   if (i.enviado) return 'enviado';
   if (!i.fatura) return 'boleto_sem_fatura';
   if (i.duplicado) return 'numero_duplicado';
-  if (!i.boleto) return 'sem_boleto';
+  if (!i.boleto && !i.semBoleto && !(i.clienteId && clientes?.find((c) => c.id === i.clienteId)?.semBoleto)) return 'sem_boleto';
   if (!i.clienteId) return 'sem_cadastro';
   if (clientes && !(clientes.find((c) => c.id === i.clienteId)?.para.length)) return 'sem_email';
   return 'pronto';
@@ -208,6 +208,7 @@ export function acrescentarAoLote(lote: Lote, novos: ArquivoLido[], clientes: Cl
       ...n,
       enviado: a.enviado,
       observacao: a.observacao,
+      semBoleto: a.semBoleto,
       clienteId: a.vinculo === 'manual' ? a.clienteId : n.clienteId,
       vinculo: a.vinculo === 'manual' ? 'manual' : n.vinculo,
     };
