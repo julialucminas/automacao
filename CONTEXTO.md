@@ -83,8 +83,7 @@ Menu lateral com 6 grupos (Início, Operação, Frota, Financeiro, Clientes, Adm
 `/inicio` (cartões conforme o perfil) e busca no topo (`components/BuscaGeral.tsx`; as telas leem `?busca=`).
 
 ## Próximo passo (nov/2026)
-Fases 1 (navegação e permissões), 2 (equipamentos + importação) e 3 (painel de manutenção) feitas. Próximas: (3 era o painel de manutenção (aba Programação; tipos CF 30 dias,
-CR corretiva, B 350 h, C 500 h, D 1000 h, editáveis em Configurações), 4 app do dono (busca "motor de partida
+Fases 1 (navegação e permissões), 2 (equipamentos + importação) e 3 (painel de manutenção) feitas. Próximas: 4 app do dono (busca "motor de partida
 frota 40"), 5 ordens de serviço no celular dos técnicos (offline), 6 serviços externos (só etapas, sem automação).
 Sem integração com o Auvo. A planilha real do Júnior NÃO vai para o repositório. Requisitos levantados com base em Auvo,
 Produttivo, Field Control e softwares de locação — ver documento de requisitos.
