@@ -62,13 +62,20 @@ Envio do mês (lote de PDFs → e-mail), Calendário (faturas + fim de locação
 relatório PDF, Excel), Clientes, Solicitações, Movimentações (locação/troca/devolução), Conferência
 (mensal de frotas), Aprovações, Histórico (envios, leitura, devolução), Registro, Configurações (texto do e-mail).
 
+## Equipamentos (fase 2, nov/2026)
+Tabela `equipamentos` (ficha em JSON por frota, campos em `api/src/equipamentos.ts`) e `historico_pecas`
+(Auvo; importar de novo substitui a origem 'auvo'). Locação continua em `clientes.frotas`; a situação
+(locada/oficina/disponível/reservada/baixada) é calculada em `web/src/lib/equipamentos.ts`.
+Importação do Quadro Geral pela tela (`components/ImportarQuadro.tsx` + `lib/quadroGeral.ts`); o leitor
+`lib/xlsxLeve.ts` existe porque a aba do Auvo declara 16 mil colunas e trava o read-excel-file.
+Na Programação, "DUDU" = Eduardo DLuca e "EDUARDO" = Eduardo Silva; no Auvo, "Eduardo" fica como está (não dá para saber).
+
 ## Navegação
 Menu lateral com 6 grupos (Início, Operação, Frota, Financeiro, Clientes, Administração), Painel do dia em
 `/inicio` (cartões conforme o perfil) e busca no topo (`components/BuscaGeral.tsx`; as telas leem `?busca=`).
 
 ## Próximo passo (nov/2026)
-Fase 1 (navegação e permissões) feita. Próximas: 2 equipamentos (importar Quadro Geral Manutenção: relação
-de frota, valor frota, contratos, histórico Auvo), 3 painel de manutenção (aba Programação; tipos CF 30 dias,
+Fases 1 (navegação e permissões) e 2 (equipamentos + importação do Quadro Geral) feitas. Próximas: 3 painel de manutenção (aba Programação; tipos CF 30 dias,
 CR corretiva, B 350 h, C 500 h, D 1000 h, editáveis em Configurações), 4 app do dono (busca "motor de partida
 frota 40"), 5 ordens de serviço no celular dos técnicos (offline), 6 serviços externos (só etapas, sem automação).
 Sem integração com o Auvo. A planilha real do Júnior NÃO vai para o repositório. Requisitos levantados com base em Auvo,

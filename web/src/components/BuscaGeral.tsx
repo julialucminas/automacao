@@ -1,4 +1,6 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { api } from '../api';
+import type { Equipamento } from '../types';
 import { useNavigate } from 'react-router-dom';
 import { useEstado } from '../state';
 import { chaveEmpresa, semAcento } from '../lib/normalizar';
@@ -17,8 +19,25 @@ const numeroDeFrota = (q: string) =>
  * Busca do topo: cliente, frota, solicitação ou fatura enviada, de qualquer tela.
  * Só procura no que o perfil da pessoa pode ver.
  */
+/** fichas dos equipamentos: carregadas quando a pessoa começa a buscar (máquinas paradas também aparecem) */
+let fichasEmCache: Equipamento[] = [];
+let carregadasEm = 0;
+
 export function useBusca(q: string): Resultado[] {
   const { clientes, oficina, solicitacoes, envios, pode } = useEstado();
+  const [fichas, setFichas] = useState<Equipamento[]>(fichasEmCache);
+  const buscando = q.trim().length >= 2;
+  useEffect(() => {
+    if (!buscando || !pode('frotas') || Date.now() - carregadasEm < 60_000) return;
+    carregadasEm = Date.now();
+    api.listarEquipamentos().then(
+      (l) => {
+        fichasEmCache = l;
+        setFichas(l);
+      },
+      () => undefined,
+    );
+  }, [buscando, pode]);
   return useMemo(() => {
     const texto = q.trim();
     if (texto.length < 2) return [];
@@ -40,9 +59,25 @@ export function useBusca(q: string): Resultado[] {
               rota: `/equipamentos?busca=${encodeURIComponent(f.numero)}`,
             });
           }
+      for (const f of fichas)
+        if (!vistas.has(f.frota) && (f.frota === num || (num.length >= 2 && f.frota.startsWith(num)))) {
+          vistas.add(f.frota);
+          const nome = [f.marca, f.modelo].filter(Boolean).join(' ') || f.descricao || '';
+          r.push({
+            tipo: 'Frota',
+            titulo: `FT${f.frota}`,
+            detalhe: `${f.situacao === 'baixada' ? 'baixada' : 'sem cliente'}${nome ? ` · ${nome}` : ''}`,
+            rota: `/equipamentos?busca=${encodeURIComponent(f.frota)}`,
+          });
+        }
       for (const o of oficina)
         if (!vistas.has(o.frota) && o.frota === num)
-          r.push({ tipo: 'Frota', titulo: `FT${o.frota}`, detalhe: `na oficina${o.observacao ? ` · ${o.observacao}` : ''}`, rota: `/equipamentos?busca=${encodeURIComponent(o.frota)}` });
+          r.push({
+            tipo: 'Frota',
+            titulo: `FT${o.frota}`,
+            detalhe: `na oficina${o.observacao ? ` · ${o.observacao}` : ''}`,
+            rota: `/equipamentos?busca=${encodeURIComponent(o.frota)}`,
+          });
     }
     if (pode('clientes') || pode('frotas')) {
       for (const c of clientes) {
@@ -74,8 +109,10 @@ export function useBusca(q: string): Resultado[] {
             detalhe: `${e.clienteNome} · ${e.referencia.slice(5)}/${e.referencia.slice(0, 4)}`,
             rota: `/historico?busca=${e.numero}`,
           });
+    // a frota com o número exato vem primeiro
+    r.sort((a, b) => Number(b.titulo === `FT${num}`) - Number(a.titulo === `FT${num}`));
     return r.slice(0, 8);
-  }, [q, clientes, oficina, solicitacoes, envios, pode]);
+  }, [q, clientes, oficina, solicitacoes, envios, pode, fichas]);
 }
 
 export function BuscaGeral() {

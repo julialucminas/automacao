@@ -52,6 +52,8 @@ export function Equipamentos() {
     ).toUpperCase();
     return q.split(/\s+/).every((p) => alvo.includes(p)) || (!!l.cliente && chaveEmpresa(l.cliente.nome).includes(chaveEmpresa(busca)));
   });
+  // quem digitou o número exato da frota quer ela primeiro
+  if (qFrota) lista.sort((a, b) => Number(b.frota === qFrota) - Number(a.frota === qFrota));
   const linhaAberta = linhas.find((l) => l.frota === aberta) ?? null;
 
   return (
