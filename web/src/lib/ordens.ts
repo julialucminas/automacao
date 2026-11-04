@@ -1,4 +1,4 @@
-import type { Ordem, StatusOS, TipoOS } from '../types';
+import type { CampoModelo, Ordem, RespostaCampo, StatusOS, TipoCampo, TipoOS } from '../types';
 import { dataBr } from './calendario';
 import { carregarImagem } from './relatorioLocacoes';
 
@@ -23,7 +23,52 @@ export const STATUS_OS: Record<StatusOS, { rotulo: string; tom: 'ok' | 'warn' | 
 
 export const RESPOSTAS = { ok: 'OK', problema: 'Problema', na: 'Não se aplica' } as const;
 
+/** Tipos de pergunta que dá para pôr num modelo de OS. */
+export const TIPOS_CAMPO: Record<TipoCampo, { rotulo: string; dica: string }> = {
+  secao: { rotulo: 'Título de seção', dica: 'Separa o formulário em partes (ex.: Motor, Hidráulico)' },
+  checklist: { rotulo: 'Item de checklist', dica: 'OK / Problema / Não tem, com observação' },
+  simnao: { rotulo: 'Sim ou não', dica: '' },
+  texto: { rotulo: 'Texto curto', dica: '' },
+  textoLongo: { rotulo: 'Texto longo', dica: '' },
+  numero: { rotulo: 'Número', dica: 'Pode ter unidade (V, bar, h…)' },
+  opcoes: { rotulo: 'Lista (escolhe uma)', dica: '' },
+  multipla: { rotulo: 'Lista (marca várias)', dica: '' },
+  data: { rotulo: 'Data', dica: '' },
+  foto: { rotulo: 'Foto', dica: 'O técnico tira a foto nesta pergunta' },
+};
+
+/** Pergunta respondida? (fotos ainda subindo contam) */
+export const respondido = (r: RespostaCampo | undefined) => !(r === undefined || r === null || r === '' || (Array.isArray(r) && r.length === 0));
+
+/** A resposta em texto, para a tela do escritório e o PDF. */
+export function textoResposta(c: CampoModelo, r: RespostaCampo | undefined): string {
+  if (!respondido(r)) return '—';
+  if (c.tipo === 'checklist' && r && typeof r === 'object' && !Array.isArray(r)) return `${RESPOSTAS[r.resposta]}${r.obs ? ` · ${r.obs}` : ''}`;
+  if (c.tipo === 'simnao') return r ? 'Sim' : 'Não';
+  if (c.tipo === 'numero') return `${String(r).replace('.', ',')}${c.unidade ? ` ${c.unidade}` : ''}`;
+  if (c.tipo === 'data') return dataBr(String(r));
+  if (c.tipo === 'foto') return `${(r as string[]).length} foto${(r as string[]).length > 1 ? 's' : ''}`;
+  if (Array.isArray(r)) return r.join(', ');
+  return String(r);
+}
+
+/** Nome do tipo da OS: o modelo usado, ou o tipo antigo. */
+export const nomeTipoOS = (o: Ordem) => o.execucao.formulario?.nome ?? TIPOS_OS[o.tipo].split(' (')[0];
+
+/** Todas as fotos da OS: as gerais e as tiradas nas perguntas. */
+export const fotosDaOS = (o: Ordem) => [...(o.execucao.fotos ?? []), ...Object.values(o.execucao.respostas ?? {}).flatMap((v) => (Array.isArray(v) ? v : []))];
+
 export const progressoChecklist = (o: Ordem) => {
+  const f = o.execucao.formulario;
+  if (f) {
+    const rs = o.execucao.respostas ?? {};
+    const campos = f.campos.filter((c) => c.tipo !== 'secao');
+    return {
+      feitos: campos.filter((c) => respondido(rs[c.id])).length,
+      total: campos.length,
+      problemas: campos.filter((c) => c.tipo === 'checklist' && (rs[c.id] as { resposta?: string } | null)?.resposta === 'problema').length,
+    };
+  }
   const l = o.execucao.checklist ?? [];
   return { feitos: l.filter((c) => c.resposta).length, total: l.length, problemas: l.filter((c) => c.resposta === 'problema').length };
 };
@@ -31,13 +76,23 @@ export const progressoChecklist = (o: Ordem) => {
 /** O que ainda falta para o técnico poder concluir (o servidor confere de novo). */
 export function faltaParaConcluir(o: Ordem): string[] {
   const ex = o.execucao;
+  const fm = ex.formulario;
   const f: string[] = [];
   if (!ex.checkin) f.push('check-in');
-  if (o.tipo !== 'externo' && (ex.horimetro === undefined || ex.horimetro === null)) f.push('horímetro');
-  const p = progressoChecklist(o);
-  if (p.feitos < p.total) f.push(`checklist (${p.total - p.feitos})`);
+  const exigeHorimetro = fm ? fm.exigeHorimetro : o.tipo !== 'externo';
+  if (exigeHorimetro && (ex.horimetro === undefined || ex.horimetro === null)) f.push('horímetro');
+  if (fm) {
+    const sem = fm.campos.filter((c) => c.obrigatorio && c.tipo !== 'secao' && !respondido(ex.respostas?.[c.id]));
+    if (sem.length) f.push(sem.length > 2 ? `${sem.length} perguntas obrigatórias` : sem.map((c) => c.rotulo).join(', '));
+    const n = fotosDaOS(o).length;
+    if (n < fm.fotosMinimas) f.push(`${fm.fotosMinimas - n} foto${fm.fotosMinimas - n > 1 ? 's' : ''}`);
+  } else {
+    const p = progressoChecklist(o);
+    if (p.feitos < p.total) f.push(`checklist (${p.total - p.feitos})`);
+  }
   if (!ex.servico?.trim()) f.push('o que foi feito');
-  if (!ex.assinatura && !ex.semAssinatura?.trim()) f.push('assinatura');
+  const exigeAssinatura = fm ? fm.exigeAssinatura : true;
+  if (exigeAssinatura && !ex.assinatura && !ex.semAssinatura?.trim()) f.push('assinatura');
   return f;
 }
 
@@ -71,7 +126,7 @@ export async function gerarPdfOS(o: Ordem, extra: { equipamento: string; serie?:
     .setFont('helvetica', 'normal')
     .setFontSize(9.5)
     .setTextColor(...CINZA)
-    .text(`${TIPOS_OS[o.tipo]}${o.tipoVisita ? ` · ${o.tipoVisita}` : ''}`, L - M, 20.5, { align: 'right' });
+    .text(`${nomeTipoOS(o)}${o.tipoVisita ? ` · ${o.tipoVisita}` : ''}`, L - M, 20.5, { align: 'right' });
   doc.setFillColor(...AMARELO).rect(M, 25, L - 2 * M, 1.4, 'F');
 
   const dados: [string, string][] = [
@@ -128,6 +183,28 @@ export async function gerarPdfOS(o: Ordem, extra: { equipamento: string; serie?:
     y = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 6;
   }
 
+  if (ex.formulario) {
+    const rs = ex.respostas ?? {};
+    titulo(ex.formulario.nome);
+    autoTable(doc, {
+      startY: y + 1,
+      head: [['Pergunta', 'Resposta']],
+      body: ex.formulario.campos.map((c) =>
+        c.tipo === 'secao'
+          ? [{ content: c.rotulo.toUpperCase(), colSpan: 2, styles: { fontStyle: 'bold', fillColor: [246, 245, 241] } }]
+          : [c.rotulo, textoResposta(c, rs[c.id])],
+      ),
+      styles: { fontSize: 9, textColor: PRETO, cellPadding: 1.4 },
+      headStyles: { fillColor: [246, 245, 241], textColor: PRETO, fontStyle: 'bold' },
+      columnStyles: { 0: { cellWidth: 80 } },
+      didParseCell: (d) => {
+        if (d.section === 'body' && d.column.index === 1 && String(d.cell.raw).startsWith('Problema')) d.cell.styles.textColor = [155, 35, 24];
+      },
+      margin: { left: M, right: M },
+    });
+    y = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 6;
+  }
+
   if ((ex.checklist ?? []).length) {
     titulo('Checklist');
     autoTable(doc, {
@@ -145,7 +222,7 @@ export async function gerarPdfOS(o: Ordem, extra: { equipamento: string; serie?:
     y = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 6;
   }
 
-  const fotos = (ex.fotos ?? []).filter((f) => !f.startsWith('pendente:'));
+  const fotos = fotosDaOS(o).filter((f) => !f.startsWith('pendente:'));
   if (fotos.length) {
     titulo('Fotos');
     y += 3;

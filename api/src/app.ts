@@ -12,6 +12,7 @@ import { carteiroReal, lerConta, servicoEnvio, type Anexo, type Carteiro } from 
 import { conferirSenha, gerarHash, hashToken, novoToken, problemaSenha } from './senha.js';
 import { CAMPOS_VALOR, DadoInvalido, equipamentos as tabelaEquipamentos, lerDados, normalizarFrota, type Equipamento, type NovaPeca, type PecaHistorico } from './equipamentos.js';
 import { CHECKLISTS, STATUS_OS, TIPOS_OS, ordens as tabelaOrdens, type ItemChecklist, type Local, type Ordem, type TipoOS } from './ordens.js';
+import { TIPOS_CAMPO, lerModelo, lerRespostas, modelos as tabelaModelos } from './modelos.js';
 import { manutencao as tabelaManutencao, validarPerifericos, validarTipos } from './manutencao.js';
 import { PERIFERICOS, type Periferico } from './equipamentos.js';
 import { ABAS, normalizarPermissoes, perfis as tabelaPerfis, type Aba, type Acesso, type Nivel } from './permissoes.js';
@@ -618,6 +619,20 @@ export function criarApp(db: Banco, opcoes: { cookieSeguro: boolean; logger?: bo
   };
   const logOS = (req: FastifyRequest, o: Ordem, acao: string) => repo.registrarLog(o.clienteId ?? '', req.usuario.id, `OS ${o.numero} (FT${o.frota}): ${acao}`, null, null, 'ordem');
 
+  // ---------- modelos de OS (formulários) ----------
+  const mods = tabelaModelos(db);
+  app.get('/api/modelos-os', { preHandler: exigir(1, 'ordens') }, async () => ({ modelos: mods.listar(), tiposCampo: TIPOS_CAMPO }));
+  app.post('/api/modelos-os', { preHandler: exigirGerencia }, async (req, reply) => {
+    const m = mods.criar(lerModelo((req.body ?? {}) as Record<string, unknown>), req.usuario.id);
+    repo.registrarLog('', req.usuario.id, `criou o modelo de OS "${m.nome}" (${m.campos.length} campos)`, null, null, 'ordem');
+    return reply.code(201).send(m);
+  });
+  app.put<{ Params: { id: string } }>('/api/modelos-os/:id', { preHandler: exigirGerencia }, async (req) => {
+    const m = mods.salvar(req.params.id, lerModelo((req.body ?? {}) as Record<string, unknown>), req.usuario.id);
+    repo.registrarLog('', req.usuario.id, `alterou o modelo de OS "${m.nome}" (${m.campos.length} campos${m.ativo ? '' : ', desativado'})`, null, null, 'ordem');
+    return m;
+  });
+
   app.get('/api/ordens/config', { preHandler: exigir(1, 'ordens') }, async () => ({ tipos: TIPOS_OS, status: STATUS_OS, checklists: CHECKLISTS }));
 
   app.get('/api/ordens/tecnicos', { preHandler: exigir(1, 'ordens') }, async () =>
@@ -634,7 +649,9 @@ export function criarApp(db: Banco, opcoes: { cookieSeguro: boolean; logger?: bo
 
   app.post('/api/ordens', { preHandler: exigirGerencia }, async (req, reply) => {
     const b = (req.body ?? {}) as Record<string, unknown>;
-    const tipo = (Object.keys(TIPOS_OS).includes(b.tipo as string) ? b.tipo : invalido('Escolha o tipo de OS.')) as TipoOS;
+    const modelo = typeof b.modeloId === 'string' && b.modeloId ? mods.buscar(b.modeloId) : null;
+    if (modelo && !modelo.ativo) throw new Invalido('Este modelo de OS está desativado.');
+    const tipo = (modelo ? modelo.tipoBase : Object.keys(TIPOS_OS).includes(b.tipo as string) ? b.tipo : invalido('Escolha o modelo de OS.')) as TipoOS;
     const frota = lerFrotaParam(b.frota);
     const clienteId = typeof b.clienteId === 'string' && b.clienteId ? b.clienteId : null;
     const cliente = clienteId ? repo.buscarCliente(clienteId) : null;
@@ -651,10 +668,11 @@ export function criarApp(db: Banco, opcoes: { cookieSeguro: boolean; logger?: bo
         agendadaPara: lerDataIso(b.agendadaPara, 'Data') ?? null,
         descricao: texto(b.descricao, 'descrição', 4000),
         pendenciaId,
+        formulario: modelo ? mods.formularioDe(modelo) : null,
       },
       req.usuario.id,
     );
-    logOS(req, o, `abriu (${TIPOS_OS[o.tipo]})${o.tecnicoNome ? ` para ${o.tecnicoNome}` : ''}`);
+    logOS(req, o, `abriu (${modelo?.nome ?? TIPOS_OS[o.tipo]})${o.tecnicoNome ? ` para ${o.tecnicoNome}` : ''}`);
     return reply.code(201).send(o);
   });
 
@@ -687,8 +705,9 @@ export function criarApp(db: Banco, opcoes: { cookieSeguro: boolean; logger?: bo
     }));
   };
   app.put<{ Params: { id: string } }>('/api/ordens/:id/execucao', { preHandler: exigir(2, 'ordens') }, async (req) => {
-    executaOS(req, req.params.id);
+    const atual = executaOS(req, req.params.id);
     const b = (req.body ?? {}) as Record<string, unknown>;
+    const respostas = b.respostas === undefined ? undefined : atual.execucao.formulario ? lerRespostas(atual.execucao.formulario, b.respostas) : invalido('Esta OS não tem formulário.');
     const h = b.horimetro;
     const horimetro = h === undefined ? undefined : h === null || h === '' ? null : Number(h);
     if (horimetro !== undefined && horimetro !== null && (!Number.isFinite(horimetro) || horimetro < 0 || horimetro > 1_000_000)) throw new Invalido('Horímetro inválido.');
@@ -712,6 +731,7 @@ export function criarApp(db: Banco, opcoes: { cookieSeguro: boolean; logger?: bo
         perifericos,
         assinadoPor: b.assinadoPor === undefined ? undefined : texto(b.assinadoPor, 'nome de quem assinou', 120),
         semAssinatura: b.semAssinatura === undefined ? undefined : texto(b.semAssinatura, 'motivo', 300),
+        respostas: respostas as Record<string, import('./modelos.js').Resposta> | undefined,
       },
       typeof b.aguardandoPeca === 'boolean' ? b.aguardandoPeca : undefined,
     );
@@ -728,8 +748,9 @@ export function criarApp(db: Banco, opcoes: { cookieSeguro: boolean; logger?: bo
   };
   app.post<{ Params: { id: string } }>('/api/ordens/:id/fotos', { preHandler: exigir(2, 'ordens'), bodyLimit: 9 * 1024 * 1024 }, async (req) => {
     executaOS(req, req.params.id);
-    const { buf, ext } = lerImagem((req.body as Record<string, unknown> | undefined)?.imagem, ['jpg', 'png']);
-    return os.adicionarFoto(req.params.id, buf, ext);
+    const b = (req.body ?? {}) as Record<string, unknown>;
+    const { buf, ext } = lerImagem(b.imagem, ['jpg', 'png']);
+    return os.adicionarFoto(req.params.id, buf, ext, typeof b.campoId === 'string' && b.campoId ? b.campoId : undefined);
   });
   app.delete<{ Params: { id: string; nome: string } }>('/api/ordens/:id/fotos/:nome', { preHandler: exigir(2, 'ordens') }, async (req) => {
     executaOS(req, req.params.id);

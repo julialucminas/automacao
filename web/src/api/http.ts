@@ -1,4 +1,5 @@
 import type { Api, EnvioPedido } from './index';
+import type { ModeloOS } from '../types';
 
 /** Implementação real: conversa com o servidor em /api. */
 
@@ -141,7 +142,10 @@ export const httpApi: Api = {
   alterarOrdem: (id, m) => chamar('PATCH', `/api/ordens/${id}`, m),
   checkinOrdem: (id, l) => chamar('POST', `/api/ordens/${id}/checkin`, l),
   salvarExecucao: (id, d) => chamar('PUT', `/api/ordens/${id}/execucao`, d),
-  fotoOrdem: (id, imagem) => chamar('POST', `/api/ordens/${id}/fotos`, { imagem }, 120_000),
+  fotoOrdem: (id, imagem, campoId) => chamar('POST', `/api/ordens/${id}/fotos`, { imagem, ...(campoId ? { campoId } : {}) }, 120_000),
+  listarModelosOS: () => chamar<{ modelos: ModeloOS[] }>('GET', '/api/modelos-os').then((r) => r.modelos),
+  criarModeloOS: (m) => chamar('POST', '/api/modelos-os', m),
+  salvarModeloOS: (id, m) => chamar('PUT', `/api/modelos-os/${encodeURIComponent(id)}`, m),
   tirarFotoOrdem: (id, nome) => chamar('DELETE', `/api/ordens/${id}/fotos/${encodeURIComponent(nome)}`),
   assinarOrdem: (id, imagem, nome) => chamar('POST', `/api/ordens/${id}/assinatura`, { imagem, nome }),
   concluirOrdem: (id, l) => chamar('POST', `/api/ordens/${id}/concluir`, l),

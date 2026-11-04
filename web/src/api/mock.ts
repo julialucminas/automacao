@@ -2,7 +2,7 @@ import type { Api } from './index';
 import type { Cliente, Conferencia, Envio, FrotaOficina, Faturamento, Solicitacao, Usuario } from '../types';
 import { REMETENTE } from '../lib/email';
 import { PERFIS_PADRAO } from '../lib/acesso';
-import type { Equipamento, Ordem, PecaHistorico, Pendencia, PerfilAcesso, UsuarioAdmin } from '../types';
+import type { Equipamento, ModeloOS, Ordem, PecaHistorico, Pendencia, PerfilAcesso, UsuarioAdmin } from '../types';
 
 /*
  * Implementação SIMULADA da API, só para desenvolvimento da interface.
@@ -129,6 +129,25 @@ const ENDERECO_QUE_DEVOLVE = /obra\.betim@|naoexiste@/i;
 const EQUIP_DEMO = new Map<string, Equipamento>();
 let HIST_DEMO: PecaHistorico[] = [];
 let PEND_DEMO: Pendencia[] = [];
+let MODELOS_DEMO: ModeloOS[] = [
+  {
+    id: 'padrao-corretiva',
+    nome: 'Corretiva',
+    descricao: 'Quando o cliente chama',
+    tipoBase: 'corretiva',
+    campos: [
+      { id: 'defeito', rotulo: 'Defeito encontrado', tipo: 'textoLongo', obrigatorio: true },
+      { id: 'parada', rotulo: 'Máquina estava parada?', tipo: 'simnao', obrigatorio: true },
+      { id: 'foto', rotulo: 'Foto do defeito', tipo: 'foto', obrigatorio: false },
+    ],
+    exigeHorimetro: true,
+    exigeAssinatura: true,
+    fotosMinimas: 0,
+    ativo: true,
+    atualizadoEm: new Date().toISOString(),
+    atualizadoPor: '',
+  },
+];
 let OS_DEMO: Ordem[] = [];
 const CHECK_DEMO = ['Garfos e correntes', 'Freio de serviço', 'Freio de estacionamento', 'Buzina', 'Luzes e giroflex', 'Alarme de ré', 'Vazamentos (óleo, água, gás)', 'Pneus'];
 const mudarOS = (oid: string, m: (o: Ordem) => Ordem) => {
@@ -364,7 +383,7 @@ export const mockApi: Api = {
       frota: n.frota.replace(/^FT\s*/i, ''),
       clienteId: n.clienteId ?? null,
       clienteNome: n.clienteNome ?? '',
-      tipo: n.tipo,
+      tipo: MODELOS_DEMO.find((x) => x.id === n.modeloId)?.tipoBase ?? n.tipo ?? 'corretiva',
       tipoVisita: n.tipoVisita ?? '',
       status: n.tecnicoId && n.agendadaPara ? 'agendada' : 'aberta',
       tecnicoId: n.tecnicoId ?? null,
@@ -372,7 +391,12 @@ export const mockApi: Api = {
       agendadaPara: n.agendadaPara ?? null,
       descricao: n.descricao ?? '',
       pendenciaId: n.pendenciaId ?? null,
-      execucao: { checklist: CHECK_DEMO.map((item) => ({ item, resposta: '', obs: '' })) },
+      execucao: (() => {
+        const m = MODELOS_DEMO.find((x) => x.id === n.modeloId);
+        return m
+          ? { formulario: { modeloId: m.id, nome: m.nome, campos: m.campos, exigeHorimetro: m.exigeHorimetro, exigeAssinatura: m.exigeAssinatura, fotosMinimas: m.fotosMinimas }, respostas: {} }
+          : { checklist: CHECK_DEMO.map((item) => ({ item, resposta: '', obs: '' })) };
+      })(),
       criadaPor: 'Demonstração',
       criadaEm: agora,
       atualizadaEm: agora,
@@ -406,11 +430,32 @@ export const mockApi: Api = {
     return mudarOS(oid, (o) => ({
       ...o,
       status: aguardandoPeca === true ? 'aguardando_peca' : aguardandoPeca === false && o.status === 'aguardando_peca' ? 'execucao' : o.status,
-      execucao: { ...o.execucao, ...Object.fromEntries(Object.entries(resto).filter(([, v]) => v !== undefined)) },
+      execucao: {
+        ...o.execucao,
+        ...Object.fromEntries(Object.entries(resto).filter(([, v]) => v !== undefined)),
+        ...(resto.respostas ? { respostas: { ...(o.execucao.respostas ?? {}), ...resto.respostas } } : {}),
+      },
     }));
   },
-  async fotoOrdem(oid) {
-    return mudarOS(oid, (o) => ({ ...o, execucao: { ...o.execucao, fotos: [...(o.execucao.fotos ?? []), `foto-${Date.now()}.jpg`] } }));
+  async fotoOrdem(oid, _img, campoId) {
+    const nome = `foto-${Date.now()}.jpg`;
+    return mudarOS(oid, (o) =>
+      campoId
+        ? { ...o, execucao: { ...o.execucao, respostas: { ...(o.execucao.respostas ?? {}), [campoId]: [...((o.execucao.respostas?.[campoId] as string[] | undefined) ?? []), nome] } } }
+        : { ...o, execucao: { ...o.execucao, fotos: [...(o.execucao.fotos ?? []), nome] } },
+    );
+  },
+  async listarModelosOS() {
+    return MODELOS_DEMO;
+  },
+  async criarModeloOS(m) {
+    const n = { ...MODELOS_DEMO[0], ...m, id: id(), atualizadoEm: new Date().toISOString(), atualizadoPor: 'Demonstração' } as ModeloOS;
+    MODELOS_DEMO = [...MODELOS_DEMO, n];
+    return n;
+  },
+  async salvarModeloOS(mid, m) {
+    MODELOS_DEMO = MODELOS_DEMO.map((x) => (x.id === mid ? ({ ...x, ...m, id: mid, atualizadoEm: new Date().toISOString() } as ModeloOS) : x));
+    return MODELOS_DEMO.find((x) => x.id === mid)!;
   },
   async tirarFotoOrdem(oid, nome) {
     return mudarOS(oid, (o) => ({ ...o, execucao: { ...o.execucao, fotos: (o.execucao.fotos ?? []).filter((f) => f !== nome) } }));

@@ -16,6 +16,7 @@ import { ConferenciaMes } from './pages/ConferenciaMes';
 import { Inicio } from './pages/Inicio';
 import { Usuarios } from './pages/Usuarios';
 import { Equipamentos } from './pages/Equipamentos';
+import { ModelosOS } from './pages/ModelosOS';
 import { Manutencao } from './pages/Manutencao';
 import { AppDono } from './pages/AppDono';
 import { Ordens } from './pages/Ordens';
@@ -30,6 +31,7 @@ const TELAS: [Aba, string, ReactNode][] = [
   ['solicitacoes', '/solicitacoes', <Solicitacoes />],
   ['manutencao', '/manutencao', <Manutencao />],
   ['ordens', '/ordens', <Ordens />],
+  ['ordens', '/modelos-os', <ModelosOS />],
   ['movimentacoes', '/movimentacoes', <Movimentacoes />],
   ['conferencia', '/conferencia', <ConferenciaMes />],
   ['calendario', '/calendario', <Calendario />],

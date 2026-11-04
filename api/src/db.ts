@@ -356,6 +356,16 @@ const MIGRACOES = [
    );
    CREATE INDEX ordens_status ON ordens(status, agendada_para);
    CREATE INDEX ordens_tecnico ON ordens(tecnico_id, status);`,
+  // 17: modelos de OS (formulário de cada tipo, montado pela empresa)
+  `CREATE TABLE modelos_os (
+     id TEXT PRIMARY KEY,
+     dados TEXT NOT NULL,
+     ativo INTEGER NOT NULL DEFAULT 1,
+     ordem INTEGER NOT NULL DEFAULT 0,
+     atualizado_em TEXT NOT NULL,
+     atualizado_por INTEGER REFERENCES usuarios(id)
+   );
+   ALTER TABLE ordens ADD COLUMN modelo_id TEXT;`,
 ];
 
 export function abrirBanco(caminho: string) {

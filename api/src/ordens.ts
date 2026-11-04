@@ -11,6 +11,7 @@ import { join } from 'node:path';
 import type { Banco } from './db.js';
 import { DadoInvalido, PERIFERICOS, equipamentos, type DadosEquipamento, type Periferico } from './equipamentos.js';
 import { camposPerifericos, type RegraPeriferico } from './manutencao.js';
+import { faltamNoFormulario, type Formulario, type Resposta } from './modelos.js';
 
 export const TIPOS_OS = {
   preventiva: 'Preventiva',
@@ -59,6 +60,10 @@ export type Execucao = {
   assinatura?: string;
   assinadoPor?: string;
   semAssinatura?: string;
+  /** cópia do formulário do modelo (quando a OS foi aberta com um modelo) */
+  formulario?: Formulario;
+  /** respostas por campo; campo de foto guarda a lista de arquivos */
+  respostas?: Record<string, Resposta>;
 };
 
 export type Ordem = {
@@ -87,11 +92,13 @@ export type Ordem = {
   cancelamento: string;
 };
 
-export type NovaOrdem = { frota: string; clienteId: string | null; clienteNome: string; tipo: TipoOS; tipoVisita: string; tecnicoId: number | null; agendadaPara: string | null; descricao: string; pendenciaId: number | null };
+export type NovaOrdem = { formulario?: Formulario | null; frota: string; clienteId: string | null; clienteNome: string; tipo: TipoOS; tipoVisita: string; tecnicoId: number | null; agendadaPara: string | null; descricao: string; pendenciaId: number | null };
 
 export class ProibidoOS extends Error {}
 
 const agora = () => new Date().toISOString();
+/** fotos gerais + fotos dos campos do formulário */
+const todasAsFotos = (ex: Execucao) => [...(ex.fotos ?? []), ...Object.values(ex.respostas ?? {}).flatMap((v) => (Array.isArray(v) ? v : []))];
 const MAX_FOTOS = 12;
 
 export function ordens(db: Banco, pastaDados: string, regrasPerifericos: () => RegraPeriferico[]) {
@@ -153,11 +160,29 @@ export function ordens(db: Banco, pastaDados: string, regrasPerifericos: () => R
       const id = randomUUID();
       const numero = ((db.prepare('SELECT MAX(numero) AS m FROM ordens').get() as { m: number | null }).m ?? 0) + 1;
       const status: StatusOS = n.tecnicoId && n.agendadaPara ? 'agendada' : 'aberta';
-      const checklist: ItemChecklist[] = CHECKLISTS[n.tipo].map((item) => ({ item, resposta: '', obs: '' }));
+      const execucao: Execucao = n.formulario ? { formulario: n.formulario, respostas: {} } : { checklist: CHECKLISTS[n.tipo].map((item): ItemChecklist => ({ item, resposta: '', obs: '' })) };
       db.prepare(
-        `INSERT INTO ordens (id, numero, frota, cliente_id, cliente_nome, tipo, tipo_visita, status, tecnico_id, agendada_para, descricao, pendencia_id, execucao, criada_por, criada_em, atualizada_em)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      ).run(id, numero, n.frota, n.clienteId, n.clienteNome, n.tipo, n.tipoVisita, status, n.tecnicoId, n.agendadaPara, n.descricao, n.pendenciaId, JSON.stringify({ checklist }), usuarioId, agora(), agora());
+        `INSERT INTO ordens (id, numero, frota, cliente_id, cliente_nome, tipo, tipo_visita, status, tecnico_id, agendada_para, descricao, pendencia_id, execucao, criada_por, criada_em, atualizada_em, modelo_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).run(
+        id,
+        numero,
+        n.frota,
+        n.clienteId,
+        n.clienteNome,
+        n.tipo,
+        n.tipoVisita,
+        status,
+        n.tecnicoId,
+        n.agendadaPara,
+        n.descricao,
+        n.pendenciaId,
+        JSON.stringify(execucao),
+        usuarioId,
+        agora(),
+        agora(),
+        n.formulario?.modeloId ?? null,
+      );
       return buscar(id);
     },
     /** Escritório muda técnico, data, descrição. Com técnico e data, a OS aberta vira agendada. */
@@ -188,30 +213,40 @@ export function ordens(db: Banco, pastaDados: string, regrasPerifericos: () => R
       return buscar(id);
     },
     /** Rascunho do técnico (salva a cada mudança). aguardandoPeca alterna a espera. */
-    salvar(id: string, d: Partial<Pick<Execucao, 'horimetro' | 'checklist' | 'servico' | 'pecas' | 'perifericos' | 'assinadoPor' | 'semAssinatura'>>, aguardandoPeca?: boolean) {
+    salvar(id: string, d: Partial<Pick<Execucao, 'horimetro' | 'checklist' | 'servico' | 'pecas' | 'perifericos' | 'assinadoPor' | 'semAssinatura' | 'respostas'>>, aguardandoPeca?: boolean) {
       const o = buscar(id);
       exigirStatus(o, ['aberta', 'agendada', 'execucao', 'aguardando_peca'], 'salvar');
+      // respostas se juntam às que já existem (fotos dos campos ficam)
+      if (d.respostas) d = { ...d, respostas: { ...(o.execucao.respostas ?? {}), ...d.respostas } };
       // campo que não veio continua como estava
       const ex = { ...o.execucao, ...Object.fromEntries(Object.entries(d).filter(([, v]) => v !== undefined)) };
       const status: StatusOS | undefined = aguardandoPeca === true ? 'aguardando_peca' : aguardandoPeca === false && o.status === 'aguardando_peca' ? 'execucao' : undefined;
       salvarExecucao(id, ex, status);
       return buscar(id);
     },
-    adicionarFoto(id: string, conteudo: Buffer, ext: 'jpg' | 'png') {
+    /** campoId: foto de uma pergunta do formulário; sem campo: fotos gerais da OS. */
+    adicionarFoto(id: string, conteudo: Buffer, ext: 'jpg' | 'png', campoId?: string) {
       const o = buscar(id);
       exigirStatus(o, ['aberta', 'agendada', 'execucao', 'aguardando_peca', 'concluida'], 'pôr foto');
-      const fotos = o.execucao.fotos ?? [];
-      if (fotos.length >= MAX_FOTOS) throw new DadoInvalido(`No máximo ${MAX_FOTOS} fotos por OS.`);
+      const ex = o.execucao;
+      if (todasAsFotos(ex).length >= MAX_FOTOS * 2) throw new DadoInvalido(`No máximo ${MAX_FOTOS * 2} fotos por OS.`);
+      const campo = campoId ? ex.formulario?.campos.find((c) => c.id === campoId && c.tipo === 'foto') : undefined;
+      if (campoId && !campo) throw new DadoInvalido('Campo de foto não encontrado.');
+      if (!campo && (ex.fotos ?? []).length >= MAX_FOTOS) throw new DadoInvalido(`No máximo ${MAX_FOTOS} fotos gerais por OS.`);
       mkdirSync(pasta(id), { recursive: true });
       const nome = `foto-${Date.now()}.${ext}`;
       writeFileSync(join(pasta(id), nome), conteudo);
-      salvarExecucao(id, { ...o.execucao, fotos: [...fotos, nome] });
+      if (campo) {
+        const atuais = Array.isArray(ex.respostas?.[campo.id]) ? (ex.respostas![campo.id] as string[]) : [];
+        salvarExecucao(id, { ...ex, respostas: { ...(ex.respostas ?? {}), [campo.id]: [...atuais, nome] } });
+      } else salvarExecucao(id, { ...ex, fotos: [...(ex.fotos ?? []), nome] });
       return buscar(id);
     },
     tirarFoto(id: string, nome: string) {
       const o = buscar(id);
       exigirStatus(o, ['aberta', 'agendada', 'execucao', 'aguardando_peca', 'concluida'], 'tirar foto');
-      salvarExecucao(id, { ...o.execucao, fotos: (o.execucao.fotos ?? []).filter((f) => f !== nome) });
+      const respostas = Object.fromEntries(Object.entries(o.execucao.respostas ?? {}).map(([k, v]) => [k, Array.isArray(v) ? v.filter((f) => f !== nome) : v]));
+      salvarExecucao(id, { ...o.execucao, fotos: (o.execucao.fotos ?? []).filter((f) => f !== nome), ...(o.execucao.respostas ? { respostas } : {}) });
       return buscar(id);
     },
     assinar(id: string, png: Buffer, nome: string) {
@@ -226,7 +261,7 @@ export function ordens(db: Banco, pastaDados: string, regrasPerifericos: () => R
     caminhoArquivo(id: string, nome: string) {
       if (!/^(foto|assinatura)-\d+\.(jpg|png)$/.test(nome)) throw new DadoInvalido('Arquivo inválido.');
       const o = buscar(id);
-      if (!(o.execucao.fotos ?? []).includes(nome) && o.execucao.assinatura !== nome) throw new DadoInvalido('Arquivo não encontrado.');
+      if (!todasAsFotos(o.execucao).includes(nome) && o.execucao.assinatura !== nome) throw new DadoInvalido('Arquivo não encontrado.');
       return join(pasta(id), nome);
     },
     /** Técnico termina: tudo respondido, horímetro e assinatura (ou o motivo de não ter). */
@@ -236,11 +271,20 @@ export function ordens(db: Banco, pastaDados: string, regrasPerifericos: () => R
       const ex = o.execucao;
       const faltam: string[] = [];
       if (!ex.checkin) faltam.push('o check-in');
-      if (o.tipo !== 'externo' && (ex.horimetro === undefined || ex.horimetro === null)) faltam.push('o horímetro');
-      const semResposta = (ex.checklist ?? []).filter((c) => !c.resposta).length;
-      if (semResposta) faltam.push(`${semResposta} ite${semResposta > 1 ? 'ns' : 'm'} do checklist`);
+      const f = ex.formulario;
+      const exigeHorimetro = f ? f.exigeHorimetro : o.tipo !== 'externo';
+      if (exigeHorimetro && (ex.horimetro === undefined || ex.horimetro === null)) faltam.push('o horímetro');
+      if (f) {
+        const sem = faltamNoFormulario(f, ex.respostas ?? {});
+        if (sem.length) faltam.push(sem.length > 3 ? `${sem.length} perguntas do formulário (${sem.slice(0, 3).join(', ')}…)` : sem.join(', '));
+        if (todasAsFotos(ex).length < f.fotosMinimas) faltam.push(`pelo menos ${f.fotosMinimas} foto${f.fotosMinimas > 1 ? 's' : ''}`);
+      } else {
+        const semResposta = (ex.checklist ?? []).filter((c) => !c.resposta).length;
+        if (semResposta) faltam.push(`${semResposta} ite${semResposta > 1 ? 'ns' : 'm'} do checklist`);
+      }
       if (!ex.servico?.trim()) faltam.push('o que foi feito');
-      if (!ex.assinatura && !ex.semAssinatura?.trim()) faltam.push('a assinatura do cliente (ou o motivo de não ter)');
+      const exigeAssinatura = f ? f.exigeAssinatura : true;
+      if (exigeAssinatura && !ex.assinatura && !ex.semAssinatura?.trim()) faltam.push('a assinatura do cliente (ou o motivo de não ter)');
       if (faltam.length) throw new DadoInvalido(`Falta preencher: ${faltam.join(', ')}.`);
       salvarExecucao(id, { ...ex, checkout }, 'concluida');
       db.prepare('UPDATE ordens SET concluida_em = ? WHERE id = ?').run(agora(), id);

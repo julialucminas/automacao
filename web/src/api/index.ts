@@ -36,6 +36,7 @@ import type {
   PecaHistorico,
   Pendencia,
   Visita,
+  ModeloOS,
 } from '../types';
 
 export type EnvioPedido = {
@@ -117,7 +118,10 @@ export interface Api {
   alterarOrdem(id: string, m: { tecnicoId?: number | null; agendadaPara?: string | null; descricao?: string; tipoVisita?: string }): Promise<Ordem>;
   checkinOrdem(id: string, local: Partial<LocalOS>): Promise<Ordem>;
   salvarExecucao(id: string, d: Partial<ExecucaoOS> & { aguardandoPeca?: boolean }): Promise<Ordem>;
-  fotoOrdem(id: string, imagemBase64: string): Promise<Ordem>;
+  fotoOrdem(id: string, imagemBase64: string, campoId?: string): Promise<Ordem>;
+  listarModelosOS(): Promise<ModeloOS[]>;
+  criarModeloOS(m: Partial<ModeloOS>): Promise<ModeloOS>;
+  salvarModeloOS(id: string, m: Partial<ModeloOS>): Promise<ModeloOS>;
   tirarFotoOrdem(id: string, nome: string): Promise<Ordem>;
   assinarOrdem(id: string, imagemBase64: string, nome: string): Promise<Ordem>;
   concluirOrdem(id: string, local: Partial<LocalOS>): Promise<Ordem>;

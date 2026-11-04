@@ -2,8 +2,8 @@ import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNo
 import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../api';
 import { useEstado } from '../state';
-import type { Equipamento, Ordem, Pendencia, StatusOS, TecnicoOS, TipoOS } from '../types';
-import { RESPOSTAS, STATUS_OS, TIPOS_OS, gerarPdfOS, progressoChecklist, urlArquivo } from '../lib/ordens';
+import type { Equipamento, ModeloOS, Ordem, Pendencia, StatusOS, TecnicoOS } from '../types';
+import { RESPOSTAS, STATUS_OS, gerarPdfOS, nomeTipoOS, progressoChecklist, textoResposta, urlArquivo } from '../lib/ordens';
 import { regrasDe } from '../lib/manutencao';
 import { dataBr, hojeIso } from '../lib/calendario';
 import { semAcento } from '../lib/normalizar';
@@ -72,12 +72,17 @@ export function Ordens() {
         <div>
           <div className="eyebrow">Operação</div>
           <h1 className="mt-1 text-[26px] font-bold">Ordens de serviço</h1>
-          <p className="text-[13px] text-ink-3">O escritório abre e agenda; o técnico executa no celular; o escritório revisa, encerra e manda o relatório ao cliente.</p>
+          <p className="text-[13px] text-ink-3">O escritório abre e agenda; o técnico preenche o formulário no celular; o escritório revisa e encerra.</p>
         </div>
         {gerencia && (
-          <button type="button" className="btn-primary" onClick={() => setNova(true)}>
-            <IcMais tamanho={16} /> Nova OS
-          </button>
+          <span className="flex gap-2">
+            <Link to="/modelos-os" className="btn-secondary">
+              Modelos de OS
+            </Link>
+            <button type="button" className="btn-primary" onClick={() => setNova(true)}>
+              <IcMais tamanho={16} /> Nova OS
+            </button>
+          </span>
         )}
       </div>
 
@@ -130,7 +135,7 @@ export function Ordens() {
                     <td className="px-4 py-2.5 font-mono font-bold">FT{o.frota}</td>
                     <td className="px-4 py-2.5">{o.clienteNome || '—'}</td>
                     <td className="px-4 py-2.5">
-                      {TIPOS_OS[o.tipo].split(' (')[0]}
+                      {nomeTipoOS(o)}
                       {o.tipoVisita && <span className="text-ink-3"> · {o.tipoVisita}</span>}
                     </td>
                     <td className="px-4 py-2.5">{o.tecnicoNome || <span className="text-warn">sem técnico</span>}</td>
@@ -140,7 +145,7 @@ export function Ordens() {
                         <Chip tom={STATUS_OS[o.status].tom}>{STATUS_OS[o.status].rotulo}</Chip>
                         {['execucao', 'aguardando_peca'].includes(o.status) && (
                           <span className="text-xs text-ink-3">
-                            checklist {p.feitos}/{p.total}
+                            {o.execucao.formulario ? 'respostas' : 'checklist'} {p.feitos}/{p.total}
                           </span>
                         )}
                         {p.problemas > 0 && (
@@ -206,7 +211,15 @@ function FormNovaOS({ fechar, criada, frotaInicial, pendenciaId }: { fechar: () 
   const { clientes, avisar, config } = useEstado();
   const regras = regrasDe(config);
   const [frota, setFrota] = useState(frotaInicial ?? '');
-  const [tipo, setTipo] = useState<TipoOS>(pendenciaId ? 'corretiva' : 'preventiva');
+  const [modelos, setModelos] = useState<ModeloOS[]>([]);
+  const [modeloId, setModeloId] = useState('');
+  const modelo = modelos.find((m) => m.id === modeloId) ?? null;
+  const tipo = modelo?.tipoBase ?? 'corretiva';
+  /** escolhe o primeiro modelo ativo do tipo (ex.: pendência → corretiva) */
+  const escolherTipo = (t: string, l = modelos) => {
+    const m = l.find((x) => x.ativo && x.tipoBase === t) ?? l.find((x) => x.ativo);
+    if (m) setModeloId(m.id);
+  };
   const [tipoVisita, setTipoVisita] = useState('');
   const [tecnicos, setTecnicos] = useState<TecnicoOS[]>([]);
   const [tecnico, setTecnico] = useState('');
@@ -220,6 +233,13 @@ function FormNovaOS({ fechar, criada, frotaInicial, pendenciaId }: { fechar: () 
   const [salvando, setSalvando] = useState(false);
   useEffect(() => {
     api.tecnicosOS().then(setTecnicos, () => undefined);
+    api.listarModelosOS().then(
+      (l) => {
+        setModelos(l);
+        escolherTipo(pendenciaId ? 'corretiva' : 'preventiva', l);
+      },
+      () => undefined,
+    );
     api.listarPendencias().then(
       (l) => {
         setPendencias(l);
@@ -233,6 +253,7 @@ function FormNovaOS({ fechar, criada, frotaInicial, pendenciaId }: { fechar: () 
       },
       () => undefined,
     );
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- escolhe o modelo inicial só ao abrir
   }, [pendenciaId]);
   useEffect(() => {
     const t = tecnicos.find((x) => x.nome === tecnicoPorNome);
@@ -253,13 +274,14 @@ function FormNovaOS({ fechar, criada, frotaInicial, pendenciaId }: { fechar: () 
     e.preventDefault();
     setErro('');
     if (!num) return setErro('Informe a frota.');
+    if (!modelo) return setErro('Escolha o modelo de OS.');
     setSalvando(true);
     try {
       const o = await api.criarOrdem({
         frota: num,
         clienteId: tipo === 'externo' ? null : (dono?.id ?? null),
         clienteNome: tipo === 'externo' ? clienteExterno.trim() : (dono?.nome ?? ''),
-        tipo,
+        modeloId: modelo.id,
         tipoVisita: tipo === 'preventiva' ? tipoVisita : '',
         tecnicoId: tecnico ? Number(tecnico) : null,
         agendadaPara: data || null,
@@ -289,14 +311,23 @@ function FormNovaOS({ fechar, criada, frotaInicial, pendenciaId }: { fechar: () 
             </datalist>
           </label>
           <label className="flex flex-col gap-1 text-xs font-semibold">
-            Tipo
-            <select className="input font-normal" value={tipo} onChange={(e) => setTipo(e.target.value as TipoOS)}>
-              {Object.entries(TIPOS_OS).map(([k, v]) => (
-                <option key={k} value={k}>
-                  {v}
-                </option>
-              ))}
+            Modelo de OS
+            <select className="input font-normal" value={modeloId} onChange={(e) => setModeloId(e.target.value)}>
+              {!modelos.length && <option value="">Carregando…</option>}
+              {modelos
+                .filter((m) => m.ativo)
+                .map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.nome}
+                  </option>
+                ))}
             </select>
+            {modelo && (
+              <span className="font-normal text-ink-3">
+                {modelo.campos.filter((c) => c.tipo !== 'secao').length} perguntas
+                {modelo.descricao ? ` · ${modelo.descricao}` : ''}
+              </span>
+            )}
           </label>
         </div>
         {tipo === 'externo' ? (
@@ -360,7 +391,7 @@ function FormNovaOS({ fechar, criada, frotaInicial, pendenciaId }: { fechar: () 
                 setPendId(e.target.value);
                 const p = pendDaFrota.find((x) => String(x.id) === e.target.value);
                 if (p && !descricao.trim()) setDescricao(p.descricao);
-                if (p) setTipo('corretiva');
+                if (p && tipo !== 'corretiva') escolherTipo('corretiva');
               }}
             >
               <option value="">Nenhuma</option>
@@ -490,7 +521,7 @@ function DetalheOS({ ordem, gerencia, fechar, mudou }: { ordem: Ordem | null; ge
     <Gaveta aberto fechar={fechar} titulo={`OS ${o.numero} · FT${o.frota}${nomeEquip ? ` · ${nomeEquip}` : ''}`} largo>
       <div className="flex flex-wrap items-center gap-1.5">
         <Chip tom={STATUS_OS[o.status].tom}>{STATUS_OS[o.status].rotulo}</Chip>
-        <Chip tom="neutro">{TIPOS_OS[o.tipo]}</Chip>
+        <Chip tom="neutro">{nomeTipoOS(o)}</Chip>
         {o.tipoVisita && <Chip tom="neutro">{o.tipoVisita}</Chip>}
         {o.clienteNome && <Chip tom="neutro">{o.clienteNome}</Chip>}
       </div>
@@ -583,6 +614,37 @@ function DetalheOS({ ordem, gerencia, fechar, mudou }: { ordem: Ordem | null; ge
       )}
       {(ex.perifericos ?? []).length > 0 && (
         <p className="text-[13px] text-ink-2">Periféricos trocados: {ex.perifericos!.map((p) => regras.perifericos.find((r) => r.id === p)?.nome ?? p).join(', ')}</p>
+      )}
+
+      {ex.formulario && Object.keys(ex.respostas ?? {}).length > 0 && (
+        <Bloco titulo={`${ex.formulario.nome} · ${progressoChecklist(o).feitos} de ${progressoChecklist(o).total}`}>
+          <dl className="flex flex-col rounded-xl border border-line p-3 text-[13.5px]">
+            {ex.formulario.campos.map((c) =>
+              c.tipo === 'secao' ? (
+                <dt key={c.id} className="mt-2 border-b border-line pb-1 text-[12px] font-bold uppercase tracking-wide text-ink-3 first:mt-0">
+                  {c.rotulo}
+                </dt>
+              ) : (
+                <div key={c.id} className="flex justify-between gap-3 border-b border-line-soft py-1.5 last:border-0">
+                  <dt>{c.rotulo}</dt>
+                  <dd className={`text-right ${textoResposta(c, ex.respostas?.[c.id]).startsWith('Problema') ? 'font-bold text-bad' : 'text-ink-2'}`}>
+                    {c.tipo === 'foto' && Array.isArray(ex.respostas?.[c.id]) ? (
+                      <span className="flex flex-wrap justify-end gap-1.5">
+                        {(ex.respostas![c.id] as string[]).map((f) => (
+                          <a key={f} href={urlArquivo(o, f)} target="_blank" rel="noreferrer">
+                            <img src={urlArquivo(o, f)} alt={c.rotulo} className="h-16 w-16 rounded-lg border border-line object-cover" />
+                          </a>
+                        ))}
+                      </span>
+                    ) : (
+                      textoResposta(c, ex.respostas?.[c.id])
+                    )}
+                  </dd>
+                </div>
+              ),
+            )}
+          </dl>
+        </Bloco>
       )}
 
       {(ex.checklist ?? []).some((c) => c.resposta) && (

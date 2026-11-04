@@ -2,8 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../api';
 import { useEstado } from '../state';
-import type { ItemChecklist, Ordem, PecaOS, PerifericoId } from '../types';
-import { STATUS_OS, TIPOS_OS, faltaParaConcluir, progressoChecklist, urlArquivo } from '../lib/ordens';
+import type { CampoModelo, ItemChecklist, Ordem, PecaOS, PerifericoId, RespostaCampo } from '../types';
+import { STATUS_OS, TIPOS_OS, faltaParaConcluir, fotosDaOS, nomeTipoOS, progressoChecklist, respondido, urlArquivo } from '../lib/ordens';
 import { aplicarLocal, enfileirar, guardar, lerGuardado, listarFila, pegarLocal, reduzirFoto, sincronizar, type Operacao } from '../lib/filaOffline';
 import { regrasDe } from '../lib/manutencao';
 import { dataBr, hojeIso } from '../lib/calendario';
@@ -131,9 +131,9 @@ export function Campo() {
         className={`px-4 py-2 text-center text-[13px] font-semibold ${!online ? 'bg-warn-soft text-warn-strong' : pendentes ? 'bg-brand-soft text-brand-text' : 'bg-ok-soft text-ok'}`}
       >
         {!online
-          ? `Sem internet · ${pendentes ? `${pendentes} alteração${pendentes > 1 ? 'ões' : ''} guardada${pendentes > 1 ? 's' : ''} no celular, sobe quando o sinal voltar` : 'pode continuar trabalhando'}`
+          ? `Sem internet · ${pendentes ? `${pendentes} ${pendentes > 1 ? 'alterações' : 'alteração'} guardada${pendentes > 1 ? 's' : ''} no celular, sobe quando o sinal voltar` : 'pode continuar trabalhando'}`
           : pendentes
-            ? `Enviando ${pendentes} alteração${pendentes > 1 ? 'ões' : ''}…`
+            ? `Enviando ${pendentes} ${pendentes > 1 ? 'alterações' : 'alteração'}…`
             : 'Tudo enviado'}
       </div>
 
@@ -192,7 +192,7 @@ function Lista({ ordens, abrir, baixadoEm, online }: { ordens: Ordem[] | null; a
                 </span>
                 <span className="text-[14px] font-semibold">{o.clienteNome || 'sem cliente'}</span>
                 <span className="text-[13px] text-ink-3">
-                  {TIPOS_OS[o.tipo].split(' (')[0]}
+                  {nomeTipoOS(o)}
                   {o.tipoVisita ? ` ${o.tipoVisita}` : ''}
                   {o.agendadaPara ? ` · ${dataBr(o.agendadaPara)}` : ''}
                 </span>
@@ -245,10 +245,13 @@ function Execucao({ o, agir, agirDigitando, telefone }: { o: Ordem; agir: (op: O
     const l = (ex.checklist ?? []).map((c, j) => (j === i ? { ...c, ...d } : c));
     salvar({ checklist: l });
   };
-  const fotos = async (arquivos: FileList | null) => {
+  const fm = ex.formulario;
+  const exigeHorimetro = fm ? fm.exigeHorimetro : o.tipo !== 'externo';
+  const nFotos = fotosDaOS(o).length;
+  const fotos = async (arquivos: FileList | null, campoId?: string) => {
     for (const f of Array.from(arquivos ?? [])) {
       try {
-        await agir({ tipo: 'foto', id: o.id, imagem: await reduzirFoto(f) });
+        await agir({ tipo: 'foto', id: o.id, imagem: await reduzirFoto(f), ...(campoId ? { campoId } : {}) });
       } catch {
         avisar('Não consegui ler essa foto.', 'bad');
       }
@@ -257,7 +260,7 @@ function Execucao({ o, agir, agirDigitando, telefone }: { o: Ordem; agir: (op: O
   const concluir = async () => {
     if (falta.length) return avisar(`Falta: ${falta.join(', ')}.`, 'bad');
     await agir({ tipo: 'concluir', id: o.id, local: await pegarLocal() });
-    avisar(`OS ${o.numero} concluída. O escritório vai revisar e mandar o relatório ao cliente.`);
+    avisar(`OS ${o.numero} concluída. O escritório vai revisar.`);
   };
 
   return (
@@ -271,7 +274,7 @@ function Execucao({ o, agir, agirDigitando, telefone }: { o: Ordem; agir: (op: O
         </div>
         <p className="text-[15px] font-semibold">{o.clienteNome || 'sem cliente'}</p>
         <p className="text-[13.5px] text-ink-3">
-          {TIPOS_OS[o.tipo]}
+          {fm ? fm.nome : TIPOS_OS[o.tipo]}
           {o.tipoVisita ? ` · ${o.tipoVisita}` : ''}
           {o.agendadaPara ? ` · ${dataBr(o.agendadaPara)}` : ''}
         </p>
@@ -307,7 +310,7 @@ function Execucao({ o, agir, agirDigitando, telefone }: { o: Ordem; agir: (op: O
 
       {ex.checkin && (
         <>
-          {o.tipo !== 'externo' && (
+          {exigeHorimetro && (
             <Etapa n={2} titulo="Horímetro" feito={ex.horimetro != null}>
               <input
                 className="input h-14 text-[22px] font-bold"
@@ -324,6 +327,11 @@ function Execucao({ o, agir, agirDigitando, telefone }: { o: Ordem; agir: (op: O
             </Etapa>
           )}
 
+          {fm ? (
+            <Etapa n={3} titulo={`${fm.nome} · ${p.feitos} de ${p.total}`} feito={fm.campos.filter((c) => c.obrigatorio).every((c) => respondido(ex.respostas?.[c.id]))}>
+              <Formulario o={o} editavel={editavel} responder={(id, v) => salvar({ respostas: { [id]: v } })} fotos={fotos} agir={agir} />
+            </Etapa>
+          ) : (
           <Etapa n={3} titulo={`Checklist · ${p.feitos} de ${p.total}`} feito={p.total > 0 && p.feitos === p.total}>
             <ul className="flex flex-col gap-3">
               {(ex.checklist ?? []).map((c, i) => (
@@ -362,6 +370,7 @@ function Execucao({ o, agir, agirDigitando, telefone }: { o: Ordem; agir: (op: O
               ))}
             </ul>
           </Etapa>
+          )}
 
           <Etapa n={4} titulo="O que foi feito" feito={!!ex.servico?.trim()}>
             <textarea
@@ -424,7 +433,7 @@ function Execucao({ o, agir, agirDigitando, telefone }: { o: Ordem; agir: (op: O
                 </button>
               )}
             </div>
-            {o.tipo !== 'externo' && (
+            {exigeHorimetro && (
               <fieldset className="flex flex-col gap-1.5">
                 <legend className="mb-1 text-[14px] font-semibold">Periféricos trocados</legend>
                 {regras.perifericos.map((pr) => {
@@ -457,7 +466,11 @@ function Execucao({ o, agir, agirDigitando, telefone }: { o: Ordem; agir: (op: O
             )}
           </Etapa>
 
-          <Etapa n={5} titulo={`Fotos · ${(ex.fotos ?? []).length}`} feito={(ex.fotos ?? []).length > 0}>
+          <Etapa
+            n={5}
+            titulo={fm ? `Outras fotos · ${(ex.fotos ?? []).length}${fm.fotosMinimas ? ` (mínimo ${fm.fotosMinimas} no total, tem ${nFotos})` : ''}` : `Fotos · ${(ex.fotos ?? []).length}`}
+            feito={fm ? nFotos >= fm.fotosMinimas && nFotos > 0 : (ex.fotos ?? []).length > 0}
+          >
             <div className="flex flex-wrap gap-2">
               {(ex.fotos ?? []).map((f) =>
                 f.startsWith('pendente:') ? (
@@ -496,7 +509,7 @@ function Execucao({ o, agir, agirDigitando, telefone }: { o: Ordem; agir: (op: O
             )}
           </Etapa>
 
-          <Etapa n={6} titulo="Assinatura do cliente" feito={!!ex.assinatura || !!ex.semAssinatura?.trim()}>
+          <Etapa n={6} titulo={fm && !fm.exigeAssinatura ? 'Assinatura do cliente (opcional)' : 'Assinatura do cliente'} feito={!!ex.assinatura || !!ex.semAssinatura?.trim()}>
             {ex.assinatura ? (
               <div className="flex flex-col gap-2">
                 {ex.assinatura === 'pendente' ? (
@@ -539,6 +552,200 @@ function Execucao({ o, agir, agirDigitando, telefone }: { o: Ordem; agir: (op: O
       )}
     </>
   );
+}
+
+const BOTAO = (ativo: boolean, cor = 'bg-noite text-white') =>
+  `min-h-[44px] rounded-xl border px-3 text-[14px] font-semibold ${ativo ? `${cor} border-transparent` : 'border-line-strong bg-white text-ink-2'}`;
+
+/** O formulário do modelo da OS, pergunta por pergunta. */
+function Formulario({
+  o,
+  editavel,
+  responder,
+  fotos,
+  agir,
+}: {
+  o: Ordem;
+  editavel: boolean;
+  responder: (id: string, v: RespostaCampo) => void;
+  fotos: (l: FileList | null, campoId?: string) => Promise<void>;
+  agir: (op: Operacao) => Promise<void>;
+}) {
+  const rs = o.execucao.respostas ?? {};
+  return (
+    <div className="flex flex-col gap-4">
+      {o.execucao.formulario!.campos.map((c) =>
+        c.tipo === 'secao' ? (
+          <h3 key={c.id} className="-mb-1 mt-2 border-b-2 border-brand pb-1 text-[13px] font-bold uppercase tracking-wide text-ink-2 first:mt-0">
+            {c.rotulo}
+          </h3>
+        ) : (
+          <div key={c.id} className="flex flex-col gap-1.5" role="group" aria-label={c.rotulo}>
+            <span className="text-[15px] font-semibold">
+              {c.rotulo}
+              {c.obrigatorio && <span className="text-bad"> *</span>}
+            </span>
+            {c.ajuda && <span className="-mt-1 text-[13px] text-ink-3">{c.ajuda}</span>}
+            <Pergunta c={c} r={rs[c.id]} o={o} editavel={editavel} responder={(v) => responder(c.id, v)} fotos={(l) => fotos(l, c.id)} agir={agir} />
+          </div>
+        ),
+      )}
+    </div>
+  );
+}
+
+function Pergunta({
+  c,
+  r,
+  o,
+  editavel,
+  responder,
+  fotos,
+  agir,
+}: {
+  c: CampoModelo;
+  r: RespostaCampo | undefined;
+  o: Ordem;
+  editavel: boolean;
+  responder: (v: RespostaCampo) => void;
+  fotos: (l: FileList | null) => Promise<void>;
+  agir: (op: Operacao) => Promise<void>;
+}) {
+  // texto e número têm estado próprio para não atrapalhar a digitação ("24," ainda não é número)
+  const [texto, setTexto] = useState(r === undefined || r === null || typeof r === 'object' ? '' : c.tipo === 'numero' ? String(r).replace('.', ',') : String(r));
+  switch (c.tipo) {
+    case 'checklist': {
+      const v = r && typeof r === 'object' && !Array.isArray(r) ? r : null;
+      return (
+        <>
+          <div className="grid grid-cols-3 gap-1.5">
+            {(
+              [
+                ['ok', 'OK', 'bg-ok text-white'],
+                ['problema', 'Problema', 'bg-bad text-white'],
+                ['na', 'Não tem', 'bg-ink-3 text-white'],
+              ] as const
+            ).map(([k, rot, cor]) => (
+              <button key={k} type="button" disabled={!editavel} aria-pressed={v?.resposta === k} className={BOTAO(v?.resposta === k, cor)} onClick={() => responder(v?.resposta === k ? null : { resposta: k, obs: v?.obs ?? '' })}>
+                {rot}
+              </button>
+            ))}
+          </div>
+          {v?.resposta === 'problema' && (
+            <input className="input" disabled={!editavel} defaultValue={v.obs} placeholder="Qual o problema?" onBlur={(e) => e.target.value !== v.obs && responder({ ...v, obs: e.target.value })} />
+          )}
+        </>
+      );
+    }
+    case 'simnao':
+      return (
+        <div className="grid grid-cols-2 gap-1.5">
+          {([true, false] as const).map((b) => (
+            <button key={String(b)} type="button" disabled={!editavel} aria-pressed={r === b} className={BOTAO(r === b)} onClick={() => responder(r === b ? null : b)}>
+              {b ? 'Sim' : 'Não'}
+            </button>
+          ))}
+        </div>
+      );
+    case 'opcoes':
+      return (c.opcoes ?? []).length <= 6 ? (
+        <div className="flex flex-wrap gap-1.5">
+          {(c.opcoes ?? []).map((op) => (
+            <button key={op} type="button" disabled={!editavel} aria-pressed={r === op} className={BOTAO(r === op)} onClick={() => responder(r === op ? null : op)}>
+              {op}
+            </button>
+          ))}
+        </div>
+      ) : (
+        <select className="input h-12" disabled={!editavel} value={typeof r === 'string' ? r : ''} onChange={(e) => responder(e.target.value || null)}>
+          <option value="">Escolher…</option>
+          {(c.opcoes ?? []).map((op) => (
+            <option key={op}>{op}</option>
+          ))}
+        </select>
+      );
+    case 'multipla': {
+      const l = Array.isArray(r) ? r : [];
+      return (
+        <div className="flex flex-col">
+          {(c.opcoes ?? []).map((op) => (
+            <label key={op} className="flex min-h-[40px] items-center gap-3 text-[15px]">
+              <input type="checkbox" className="h-5 w-5" disabled={!editavel} checked={l.includes(op)} onChange={() => responder(l.includes(op) ? l.filter((x) => x !== op) : [...l, op])} />
+              {op}
+            </label>
+          ))}
+        </div>
+      );
+    }
+    case 'data':
+      return <input type="date" className="input h-12" disabled={!editavel} value={typeof r === 'string' ? r : ''} onChange={(e) => responder(e.target.value || null)} />;
+    case 'numero':
+      return (
+        <span className="flex items-center gap-2">
+          <input
+            className="input h-12 text-[17px] font-semibold"
+            inputMode="decimal"
+            disabled={!editavel}
+            value={texto}
+            onChange={(e) => {
+              setTexto(e.target.value);
+              const n = Number(e.target.value.replace(/\s/g, '').replace(',', '.'));
+              responder(e.target.value.trim() && Number.isFinite(n) ? n : null);
+            }}
+          />
+          {c.unidade && <span className="text-[15px] text-ink-3">{c.unidade}</span>}
+        </span>
+      );
+    case 'texto':
+    case 'textoLongo': {
+      const props = {
+        className: `input ${c.tipo === 'textoLongo' ? 'py-2.5' : 'h-12'} text-[15px]`,
+        disabled: !editavel,
+        value: texto,
+        onChange: (e: { target: { value: string } }) => {
+          setTexto(e.target.value);
+          responder(e.target.value);
+        },
+      };
+      return c.tipo === 'textoLongo' ? <textarea rows={3} {...props} /> : <input {...props} />;
+    }
+    case 'foto': {
+      const l = Array.isArray(r) ? r : [];
+      return (
+        <div className="flex flex-wrap items-center gap-2">
+          {l.map((f) =>
+            f.startsWith('pendente:') ? (
+              <span key={f} className="flex h-20 w-20 items-center justify-center rounded-xl border border-dashed border-line-strong text-center text-xs text-ink-3">
+                aguardando sinal
+              </span>
+            ) : (
+              <span key={f} className="relative">
+                <img src={urlArquivo(o, f)} alt={c.rotulo} className="h-20 w-20 rounded-xl border border-line object-cover" />
+                {editavel && (
+                  <button
+                    type="button"
+                    aria-label="Tirar foto"
+                    onClick={() => void agir({ tipo: 'tirarFoto', id: o.id, nome: f })}
+                    className="absolute -right-2 -top-2 flex h-7 w-7 items-center justify-center rounded-full bg-noite text-white"
+                  >
+                    ✕
+                  </button>
+                )}
+              </span>
+            ),
+          )}
+          {editavel && (
+            <label className="btn-secondary h-12 cursor-pointer text-[15px]">
+              {l.length ? '+ Foto' : 'Tirar foto'}
+              <input type="file" accept="image/*" capture="environment" multiple className="sr-only" onChange={(e) => void fotos(e.target.files).then(() => (e.target.value = ''))} />
+            </label>
+          )}
+        </div>
+      );
+    }
+    default:
+      return null;
+  }
 }
 
 /** Campo para o cliente assinar com o dedo. */

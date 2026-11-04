@@ -60,6 +60,8 @@ export function useMenu(): ItemMenu[] {
     // a ficha de cada máquina usa a mesma permissão da relação de frotas
     if (a.id === 'frotas') itens.push({ aba: 'frotas', rotulo: 'Equipamentos', rota: '/equipamentos', grupo: 'frota', badge: 0, alerta: false });
     itens.push({ aba: a.id, rotulo: a.id === 'calendario' && !pode('envio') ? 'Calendário de locações' : a.rotulo, rota: a.rota, grupo: a.grupo, badge: n, alerta });
+    // os formulários das OS: quem abre e encerra OS monta os modelos
+    if (a.id === 'ordens' && pode('ordens', 2) && pode('manutencao', 2)) itens.push({ aba: 'ordens', rotulo: 'Modelos de OS', rota: '/modelos-os', grupo: a.grupo, badge: 0, alerta: false });
   }
   return itens;
 }

@@ -9,7 +9,7 @@ import type { ExecucaoOS, LocalOS, Ordem } from '../types';
 export type Operacao =
   | { tipo: 'checkin'; id: string; local: Partial<LocalOS> }
   | { tipo: 'salvar'; id: string; dados: Partial<ExecucaoOS> & { aguardandoPeca?: boolean } }
-  | { tipo: 'foto'; id: string; imagem: string }
+  | { tipo: 'foto'; id: string; imagem: string; campoId?: string }
   | { tipo: 'tirarFoto'; id: string; nome: string }
   | { tipo: 'assinatura'; id: string; imagem: string; nome: string }
   | { tipo: 'concluir'; id: string; local: Partial<LocalOS> };
@@ -50,7 +50,8 @@ export async function enfileirar(op: Operacao) {
     const ultimo = fila[fila.length - 1];
     // não junta com o que está sendo enviado agora (senão a mudança some quando o envio termina)
     if (ultimo && ultimo.tipo === 'salvar' && ultimo.id === op.id && ultimo.chave !== emEnvio) {
-      await tx(FILA, 'readwrite', (s) => s.put({ ...ultimo, dados: { ...ultimo.dados, ...op.dados } }));
+      const respostas = ultimo.dados.respostas || op.dados.respostas ? { respostas: { ...(ultimo.dados.respostas ?? {}), ...(op.dados.respostas ?? {}) } } : {};
+      await tx(FILA, 'readwrite', (s) => s.put({ ...ultimo, dados: { ...ultimo.dados, ...op.dados, ...respostas } }));
       return;
     }
   }
@@ -77,13 +78,25 @@ export function aplicarLocal(o: Ordem, op: Operacao): Ordem {
       return {
         ...o,
         status: aguardandoPeca === true ? 'aguardando_peca' : aguardandoPeca === false && o.status === 'aguardando_peca' ? 'execucao' : o.status,
-        execucao: { ...ex, ...Object.fromEntries(Object.entries(d).filter(([, v]) => v !== undefined)) },
+        execucao: {
+          ...ex,
+          ...Object.fromEntries(Object.entries(d).filter(([, v]) => v !== undefined)),
+          ...(d.respostas ? { respostas: { ...(ex.respostas ?? {}), ...d.respostas } } : {}),
+        },
       };
     }
-    case 'foto':
-      return { ...o, execucao: { ...ex, fotos: [...(ex.fotos ?? []), `pendente:${op.imagem.slice(-12)}`] } };
-    case 'tirarFoto':
-      return { ...o, execucao: { ...ex, fotos: (ex.fotos ?? []).filter((f) => f !== op.nome) } };
+    case 'foto': {
+      const nome = `pendente:${op.imagem.slice(-12)}`;
+      if (op.campoId) {
+        const atuais = Array.isArray(ex.respostas?.[op.campoId]) ? (ex.respostas![op.campoId] as string[]) : [];
+        return { ...o, execucao: { ...ex, respostas: { ...(ex.respostas ?? {}), [op.campoId]: [...atuais, nome] } } };
+      }
+      return { ...o, execucao: { ...ex, fotos: [...(ex.fotos ?? []), nome] } };
+    }
+    case 'tirarFoto': {
+      const respostas = ex.respostas && Object.fromEntries(Object.entries(ex.respostas).map(([k, v]) => [k, Array.isArray(v) ? v.filter((f) => f !== op.nome) : v]));
+      return { ...o, execucao: { ...ex, fotos: (ex.fotos ?? []).filter((f) => f !== op.nome), ...(respostas ? { respostas } : {}) } };
+    }
     case 'assinatura':
       return { ...o, execucao: { ...ex, assinatura: 'pendente', assinadoPor: op.nome } };
     case 'concluir':
@@ -98,7 +111,7 @@ async function executar(op: Operacao): Promise<Ordem> {
     case 'salvar':
       return api.salvarExecucao(op.id, op.dados);
     case 'foto':
-      return api.fotoOrdem(op.id, op.imagem);
+      return api.fotoOrdem(op.id, op.imagem, op.campoId);
     case 'tirarFoto':
       return api.tirarFotoOrdem(op.id, op.nome);
     case 'assinatura':

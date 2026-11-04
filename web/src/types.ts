@@ -335,7 +335,26 @@ export type StatusOS = 'aberta' | 'agendada' | 'execucao' | 'aguardando_peca' | 
 export type ItemChecklist = { item: string; resposta: 'ok' | 'problema' | 'na' | ''; obs: string };
 export type LocalOS = { em: string; lat: number | null; lng: number | null; precisao: number | null };
 export type PecaOS = { codigo: string; descricao: string; quantidade: number };
+export type TipoCampo = 'secao' | 'checklist' | 'simnao' | 'texto' | 'textoLongo' | 'numero' | 'opcoes' | 'multipla' | 'data' | 'foto';
+export type CampoModelo = { id: string; rotulo: string; tipo: TipoCampo; obrigatorio: boolean; opcoes?: string[]; unidade?: string; ajuda?: string };
+export type ModeloOS = {
+  id: string;
+  nome: string;
+  descricao: string;
+  tipoBase: TipoOS;
+  campos: CampoModelo[];
+  exigeHorimetro: boolean;
+  exigeAssinatura: boolean;
+  fotosMinimas: number;
+  ativo: boolean;
+  atualizadoEm: string;
+  atualizadoPor: string;
+};
+export type FormularioOS = Pick<ModeloOS, 'nome' | 'campos' | 'exigeHorimetro' | 'exigeAssinatura' | 'fotosMinimas'> & { modeloId: string };
+export type RespostaCampo = string | number | boolean | string[] | { resposta: 'ok' | 'problema' | 'na'; obs: string } | null;
 export type ExecucaoOS = {
+  formulario?: FormularioOS;
+  respostas?: Record<string, RespostaCampo>;
   checkin?: LocalOS;
   checkout?: LocalOS;
   horimetro?: number | null;
@@ -377,7 +396,8 @@ export type NovaOrdem = {
   frota: string;
   clienteId?: string | null;
   clienteNome?: string;
-  tipo: TipoOS;
+  tipo?: TipoOS;
+  modeloId?: string;
   tipoVisita?: string;
   tecnicoId?: number | null;
   agendadaPara?: string | null;

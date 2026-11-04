@@ -93,6 +93,11 @@ Técnico (ordens 2 sem manutencao 2) só vê as dele e abre direto em `/campo` (
 Fotos e assinatura em `/opt/faturas-dados/ordens/<id>/`. PDF gerado no navegador (`web/src/lib/ordens.ts`).
 Sem internet: fila no IndexedDB (`web/src/lib/filaOffline.ts`), service worker `web/public/sw.js`, e o último
 usuário fica guardado para abrir sem sinal. Checklists por tipo em `CHECKLISTS` (código).
+Relatório ao cliente desligado por padrão (config `os.relatorioCliente`, Configurações → Manutenção).
+Modelos de OS (migração 17, `api/src/modelos.ts`, tela `/modelos-os`): cada tipo de OS com seu formulário
+(seção, checklist, sim/não, texto, número, lista, múltipla, data, foto), horímetro/assinatura/fotos mínimas
+configuráveis. A OS guarda uma cópia do formulário (`execucao.formulario`) e as respostas (`execucao.respostas`);
+mudar o modelo não mexe nas OS já abertas. OS antigas seguem com o `checklist` fixo.
 Cópias do banco: uma por dia em `/opt/faturas-dados/copias` (30 dias) + botão de baixar (Usuários e permissões).
 
 ## Navegação
@@ -100,6 +105,6 @@ Menu lateral com 6 grupos (Início, Operação, Frota, Financeiro, Clientes, Adm
 `/inicio` (cartões conforme o perfil) e busca no topo (`components/BuscaGeral.tsx`; as telas leem `?busca=`).
 
 ## Próximo passo (nov/2026)
-Fases 1 (navegação e permissões), 2 (equipamentos + importação) e 3 (painel de manutenção) feitas. Fases 4 (app do dono) e 5 (ordens de serviço) feitas. Próxima: 6 serviços externos (só etapas, sem automação).
+Fases 1 (navegação e permissões), 2 (equipamentos + importação) e 3 (painel de manutenção) feitas. Fases 4 (app do dono) e 5 (ordens de serviço, com modelos de OS) feitas. Próxima: 6 serviços externos (só etapas, sem automação).
 Sem integração com o Auvo. A planilha real do Júnior NÃO vai para o repositório. Requisitos levantados com base em Auvo,
 Produttivo, Field Control e softwares de locação — ver documento de requisitos.
