@@ -35,7 +35,8 @@ export function detalhesMov(m: { tipo: TipoMov; frota: string; frotaNova?: strin
 }
 
 export function Movimentacoes() {
-  const { clientes, movimentacoes, recarregarOperacoes, ehFinanceiro, avisar } = useEstado();
+  const { clientes, movimentacoes, recarregarOperacoes, aprova: ehFinanceiro, avisar, pode } = useEstado();
+  const registra = pode('movimentacoes', 2);
   const [m, setM] = useState<NovaMovimentacao>(() => movVazia(hojeIso()));
   const [valorTxt, setValorTxt] = useState('');
   const [emailsTxt, setEmailsTxt] = useState('');
@@ -47,7 +48,20 @@ export function Movimentacoes() {
 
   const ativos = useMemo(() => clientes.filter((c) => c.ativo).sort((a, b) => a.nome.localeCompare(b.nome)), [clientes]);
   const clienteAtual = m.clienteId ? clientes.find((c) => c.id === m.clienteId) : null;
-  const ondeEsta = m.frota.trim() ? clientes.filter((c) => c.ativo && c.frotas.some((f) => f.numero === m.frota.trim().toUpperCase().replace(/^FT[\s-]*/, ''))) : [];
+  const ondeEsta = m.frota.trim()
+    ? clientes.filter(
+        (c) =>
+          c.ativo &&
+          c.frotas.some(
+            (f) =>
+              f.numero ===
+              m.frota
+                .trim()
+                .toUpperCase()
+                .replace(/^FT[\s-]*/, ''),
+          ),
+      )
+    : [];
 
   const mudar = (p: Partial<NovaMovimentacao>) => setM((x) => ({ ...x, ...p }));
 
@@ -74,7 +88,14 @@ export function Movimentacoes() {
     if (m.tipo !== 'devolucao' && !m.clienteId && !m.clienteNome?.trim()) return setErro('Informe o cliente.');
     const valor = valorTxt.trim() ? lerReais(valorTxt) : null;
     if (valorTxt.trim() && valor === null) return setErro(`Não entendi o valor "${valorTxt}". Use, por exemplo, 3.350,00`);
-    const emails = [...new Set(emailsTxt.split(/[\s,;]+/).map((e) => e.trim().toLowerCase()).filter(Boolean))];
+    const emails = [
+      ...new Set(
+        emailsTxt
+          .split(/[\s,;]+/)
+          .map((e) => e.trim().toLowerCase())
+          .filter(Boolean),
+      ),
+    ];
     const inval = emails.find((e) => !emailValido(e));
     if (inval) return setErro(`O e-mail "${inval}" não parece válido.`);
     setSalvando(true);
@@ -95,206 +116,248 @@ export function Movimentacoes() {
 
   const q = busca.trim().toUpperCase();
   const lista = movimentacoes.filter(
-    (x) => (filtro === 'todas' || x.status === filtro) && (!q || x.frota.includes(q.replace(/^FT\s*/, '')) || x.clienteNome.includes(q) || x.criadaPorNome.toUpperCase().includes(q)),
+    (x) =>
+      (filtro === 'todas' || x.status === filtro) && (!q || x.frota.includes(q.replace(/^FT\s*/, '')) || x.clienteNome.includes(q) || x.criadaPorNome.toUpperCase().includes(q)),
   );
 
   const opcaoTipo = (t: TipoMov) => (
-    <label key={t} className={`flex min-h-[44px] flex-1 cursor-pointer items-center gap-2 rounded-[10px] border px-3 text-[13px] ${m.tipo === t ? 'border-ink bg-white font-semibold' : 'border-line-strong bg-white/60'}`}>
+    <label
+      key={t}
+      className={`flex min-h-[44px] flex-1 cursor-pointer items-center gap-2 rounded-[10px] border px-3 text-[13px] ${m.tipo === t ? 'border-ink bg-white font-semibold' : 'border-line-strong bg-white/60'}`}
+    >
       <input type="radio" name="tipo" checked={m.tipo === t} onChange={() => mudar({ tipo: t })} className="h-[18px] w-[18px] accent-ink" />
       {NOMES_TIPO[t]}
     </label>
   );
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[minmax(0,460px)_minmax(0,1fr)]">
-      <section className="flex flex-col gap-4 self-start rounded-xl border border-line bg-white p-5">
-        <div>
-          <h1 className="text-lg font-bold">Registrar movimentação</h1>
-          <p className="text-[13px] text-ink-3">
-            {ehFinanceiro ? 'Entra no cadastro na hora.' : 'Vai para o financeiro aprovar antes de entrar no cadastro.'}
-          </p>
-        </div>
-
-        <details className="rounded-xl border border-dashed border-line-strong bg-[#F8F7F3] p-3" open={!m.frota}>
-          <summary className="cursor-pointer text-[13px] font-semibold">Colar a mensagem (preenche sozinho)</summary>
-          <textarea
-            aria-label="Mensagem da movimentação"
-            rows={6}
-            value={colado}
-            onChange={(e) => setColado(e.target.value)}
-            placeholder={'NOVA LOCAÇÃO FT35\n20/10/2026\nFENIX NOVUS\n- Valor da Locação: R$3.350,00\n- Frete: Por conta da Lucminas\n…'}
-            className="input mt-2 resize-y bg-white py-2 font-mono text-[12.5px]"
-          />
-          <button type="button" className="btn-secondary btn-sm mt-2" onClick={preencherDoTexto} disabled={!colado.trim()}>
-            Preencher campos
-          </button>
-        </details>
-
-        <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Tipo de movimentação">
-          {(['locacao', 'troca', 'devolucao'] as TipoMov[]).map(opcaoTipo)}
-        </div>
-
-        <div className="grid grid-cols-2 gap-3">
-          <div className="flex flex-col gap-1.5">
-            <label htmlFor="mov-frota" className="label">
-              {m.tipo === 'troca' ? 'Frota que sai' : 'Frota'}
-            </label>
-            <input id="mov-frota" className="input uppercase" value={m.frota} onChange={(e) => mudar({ frota: e.target.value })} placeholder="FT35" />
+    <div className={registra ? 'grid gap-6 lg:grid-cols-[minmax(0,460px)_minmax(0,1fr)]' : 'grid gap-6'}>
+      {registra && (
+        <section className="flex flex-col gap-4 self-start rounded-xl border border-line bg-white p-5">
+          <div>
+            <h1 className="text-lg font-bold">Registrar movimentação</h1>
+            <p className="text-[13px] text-ink-3">{ehFinanceiro ? 'Entra no cadastro na hora.' : 'Vai para o financeiro aprovar antes de entrar no cadastro.'}</p>
           </div>
-          {m.tipo === 'troca' ? (
-            <div className="flex flex-col gap-1.5">
-              <label htmlFor="mov-frota-nova" className="label">
-                Frota que entra
-              </label>
-              <input id="mov-frota-nova" className="input uppercase" value={m.frotaNova ?? ''} onChange={(e) => mudar({ frotaNova: e.target.value })} placeholder="FT40" />
-            </div>
-          ) : (
-            <div className="flex flex-col gap-1.5">
-              <label htmlFor="mov-data" className="label">
-                Data
-              </label>
-              <input id="mov-data" type="date" className="input" value={m.data} onChange={(e) => mudar({ data: e.target.value })} />
-            </div>
-          )}
-          {m.tipo === 'troca' && (
-            <div className="col-span-2 flex flex-col gap-1.5">
-              <label htmlFor="mov-data" className="label">
-                Data
-              </label>
-              <input id="mov-data" type="date" className="input" value={m.data} onChange={(e) => mudar({ data: e.target.value })} />
-            </div>
-          )}
-        </div>
-        {ondeEsta.length > 0 && (
-          <p className="-mt-2 text-xs text-ink-3">
-            FT{m.frota.trim().toUpperCase().replace(/^FT[\s-]*/, '')} hoje está em: <b className="text-ink-2">{ondeEsta.map((c) => c.nome).join(', ')}</b>
-            {m.tipo === 'locacao' && ' (sai de lá quando a locação for aprovada)'}
-          </p>
-        )}
 
-        <div className="flex flex-col gap-1.5">
-          <label htmlFor="mov-cliente" className="label">
-            Cliente {m.tipo === 'devolucao' && <span className="font-normal text-ink-3">(opcional: o sistema acha pela frota)</span>}
-          </label>
-          <input id="mov-cliente" list="mov-clientes" className="input uppercase" value={m.clienteNome ?? ''} onChange={(e) => escolherCliente(e.target.value)} placeholder="Comece a digitar o nome" />
-          <datalist id="mov-clientes">
-            {ativos.map((c) => (
-              <option key={c.id} value={c.nome} />
-            ))}
-          </datalist>
-          {m.clienteNome?.trim() && (
-            <p className="text-xs">{clienteAtual ? <Chip tom="ok">Cliente cadastrado</Chip> : <Chip tom="info">Cliente novo: será cadastrado</Chip>}</p>
-          )}
-        </div>
+          <details className="rounded-xl border border-dashed border-line-strong bg-[#F8F7F3] p-3" open={!m.frota}>
+            <summary className="cursor-pointer text-[13px] font-semibold">Colar a mensagem (preenche sozinho)</summary>
+            <textarea
+              aria-label="Mensagem da movimentação"
+              rows={6}
+              value={colado}
+              onChange={(e) => setColado(e.target.value)}
+              placeholder={'NOVA LOCAÇÃO FT35\n20/10/2026\nFENIX NOVUS\n- Valor da Locação: R$3.350,00\n- Frete: Por conta da Lucminas\n…'}
+              className="input mt-2 resize-y bg-white py-2 font-mono text-[12.5px]"
+            />
+            <button type="button" className="btn-secondary btn-sm mt-2" onClick={preencherDoTexto} disabled={!colado.trim()}>
+              Preencher campos
+            </button>
+          </details>
 
-        {m.tipo !== 'devolucao' && (
-          <>
-            <div className="grid grid-cols-2 gap-3">
+          <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Tipo de movimentação">
+            {(['locacao', 'troca', 'devolucao'] as TipoMov[]).map(opcaoTipo)}
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor="mov-frota" className="label">
+                {m.tipo === 'troca' ? 'Frota que sai' : 'Frota'}
+              </label>
+              <input id="mov-frota" className="input uppercase" value={m.frota} onChange={(e) => mudar({ frota: e.target.value })} placeholder="FT35" />
+            </div>
+            {m.tipo === 'troca' ? (
               <div className="flex flex-col gap-1.5">
-                <label htmlFor="mov-valor" className="label">
-                  Valor da locação (R$)
+                <label htmlFor="mov-frota-nova" className="label">
+                  Frota que entra
+                </label>
+                <input id="mov-frota-nova" className="input uppercase" value={m.frotaNova ?? ''} onChange={(e) => mudar({ frotaNova: e.target.value })} placeholder="FT40" />
+              </div>
+            ) : (
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="mov-data" className="label">
+                  Data
+                </label>
+                <input id="mov-data" type="date" className="input" value={m.data} onChange={(e) => mudar({ data: e.target.value })} />
+              </div>
+            )}
+            {m.tipo === 'troca' && (
+              <div className="col-span-2 flex flex-col gap-1.5">
+                <label htmlFor="mov-data" className="label">
+                  Data
+                </label>
+                <input id="mov-data" type="date" className="input" value={m.data} onChange={(e) => mudar({ data: e.target.value })} />
+              </div>
+            )}
+          </div>
+          {ondeEsta.length > 0 && (
+            <p className="-mt-2 text-xs text-ink-3">
+              FT
+              {m.frota
+                .trim()
+                .toUpperCase()
+                .replace(/^FT[\s-]*/, '')}{' '}
+              hoje está em: <b className="text-ink-2">{ondeEsta.map((c) => c.nome).join(', ')}</b>
+              {m.tipo === 'locacao' && ' (sai de lá quando a locação for aprovada)'}
+            </p>
+          )}
+
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="mov-cliente" className="label">
+              Cliente {m.tipo === 'devolucao' && <span className="font-normal text-ink-3">(opcional: o sistema acha pela frota)</span>}
+            </label>
+            <input
+              id="mov-cliente"
+              list="mov-clientes"
+              className="input uppercase"
+              value={m.clienteNome ?? ''}
+              onChange={(e) => escolherCliente(e.target.value)}
+              placeholder="Comece a digitar o nome"
+            />
+            <datalist id="mov-clientes">
+              {ativos.map((c) => (
+                <option key={c.id} value={c.nome} />
+              ))}
+            </datalist>
+            {m.clienteNome?.trim() && <p className="text-xs">{clienteAtual ? <Chip tom="ok">Cliente cadastrado</Chip> : <Chip tom="info">Cliente novo: será cadastrado</Chip>}</p>}
+          </div>
+
+          {m.tipo !== 'devolucao' && (
+            <>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="flex flex-col gap-1.5">
+                  <label htmlFor="mov-valor" className="label">
+                    Valor da locação (R$)
+                  </label>
+                  <input
+                    id="mov-valor"
+                    inputMode="decimal"
+                    className="input text-right"
+                    value={valorTxt}
+                    onChange={(e) => setValorTxt(e.target.value)}
+                    onBlur={() => {
+                      const v = lerReais(valorTxt);
+                      if (v !== null) setValorTxt(reaisParaCampo(v));
+                    }}
+                    placeholder="3.350,00"
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <label htmlFor="mov-gas" className="label">
+                    Vasilhames de gás
+                  </label>
+                  <input
+                    id="mov-gas"
+                    type="number"
+                    min={0}
+                    max={50}
+                    className="input text-center"
+                    value={m.gas}
+                    onChange={(e) => mudar({ gas: Math.max(0, Number(e.target.value) || 0) })}
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <label htmlFor="mov-frete" className="label">
+                    Frete
+                  </label>
+                  <select id="mov-frete" className="input" value={m.frete} onChange={(e) => mudar({ frete: e.target.value as NovaMovimentacao['frete'] })}>
+                    <option value="">—</option>
+                    <option value="lucminas">Por conta da Lucminas</option>
+                    <option value="cliente">Por conta do cliente</option>
+                  </select>
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <label htmlFor="mov-contrato" className="label">
+                    Tempo de contrato
+                  </label>
+                  <input id="mov-contrato" className="input" value={m.contrato} onChange={(e) => mudar({ contrato: e.target.value })} placeholder="12 meses" />
+                </div>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="mov-fim" className="label">
+                  Término previsto <span className="font-normal text-ink-3">(aparece no Calendário)</span>
+                </label>
+                <input id="mov-fim" type="date" className="input" value={m.fim ?? ''} onChange={(e) => mudar({ fim: e.target.value || null })} />
+                {(() => {
+                  const sug = fimSugerido(m.data, m.contrato);
+                  return sug && sug !== m.fim ? (
+                    <button type="button" className="self-start text-xs font-semibold text-ink-2 underline underline-offset-2" onClick={() => mudar({ fim: sug })}>
+                      Usar {dataBr(sug)} ({m.contrato} a partir de {dataBr(m.data)})
+                    </button>
+                  ) : null;
+                })()}
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="mov-prazo" className="label">
+                  Prazo de pagamento
                 </label>
                 <input
-                  id="mov-valor"
-                  inputMode="decimal"
-                  className="input text-right"
-                  value={valorTxt}
-                  onChange={(e) => setValorTxt(e.target.value)}
-                  onBlur={() => {
-                    const v = lerReais(valorTxt);
-                    if (v !== null) setValorTxt(reaisParaCampo(v));
-                  }}
-                  placeholder="3.350,00"
+                  id="mov-prazo"
+                  className="input"
+                  value={m.prazoPagamento}
+                  onChange={(e) => mudar({ prazoPagamento: e.target.value })}
+                  placeholder="30 dias após emissão da fatura"
                 />
               </div>
               <div className="flex flex-col gap-1.5">
-                <label htmlFor="mov-gas" className="label">
-                  Vasilhames de gás
+                <label htmlFor="mov-emails" className="label">
+                  E-mails para a fatura <span className="font-normal text-ink-3">(separe por vírgula)</span>
                 </label>
-                <input id="mov-gas" type="number" min={0} max={50} className="input text-center" value={m.gas} onChange={(e) => mudar({ gas: Math.max(0, Number(e.target.value) || 0) })} />
+                <input
+                  id="mov-emails"
+                  className="input"
+                  inputMode="email"
+                  value={emailsTxt}
+                  onChange={(e) => setEmailsTxt(e.target.value)}
+                  placeholder="compras@cliente.com.br, comercial@cliente.com.br"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="flex flex-col gap-1.5">
+                  <label htmlFor="mov-contato" className="label">
+                    Contato
+                  </label>
+                  <input id="mov-contato" className="input" value={m.contatoNome} onChange={(e) => mudar({ contatoNome: e.target.value })} placeholder="João Pedro" />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <label htmlFor="mov-tel" className="label">
+                    Telefone
+                  </label>
+                  <input
+                    id="mov-tel"
+                    className="input"
+                    inputMode="tel"
+                    value={m.contatoTelefone}
+                    onChange={(e) => mudar({ contatoTelefone: e.target.value })}
+                    placeholder="(31) 98808-9842"
+                  />
+                </div>
               </div>
               <div className="flex flex-col gap-1.5">
-                <label htmlFor="mov-frete" className="label">
-                  Frete
+                <label htmlFor="mov-desc" className="label">
+                  Equipamento <span className="font-normal text-ink-3">(opcional)</span>
                 </label>
-                <select id="mov-frete" className="input" value={m.frete} onChange={(e) => mudar({ frete: e.target.value as NovaMovimentacao['frete'] })}>
-                  <option value="">—</option>
-                  <option value="lucminas">Por conta da Lucminas</option>
-                  <option value="cliente">Por conta do cliente</option>
-                </select>
+                <input id="mov-desc" className="input" value={m.descricao} onChange={(e) => mudar({ descricao: e.target.value })} placeholder="Empilhadeira 2,5t a gás" />
               </div>
-              <div className="flex flex-col gap-1.5">
-                <label htmlFor="mov-contrato" className="label">
-                  Tempo de contrato
-                </label>
-                <input id="mov-contrato" className="input" value={m.contrato} onChange={(e) => mudar({ contrato: e.target.value })} placeholder="12 meses" />
-              </div>
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <label htmlFor="mov-fim" className="label">
-                Término previsto <span className="font-normal text-ink-3">(aparece no Calendário)</span>
-              </label>
-              <input id="mov-fim" type="date" className="input" value={m.fim ?? ''} onChange={(e) => mudar({ fim: e.target.value || null })} />
-              {(() => {
-                const sug = fimSugerido(m.data, m.contrato);
-                return sug && sug !== m.fim ? (
-                  <button type="button" className="self-start text-xs font-semibold text-ink-2 underline underline-offset-2" onClick={() => mudar({ fim: sug })}>
-                    Usar {dataBr(sug)} ({m.contrato} a partir de {dataBr(m.data)})
-                  </button>
-                ) : null;
-              })()}
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <label htmlFor="mov-prazo" className="label">
-                Prazo de pagamento
-              </label>
-              <input id="mov-prazo" className="input" value={m.prazoPagamento} onChange={(e) => mudar({ prazoPagamento: e.target.value })} placeholder="30 dias após emissão da fatura" />
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <label htmlFor="mov-emails" className="label">
-                E-mails para a fatura <span className="font-normal text-ink-3">(separe por vírgula)</span>
-              </label>
-              <input id="mov-emails" className="input" inputMode="email" value={emailsTxt} onChange={(e) => setEmailsTxt(e.target.value)} placeholder="compras@cliente.com.br, comercial@cliente.com.br" />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="flex flex-col gap-1.5">
-                <label htmlFor="mov-contato" className="label">
-                  Contato
-                </label>
-                <input id="mov-contato" className="input" value={m.contatoNome} onChange={(e) => mudar({ contatoNome: e.target.value })} placeholder="João Pedro" />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <label htmlFor="mov-tel" className="label">
-                  Telefone
-                </label>
-                <input id="mov-tel" className="input" inputMode="tel" value={m.contatoTelefone} onChange={(e) => mudar({ contatoTelefone: e.target.value })} placeholder="(31) 98808-9842" />
-              </div>
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <label htmlFor="mov-desc" className="label">
-                Equipamento <span className="font-normal text-ink-3">(opcional)</span>
-              </label>
-              <input id="mov-desc" className="input" value={m.descricao} onChange={(e) => mudar({ descricao: e.target.value })} placeholder="Empilhadeira 2,5t a gás" />
-            </div>
-          </>
-        )}
-        <div className="flex flex-col gap-1.5">
-          <label htmlFor="mov-obs" className="label">
-            Observações
-          </label>
-          <textarea id="mov-obs" rows={2} className="input resize-y py-2 text-[13px]" value={m.observacoes} onChange={(e) => mudar({ observacoes: e.target.value })} />
-        </div>
-        <p className="text-xs text-ink-3">A data de faturamento do cliente não é alterada: ela continua sendo definida no cadastro.</p>
-
-        {erro && (
-          <div role="alert" className="rounded-[10px] bg-bad-soft px-3 py-2.5 text-[13px] text-bad-strong">
-            {erro}
+            </>
+          )}
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="mov-obs" className="label">
+              Observações
+            </label>
+            <textarea id="mov-obs" rows={2} className="input resize-y py-2 text-[13px]" value={m.observacoes} onChange={(e) => mudar({ observacoes: e.target.value })} />
           </div>
-        )}
-        <button type="button" className="btn-primary" onClick={registrar} disabled={salvando}>
-          {salvando ? 'Registrando…' : ehFinanceiro ? 'Registrar movimentação' : 'Enviar para aprovação'}
-        </button>
-      </section>
+          <p className="text-xs text-ink-3">A data de faturamento do cliente não é alterada: ela continua sendo definida no cadastro.</p>
+
+          {erro && (
+            <div role="alert" className="rounded-[10px] bg-bad-soft px-3 py-2.5 text-[13px] text-bad-strong">
+              {erro}
+            </div>
+          )}
+          <button type="button" className="btn-primary" onClick={registrar} disabled={salvando}>
+            {salvando ? 'Registrando…' : ehFinanceiro ? 'Registrar movimentação' : 'Enviar para aprovação'}
+          </button>
+        </section>
+      )}
 
       <section className="flex min-w-0 flex-col gap-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -315,7 +378,9 @@ export function Movimentacoes() {
             </select>
           </div>
         </div>
-        {lista.length === 0 && <p className="rounded-xl border border-line bg-white p-6 text-center text-ink-3">Nenhuma movimentação {movimentacoes.length ? 'com esse filtro' : 'registrada ainda'}.</p>}
+        {lista.length === 0 && (
+          <p className="rounded-xl border border-line bg-white p-6 text-center text-ink-3">Nenhuma movimentação {movimentacoes.length ? 'com esse filtro' : 'registrada ainda'}.</p>
+        )}
         <ul className="flex flex-col gap-3">
           {lista.map((x) => (
             <li key={x.id}>

@@ -1,8 +1,10 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { api } from './api';
 import type { Cliente, ClienteInput, ConfigEmail, Envio, FrotaOficina, ItemLote, Lote, Movimentacao, Proposta, Solicitacao, Usuario } from './types';
 import { hojeIso } from './lib/calendario';
 import { encontrarCliente, statusDoItem } from './lib/pareamento';
+import { nivel, type Aba } from './lib/acesso';
+import type { Nivel } from './types';
 
 type Aviso = { id: number; texto: string; tom: 'ok' | 'bad' };
 
@@ -13,8 +15,12 @@ type Estado = {
   entrar(email: string, senha: string): Promise<void>;
   sair(): Promise<void>;
 
-  /** financeiro (Angelise/Júlia) pode tudo; operações (Júnior) propõe e o financeiro aprova */
-  ehFinanceiro: boolean;
+  /** o perfil do usuário tem pelo menos esse nível na aba (1 = vê, 2 = edita) */
+  pode(aba: Aba, n?: Nivel): boolean;
+  /** somas, totais e valores nos relatórios em PDF */
+  veValores: boolean;
+  /** aprova as alterações dos outros: o que ele registra entra direto no cadastro */
+  aprova: boolean;
 
   clientes: Cliente[];
   recarregarClientes(): Promise<void>;
@@ -78,7 +84,13 @@ export function EstadoProvider({ children }: { children: ReactNode }) {
   const [envioAtivo, setEnvioAtivo] = useState(false);
 
   const recarregarClientes = useCallback(async () => setClientes(await api.listarClientes()), []);
-  const recarregarEnvios = useCallback(async () => setEnvios(await api.listarEnvios()), []);
+  // só quem vê o envio ou o histórico recebe a lista de envios
+  const usuarioRef = useRef<Usuario | null>(null);
+  usuarioRef.current = usuario;
+  const recarregarEnvios = useCallback(async () => {
+    const u = usuarioRef.current;
+    if (u && (nivel(u, 'envio') || nivel(u, 'historico'))) setEnvios(await api.listarEnvios());
+  }, []);
   const recarregarSolicitacoes = useCallback(async () => {
     try {
       setSolicitacoes(await api.listarSolicitacoes());
@@ -107,7 +119,10 @@ export function EstadoProvider({ children }: { children: ReactNode }) {
     };
     tudo();
     api.lerConfig().then(setConfig, () => undefined);
-    api.situacaoEnvio().then((s) => setEnvioAtivo(s.configurado), () => undefined);
+    api.situacaoEnvio().then(
+      (s) => setEnvioAtivo(s.configurado),
+      () => undefined,
+    );
     const t = setInterval(tudo, 60_000);
     const foco = () => document.visibilityState === 'visible' && tudo();
     document.addEventListener('visibilitychange', foco);
@@ -121,6 +136,7 @@ export function EstadoProvider({ children }: { children: ReactNode }) {
     api
       .usuarioAtual()
       .then(async (u) => {
+        usuarioRef.current = u;
         setUsuario(u);
         if (u) await Promise.all([recarregarClientes(), recarregarEnvios()]);
       })
@@ -150,11 +166,10 @@ export function EstadoProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const hoje = hojeIso();
-  const pendentesParaMim = useMemo(
-    () => solicitacoes.filter((x) => x.status === 'aberta' && x.paraUsuario === usuario?.id && x.data <= hoje),
-    [solicitacoes, usuario, hoje],
-  );
-  const ehFinanceiro = (usuario?.perfil ?? 'financeiro') === 'financeiro';
+  const pendentesParaMim = useMemo(() => solicitacoes.filter((x) => x.status === 'aberta' && x.paraUsuario === usuario?.id && x.data <= hoje), [solicitacoes, usuario, hoje]);
+  const pode = useCallback((aba: Aba, n: Nivel = 1) => nivel(usuario, aba) >= n, [usuario]);
+  const veValores = !!usuario?.veValores;
+  const aprova = pode('aprovacoes', 2);
   const aguardandoAprovacao = movimentacoes.filter((m) => m.status === 'pendente').length + propostas.filter((p) => p.status === 'pendente').length;
   const naoLidas = solicitacoes.reduce((n, x) => n + (x.naoLidas > 0 ? 1 : 0), 0);
 
@@ -165,6 +180,7 @@ export function EstadoProvider({ children }: { children: ReactNode }) {
       erroInicial,
       async entrar(email, senha) {
         const u = await api.login(email, senha);
+        usuarioRef.current = u;
         setUsuario(u);
         await Promise.all([recarregarClientes(), recarregarEnvios()]);
       },
@@ -174,7 +190,9 @@ export function EstadoProvider({ children }: { children: ReactNode }) {
         setLote(null);
       },
 
-      ehFinanceiro,
+      pode,
+      veValores,
+      aprova,
       clientes,
       recarregarClientes,
       async proporCliente(input) {
@@ -264,7 +282,33 @@ export function EstadoProvider({ children }: { children: ReactNode }) {
       avisar,
       fecharAviso: () => setAviso(null),
     }),
-    [usuario, carregando, erroInicial, ehFinanceiro, movimentacoes, propostas, oficina, aguardandoAprovacao, config, envioAtivo, recarregarOperacoes, clientes, envios, solicitacoes, recarregarSolicitacoes, pendentesParaMim, naoLidas, lote, aviso, avisar, recarregarClientes, recarregarEnvios, reconciliarLote],
+    [
+      usuario,
+      carregando,
+      erroInicial,
+      pode,
+      veValores,
+      aprova,
+      movimentacoes,
+      propostas,
+      oficina,
+      aguardandoAprovacao,
+      config,
+      envioAtivo,
+      recarregarOperacoes,
+      clientes,
+      envios,
+      solicitacoes,
+      recarregarSolicitacoes,
+      pendentesParaMim,
+      naoLidas,
+      lote,
+      aviso,
+      avisar,
+      recarregarClientes,
+      recarregarEnvios,
+      reconciliarLote,
+    ],
   );
 
   return <Ctx.Provider value={valor}>{children}</Ctx.Provider>;

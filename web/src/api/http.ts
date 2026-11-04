@@ -121,6 +121,16 @@ export const httpApi: Api = {
     await chamar('POST', `/api/conferencia/${ref}/desmarcar`, { clienteId, frota });
   },
 
+  listarPerfis: async () => (await chamar<{ perfis: import('../types').PerfilAcesso[] }>('GET', '/api/perfis')).perfis,
+  criarPerfil: (p) => chamar('POST', '/api/perfis', p),
+  salvarPerfil: (p) => chamar('PUT', `/api/perfis/${encodeURIComponent(p.id)}`, p),
+  apagarPerfil: async (id) => {
+    await chamar('DELETE', `/api/perfis/${encodeURIComponent(id)}`);
+  },
+  listarUsuariosAdmin: () => chamar('GET', '/api/admin/usuarios'),
+  criarUsuario: (u) => chamar('POST', '/api/admin/usuarios', u),
+  alterarUsuario: (id, m) => chamar('PATCH', `/api/admin/usuarios/${id}`, m),
+
   listarEnvios: () => chamar('GET', '/api/envios'),
   // o envio real (SMTP + cópia em Enviados) entra na próxima etapa; o servidor responde com a explicação
   enviar: async (pedido) => chamar('POST', '/api/envios', await corpoEnvio(pedido), 180_000),

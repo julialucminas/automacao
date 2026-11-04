@@ -96,3 +96,53 @@ export const IcExterno = (p: P) => (
     <path d="M15 3h6v6M10 14L21 3" />
   </Base>
 );
+
+export const IcMenu = (p: P) => (
+  <Base {...p}>
+    <path d="M4 6h16M4 12h16M4 18h16" />
+  </Base>
+);
+export const IcSeta = (p: P) => (
+  <Base {...p}>
+    <path d="m9 6 6 6-6 6" />
+  </Base>
+);
+export const IcCasa = (p: P) => (
+  <Base {...p}>
+    <path d="M3 11.5 12 4l9 7.5" />
+    <path d="M5.5 10v10h13V10" />
+  </Base>
+);
+export const IcPrancheta = (p: P) => (
+  <Base {...p}>
+    <rect x="5" y="4" width="14" height="17" rx="2" />
+    <path d="M9 4V3h6v1M9 10h6M9 14h6M9 18h3" />
+  </Base>
+);
+export const IcEmpilhadeira = (p: P) => (
+  <Base {...p}>
+    <path d="M4 18V9h6l3 5v4" />
+    <path d="M17 3v15h4" />
+    <path d="M13 14h4" />
+    <circle cx="7" cy="18.5" r="1.8" />
+    <circle cx="13" cy="18.5" r="1.8" />
+  </Base>
+);
+export const IcDinheiro = (p: P) => (
+  <Base {...p}>
+    <rect x="3" y="6" width="18" height="12" rx="2" />
+    <circle cx="12" cy="12" r="2.5" />
+    <path d="M6.5 9.5v.01M17.5 14.5v.01" />
+  </Base>
+);
+export const IcPredio = (p: P) => (
+  <Base {...p}>
+    <path d="M4 21V5l8-2v18M12 8h8v13M8 8v.01M8 12v.01M8 16v.01M16 12v.01M16 16v.01M2 21h20" />
+  </Base>
+);
+export const IcEscudo = (p: P) => (
+  <Base {...p}>
+    <path d="M12 3 5 6v5c0 4.5 3 8.5 7 10 4-1.5 7-5.5 7-10V6l-7-3Z" />
+    <path d="m9 12 2 2 4-4" />
+  </Base>
+);

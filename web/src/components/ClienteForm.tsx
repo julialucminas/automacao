@@ -144,12 +144,12 @@ export function ClienteForm({
   fechar: () => void;
   aoSalvar?: (c: Cliente) => void;
 }) {
-  const ehFin = useEstado().ehFinanceiro;
+  const ehFin = useEstado().pode('clientes', 2);
   return (
     <Gaveta aberto={!!inicial} fechar={fechar} titulo={inicial?.id ? 'Editar cliente' : 'Novo cliente'}>
       {inicial && !ehFin && (
         <p className="rounded-[10px] bg-brand-soft px-3 py-2.5 text-[13px]">
-          As alterações vão para a <b>Angelise aprovar</b> antes de entrar no cadastro.
+          As alterações vão para o <b>financeiro aprovar</b> antes de entrar no cadastro.
         </p>
       )}
       {inicial && <Formulario key={inicial.id ?? 'novo'} inicial={inicial} fechar={fechar} aoSalvar={aoSalvar} />}
@@ -158,7 +158,8 @@ export function ClienteForm({
 }
 
 function Formulario({ inicial, fechar, aoSalvar }: { inicial: Rascunho; fechar: () => void; aoSalvar?: (c: Cliente) => void }) {
-  const { salvarCliente, proporCliente, ehFinanceiro, definirAtivo, clientes, avisar } = useEstado();
+  const { salvarCliente, proporCliente, pode, definirAtivo, clientes, avisar } = useEstado();
+  const ehFinanceiro = pode('clientes', 2);
   const [d, setD] = useState<Rascunho>(inicial);
   const [paraIn, setParaIn] = useState('');
   const [ccIn, setCcIn] = useState('');

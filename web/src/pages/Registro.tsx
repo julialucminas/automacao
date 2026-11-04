@@ -15,6 +15,7 @@ const AREAS: Record<string, { rotulo: string; tom: Tom }> = {
   proposta: { rotulo: 'Aprovação', tom: 'warn' },
   conferencia: { rotulo: 'Conferência', tom: 'ok' },
   configuracao: { rotulo: 'Configuração', tom: 'neutro' },
+  usuarios: { rotulo: 'Usuários e permissões', tom: 'info' },
 };
 
 export function Registro() {

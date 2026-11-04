@@ -8,12 +8,17 @@ Toda a comunicação com o time é em **português**, sem jargão técnico, com 
 ## Pessoas e perfis
 | Pessoa | Login | Perfil | O que faz |
 |---|---|---|---|
-| Júlia | juliamaria@lucminas.com.br | financeiro | administra o sistema |
+| Júlia | juliamaria@lucminas.com.br | admin | administra o sistema (Usuários e permissões) |
 | Angelise ("Angeli") | lucminas@lucminas.com.br | financeiro | faturas, envio, aprova alterações de Operações |
 | Júnior | locacao@lucminas.com.br | operacoes | movimentações, conferência de frotas, oficina; **não** vê somas de valores; alterações de cadastro vão para aprovação |
 
-Perfis hoje: `financeiro` (tudo) e `operacoes` (restrito). Ver `exigirFinanceiro` em `api/src/app.ts`
-e o menu por perfil em `web/src/components/Layout.tsx` / rotas em `web/src/App.tsx`.
+Técnicos (a cadastrar, perfil `tecnico`): Eduardo Silva, Eduardo DLuca ("Dudu"), Eneiton, Fabrício. Dono: perfil `diretoria`.
+
+Permissões (desde nov/2026): tabela `perfis` (migração 13) com nível por aba — 0 não vê, 1 vê, 2 edita —
+e "vê valores". Lista de abas em `api/src/permissoes.ts` (servidor, confere toda rota com `exigir(nivel, ...abas)`)
+e `web/src/lib/acesso.ts` (menu, rotas, tela). A Júlia muda tudo na tela **Usuários e permissões**.
+Regras: quem tem `aprovacoes` = 2 registra direto; os outros mandam para aprovação. Valor de cada frota só vai
+para quem vê valores ou faz Conferência (o técnico recebe 0). O servidor nunca deixa o sistema sem administrador.
 
 ## Arquitetura
 - `web/` React 19 + Vite + TypeScript + Tailwind 3, HashRouter. `VITE_API=http` usa a API real;
@@ -57,7 +62,14 @@ Envio do mês (lote de PDFs → e-mail), Calendário (faturas + fim de locação
 relatório PDF, Excel), Clientes, Solicitações, Movimentações (locação/troca/devolução), Conferência
 (mensal de frotas), Aprovações, Histórico (envios, leitura, devolução), Registro, Configurações (texto do e-mail).
 
+## Navegação
+Menu lateral com 6 grupos (Início, Operação, Frota, Financeiro, Clientes, Administração), Painel do dia em
+`/inicio` (cartões conforme o perfil) e busca no topo (`components/BuscaGeral.tsx`; as telas leem `?busca=`).
+
 ## Próximo passo (nov/2026)
-Virar o sistema da empresa: reorganizar a navegação por módulos, permissões por aba, cadastro
-robusto de equipamentos (frota) e ordens de serviço. Requisitos levantados com base em Auvo,
+Fase 1 (navegação e permissões) feita. Próximas: 2 equipamentos (importar Quadro Geral Manutenção: relação
+de frota, valor frota, contratos, histórico Auvo), 3 painel de manutenção (aba Programação; tipos CF 30 dias,
+CR corretiva, B 350 h, C 500 h, D 1000 h, editáveis em Configurações), 4 app do dono (busca "motor de partida
+frota 40"), 5 ordens de serviço no celular dos técnicos (offline), 6 serviços externos (só etapas, sem automação).
+Sem integração com o Auvo. A planilha real do Júnior NÃO vai para o repositório. Requisitos levantados com base em Auvo,
 Produttivo, Field Control e softwares de locação — ver documento de requisitos.

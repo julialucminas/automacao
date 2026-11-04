@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useBuscaDaUrl } from '../lib/buscaDaUrl';
 import { Link } from 'react-router-dom';
 import { useEstado } from '../state';
 import type { Cliente, Frota } from '../types';
@@ -24,12 +25,16 @@ const comparaNumero = (a: string, b: string) => a.localeCompare(b, 'pt-BR', { nu
 const COLUNAS = 'grid grid-cols-[120px_minmax(200px,1.4fr)_minmax(160px,1fr)_120px_minmax(170px,1fr)_90px] items-center gap-3';
 
 export function Frotas() {
-  const { clientes, avisar, oficina, definirOficina, ehFinanceiro } = useEstado();
+  const { clientes, avisar, oficina, definirOficina, veValores: ehFinanceiro, pode } = useEstado();
+  const editaFrotas = pode('frotas', 2);
+  /** valor de cada frota: quem vê valores ou quem confere frotas e valores no fim do mês (o servidor manda 0 para os outros) */
+  const veValorFrota = ehFinanceiro || pode('conferencia');
   const [verOficina, setVerOficina] = useState(false);
   const [relatorio, setRelatorio] = useState(false);
   const naOficina = useMemo(() => new Map(oficina.map((o) => [o.frota, o])), [oficina]);
   const [exportando, setExportando] = useState(false);
   const [busca, setBusca] = useState('');
+  useBuscaDaUrl(setBusca);
   const [ordem, setOrdem] = useState<Ordem>('frota');
   const [visao, setVisao] = useState<Visao>('frotas');
   const [mostrarInativos, setMostrarInativos] = useState(false);
@@ -164,7 +169,7 @@ export function Frotas() {
           </div>
         </div>
       )}
-      {semValor > 0 && (
+      {veValorFrota && semValor > 0 && (
         <p className="mb-4 text-[13px] text-warn-strong">
           {semValor} frota{semValor > 1 ? 's' : ''} sem valor cadastrado.
         </p>
@@ -206,7 +211,7 @@ export function Frotas() {
                 {cabecalho('frota', 'Frota')}
                 {cabecalho('cliente', 'Cliente')}
                 <span className="font-semibold">Descrição</span>
-                {cabecalho('valor', 'Valor', 'text-right')}
+                {veValorFrota ? cabecalho('valor', 'Valor', 'text-right') : <span />}
                 {cabecalho('proxima', 'Próxima fatura')}
                 <span className="sr-only">Ações</span>
               </div>
@@ -248,14 +253,22 @@ export function Frotas() {
                       {l.frota.descricao || (resumoLocacao(l.frota) ? '' : '—')}
                       {resumoLocacao(l.frota) && <span className="block text-xs text-ink-3">{resumoLocacao(l.frota)}</span>}
                     </span>
-                    <span className={`text-right font-semibold ${l.frota.valor ? '' : 'text-warn'}`}>{l.frota.valor ? formatarReais(l.frota.valor) : 'sem valor'}</span>
+                    {veValorFrota ? (
+                      <span className={`text-right font-semibold ${l.frota.valor ? '' : 'text-warn'}`}>{l.frota.valor ? formatarReais(l.frota.valor) : 'sem valor'}</span>
+                    ) : (
+                      <span />
+                    )}
                     <span className="text-ink-2">
                       {l.proxima ? <b className="text-ink">{dataCurta(l.proxima)}</b> : '—'}
                       <span className="block text-xs text-ink-3">{descreverRegra(regraDoCliente(l.cliente))}</span>
                     </span>
-                    <button type="button" className="btn-secondary btn-sm" onClick={() => editar(l.cliente)} aria-label={`Editar ${l.cliente.nome}`}>
-                      Editar
-                    </button>
+                    {editaFrotas ? (
+                      <button type="button" className="btn-secondary btn-sm" onClick={() => editar(l.cliente)} aria-label={`Editar ${l.cliente.nome}`}>
+                        Editar
+                      </button>
+                    ) : (
+                      <span />
+                    )}
                   </div>
                 );
               })}
@@ -285,9 +298,11 @@ export function Frotas() {
                       </>
                     )}
                   </span>
-                  <button type="button" className="btn-secondary btn-sm" onClick={() => editar(g.cliente)}>
-                    Editar
-                  </button>
+                  {editaFrotas && (
+                    <button type="button" className="btn-secondary btn-sm" onClick={() => editar(g.cliente)}>
+                      Editar
+                    </button>
+                  )}
                 </div>
               </div>
               <div className="flex flex-wrap gap-2">
@@ -301,7 +316,7 @@ export function Frotas() {
                     >
                       <b className="font-mono">{l.frota.numero}</b>
                       {naOficina.has(l.frota.numero) && <SeloOficina />}
-                      <span className="text-ink-2">{l.frota.valor ? formatarReais(l.frota.valor) : 'sem valor'}</span>
+                      {veValorFrota && <span className="text-ink-2">{l.frota.valor ? formatarReais(l.frota.valor) : 'sem valor'}</span>}
                     </span>
                   ))}
               </div>
@@ -313,7 +328,7 @@ export function Frotas() {
 
       <ClienteForm inicial={editando} fechar={() => setEditando(null)} />
       <RelatorioPdf aberto={relatorio} fechar={() => setRelatorio(false)} />
-      <Oficina aberto={verOficina} fechar={() => setVerOficina(false)} lista={oficina} definir={definirOficina} clientes={clientes} avisar={avisar} />
+      <Oficina aberto={verOficina} fechar={() => setVerOficina(false)} lista={oficina} definir={definirOficina} clientes={clientes} avisar={avisar} podeEditar={editaFrotas} />
     </div>
   );
 }
@@ -329,7 +344,9 @@ function Oficina({
   definir,
   clientes,
   avisar,
+  podeEditar,
 }: {
+  podeEditar: boolean;
   aberto: boolean;
   fechar: () => void;
   lista: FrotaOficina[];
@@ -358,29 +375,31 @@ function Oficina({
     .replace(/^FT[\s-]*/, '');
   return (
     <Modal aberto={aberto} fechar={fechar} titulo="Frotas na oficina">
-      <form
-        className="flex flex-wrap items-end gap-2"
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (!numero) return;
-          void rodar(() => api.colocarNaOficina(numero, obs.trim()), `FT${numero} marcada como na oficina.`).then(() => {
-            setFrota('');
-            setObs('');
-          });
-        }}
-      >
-        <label className="flex w-[110px] flex-col gap-1 text-xs font-semibold">
-          Frota
-          <input className="input" value={frota} onChange={(e) => setFrota(e.target.value)} placeholder="FT59" />
-        </label>
-        <label className="flex min-w-[160px] flex-1 flex-col gap-1 text-xs font-semibold">
-          O que foi fazer <span className="font-normal text-ink-3">(opcional)</span>
-          <input className="input" value={obs} onChange={(e) => setObs(e.target.value)} placeholder="Ex.: troca de motor" />
-        </label>
-        <button type="submit" className="btn-primary" disabled={!numero || ocupado}>
-          Colocar na oficina
-        </button>
-      </form>
+      {podeEditar && (
+        <form
+          className="flex flex-wrap items-end gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (!numero) return;
+            void rodar(() => api.colocarNaOficina(numero, obs.trim()), `FT${numero} marcada como na oficina.`).then(() => {
+              setFrota('');
+              setObs('');
+            });
+          }}
+        >
+          <label className="flex w-[110px] flex-col gap-1 text-xs font-semibold">
+            Frota
+            <input className="input" value={frota} onChange={(e) => setFrota(e.target.value)} placeholder="FT59" />
+          </label>
+          <label className="flex min-w-[160px] flex-1 flex-col gap-1 text-xs font-semibold">
+            O que foi fazer <span className="font-normal text-ink-3">(opcional)</span>
+            <input className="input" value={obs} onChange={(e) => setObs(e.target.value)} placeholder="Ex.: troca de motor" />
+          </label>
+          <button type="submit" className="btn-primary" disabled={!numero || ocupado}>
+            Colocar na oficina
+          </button>
+        </form>
+      )}
       {numero && dono(numero) && (
         <p className="-mt-1 text-xs text-ink-3">
           A FT{numero} está com {dono(numero)}: ela continua no cadastro do cliente, só ganha a marca de oficina.
@@ -401,14 +420,16 @@ function Oficina({
                   {dono(o.frota) ? ` · com ${dono(o.frota)}` : ' · sem cliente'}
                 </div>
               </div>
-              <button
-                type="button"
-                className="btn-secondary btn-sm"
-                disabled={ocupado}
-                onClick={() => void rodar(() => api.tirarDaOficina(o.frota), `FT${o.frota} saiu da oficina.`)}
-              >
-                Saiu da oficina
-              </button>
+              {podeEditar && (
+                <button
+                  type="button"
+                  className="btn-secondary btn-sm"
+                  disabled={ocupado}
+                  onClick={() => void rodar(() => api.tirarDaOficina(o.frota), `FT${o.frota} saiu da oficina.`)}
+                >
+                  Saiu da oficina
+                </button>
+              )}
             </li>
           ))}
         </ul>
@@ -418,7 +439,7 @@ function Oficina({
 }
 
 function RelatorioPdf({ aberto, fechar }: { aberto: boolean; fechar: () => void }) {
-  const { clientes, oficina, ehFinanceiro, usuario, avisar } = useEstado();
+  const { clientes, oficina, veValores: ehFinanceiro, usuario, avisar } = useEstado();
   const [ref, setRef] = useState(referenciaAtual());
   const [gerando, setGerando] = useState(false);
   const [modelo, setModelo] = useState<ModeloRelatorio>('completo');

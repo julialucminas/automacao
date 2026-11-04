@@ -131,8 +131,16 @@ export type Envio = {
 };
 
 /** chamar: como a pessoa é chamada na saudação do topo (ex.: "Angeli"). */
-export type Perfil = 'financeiro' | 'operacoes';
-export type Usuario = { id?: number; nome: string; email: string; chamar?: string; perfil?: Perfil };
+/** id do perfil (admin, financeiro, operacoes, tecnico, diretoria ou criado pelo administrador) */
+export type Perfil = string;
+/** 0 = não vê · 1 = vê · 2 = edita */
+export type Nivel = 0 | 1 | 2;
+export type Permissoes = Record<string, Nivel>;
+export type Usuario = { id?: number; nome: string; email: string; chamar?: string; perfil?: Perfil; perfilNome?: string; permissoes?: Permissoes; veValores?: boolean };
+/** Perfil com as permissões por aba (tela Usuários e permissões). */
+export type PerfilAcesso = { id: string; nome: string; descricao: string; permissoes: Permissoes; veValores: boolean; padrao: boolean };
+/** Usuário na tela de administração. */
+export type UsuarioAdmin = { id: number; email: string; nome: string; chamar: string; perfil: Perfil; ativo: boolean };
 
 export type Pessoa = { id: number; nome: string; chamar: string; email: string };
 

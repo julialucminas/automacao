@@ -125,7 +125,7 @@ export function CartaoProposta({ p, children }: { p: Proposta; children?: React.
 }
 
 export function Aprovacoes() {
-  const { movimentacoes, propostas, recarregarOperacoes, avisar, ehFinanceiro } = useEstado();
+  const { movimentacoes, propostas, recarregarOperacoes, avisar, aprova: ehFinanceiro } = useEstado();
   const movPend = movimentacoes.filter((m) => m.status === 'pendente');
   const propPend = propostas.filter((p) => p.status === 'pendente');
   const decididas = [

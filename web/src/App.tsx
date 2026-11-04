@@ -13,9 +13,57 @@ import { Aprovacoes } from './pages/Aprovacoes';
 import { Registro } from './pages/Registro';
 import { Configuracoes } from './pages/Configuracoes';
 import { ConferenciaMes } from './pages/ConferenciaMes';
+import { Inicio } from './pages/Inicio';
+import { Usuarios } from './pages/Usuarios';
+import { useMenu } from './components/Layout';
+import type { Aba } from './lib/acesso';
+import type { ReactNode } from 'react';
+
+/** Cada tela só existe para quem o perfil deixa ver (o servidor confere de novo). */
+const TELAS: [Aba, string, ReactNode][] = [
+  ['inicio', '/inicio', <Inicio />],
+  ['solicitacoes', '/solicitacoes', <Solicitacoes />],
+  ['movimentacoes', '/movimentacoes', <Movimentacoes />],
+  ['conferencia', '/conferencia', <ConferenciaMes />],
+  ['calendario', '/calendario', <Calendario />],
+  ['frotas', '/frotas', <Frotas />],
+  ['envio', '/envio', <Envio />],
+  ['historico', '/historico', <Historico />],
+  ['configuracoes', '/configuracoes', <Configuracoes />],
+  ['clientes', '/clientes', <Clientes />],
+  ['registro', '/registro', <Registro />],
+  ['usuarios', '/usuarios', <Usuarios />],
+];
+
+function RotasLogado() {
+  const { pode } = useEstado();
+  const menu = useMenu();
+  const primeira = pode('inicio') ? '/inicio' : (menu[0]?.rota ?? '/inicio');
+  return (
+    <Routes>
+      <Route element={<Layout />}>
+        {TELAS.filter(([aba]) => pode(aba, aba === 'envio' ? 2 : 1)).map(([aba, rota, tela]) => (
+          <Route key={aba} path={rota} element={tela} />
+        ))}
+        {/* aprovações (quem aprova) ou "Minhas alterações" (quem propõe) */}
+        <Route path="/aprovacoes" element={<Aprovacoes />} />
+        <Route path="*" element={menu.length ? <Navigate to={primeira} replace /> : <SemAcesso />} />
+      </Route>
+    </Routes>
+  );
+}
+
+function SemAcesso() {
+  return (
+    <div className="mx-auto mt-10 max-w-[480px] rounded-xl border border-line bg-white p-6">
+      <h1 className="text-lg font-bold">Seu usuário ainda não tem acesso a nenhuma tela</h1>
+      <p className="mt-2 text-ink-2">Peça ao administrador do sistema para ajustar o seu perfil em Usuários e permissões.</p>
+    </div>
+  );
+}
 
 function Rotas() {
-  const { usuario, carregando, erroInicial, ehFinanceiro } = useEstado();
+  const { usuario, carregando, erroInicial } = useEstado();
   if (carregando) return <div className="p-10 text-ink-3">Carregando…</div>;
   if (erroInicial)
     return (
@@ -29,28 +77,7 @@ function Rotas() {
       </div>
     );
   if (!usuario) return <Login />;
-  return (
-    <Routes>
-      <Route element={<Layout />}>
-        {ehFinanceiro && (
-          <>
-            <Route path="/envio" element={<Envio />} />
-            <Route path="/clientes" element={<Clientes />} />
-            <Route path="/historico" element={<Historico />} />
-            <Route path="/registro" element={<Registro />} />
-            <Route path="/configuracoes" element={<Configuracoes />} />
-          </>
-        )}
-        <Route path="/frotas" element={<Frotas />} />
-        <Route path="/calendario" element={<Calendario />} />
-        <Route path="/solicitacoes" element={<Solicitacoes />} />
-        <Route path="/movimentacoes" element={<Movimentacoes />} />
-        <Route path="/conferencia" element={<ConferenciaMes />} />
-        <Route path="/aprovacoes" element={<Aprovacoes />} />
-        <Route path="*" element={<Navigate to={ehFinanceiro ? '/envio' : '/movimentacoes'} replace />} />
-      </Route>
-    </Routes>
-  );
+  return <RotasLogado />;
 }
 
 export default function App() {

@@ -34,7 +34,7 @@ describe('login', () => {
   });
 
   it('logout derruba a sessão', async () => {
-    expect((await req('GET', '/api/sessao')).json()).toEqual({ id: 1, email: 'julia@lucminas.com.br', nome: 'Júlia', chamar: '', perfil: 'financeiro' });
+    expect((await req('GET', '/api/sessao')).json()).toMatchObject({ id: 1, email: 'julia@lucminas.com.br', nome: 'Júlia', chamar: '', perfil: 'financeiro', perfilNome: 'Financeiro', veValores: true });
     await req('DELETE', '/api/sessao');
     expect((await req('GET', '/api/sessao')).statusCode).toBe(401);
   });

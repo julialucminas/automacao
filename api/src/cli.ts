@@ -1,6 +1,6 @@
 /*
  * Administração de usuários, pelo terminal do servidor:
- *   bash /opt/faturas/deploy/usuario.sh criar  email@lucminas.com.br "Nome" [--chamar Apelido] [--senha] [--perfil operacoes]
+ *   bash /opt/faturas/deploy/usuario.sh criar  email@lucminas.com.br "Nome" [--chamar Apelido] [--senha] [--perfil admin|financeiro|operacoes|tecnico|diretoria]
  *   bash /opt/faturas/deploy/usuario.sh senha  email@lucminas.com.br [--senha]
  *   bash /opt/faturas/deploy/usuario.sh chamar email@lucminas.com.br Apelido
  *   bash /opt/faturas/deploy/usuario.sh desativar | reativar email@lucminas.com.br
@@ -11,6 +11,7 @@
 import { createInterface, type Interface } from 'node:readline/promises';
 import { Writable } from 'node:stream';
 import { abrirBanco, repositorio } from './db.js';
+import { perfis as tabelaPerfis } from './permissoes.js';
 import { gerarHash, problemaSenha, senhaAleatoria } from './senha.js';
 import { CONTA_PADRAO, enviarSmtp, listarPastas, montar, pdfDeTeste, salvarEmEnviados, type ContaEmail } from './email.js';
 import { salvarConta } from './envio.js';
@@ -141,6 +142,8 @@ async function testarEmail() {
 
 const db = abrirBanco(process.env.BANCO ?? '/dados/faturas.db');
 const repo = repositorio(db);
+const perfis = tabelaPerfis(db);
+const idsPerfis = () => perfis.listar().map((p) => p.id);
 
 const sair = (msg: string, codigo = 1): never => {
   console.log(msg);
@@ -205,8 +208,8 @@ if (cmd === 'criar') {
   if (!email || !EMAIL.test(email) || !nome) sair('Uso: criar email@lucminas.com.br "Nome" [--chamar Apelido] [--senha]');
   if (repo.usuarioParaLogin(email)) sair(`Já existe usuário com o e-mail ${email}. Para trocar a senha use: senha ${email}`);
   const s = await obterSenha();
-  const perfil = perfilFlag === 'operacoes' ? 'operacoes' : 'financeiro';
-  if (perfilFlag && perfilFlag !== 'operacoes' && perfilFlag !== 'financeiro') sair('Perfil deve ser financeiro ou operacoes.');
+  const perfil = perfilFlag ?? 'financeiro';
+  if (!idsPerfis().includes(perfil)) sair(`Perfil deve ser um destes: ${idsPerfis().join(', ')}.`);
   const u = repo.criarUsuario(email, nome, await gerarHash(s.senha), (chamarFlag ?? '').trim(), perfil);
   console.log(`Usuário criado: ${u.nome} · perfil ${u.perfil}${u.chamar ? ` · saudação: "Oi ${u.chamar}! :)"` : ''}`);
   mostrar(u.email, s);
@@ -228,8 +231,8 @@ if (cmd === 'criar') {
   console.log(cmd === 'desativar' ? 'Usuário desativado.' : 'Usuário reativado.');
 } else if (cmd === 'perfil') {
   const p = resto[0];
-  if (!email || (p !== 'financeiro' && p !== 'operacoes')) sair('Uso: perfil email@lucminas.com.br financeiro|operacoes');
-  if (!repo.definirPerfil(email, p as 'financeiro' | 'operacoes')) sair(`Usuário ${email} não encontrado.`);
+  if (!email || !idsPerfis().includes(p)) sair(`Uso: perfil email@lucminas.com.br ${idsPerfis().join('|')}`);
+  if (!repo.definirPerfil(email, p)) sair(`Usuário ${email} não encontrado.`);
   console.log(`Perfil de ${email}: ${p}`);
 } else if (cmd === 'configurar-email') {
   await configurarEmail();

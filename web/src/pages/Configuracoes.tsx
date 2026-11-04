@@ -4,7 +4,8 @@ import type { ConfigEmail } from '../types';
 import { MODELO_PADRAO, preencher, REMETENTE, referenciaAtual, referenciaPorExtenso, VARIAVEIS } from '../lib/email';
 
 export function Configuracoes() {
-  const { config, salvarConfig, avisar, ehFinanceiro, clientes } = useEstado();
+  const { config, salvarConfig, avisar, pode, clientes } = useEstado();
+  const ehFinanceiro = pode('configuracoes', 2);
   const [c, setC] = useState<ConfigEmail>(config ?? MODELO_PADRAO);
   const [salvando, setSalvando] = useState(false);
   useEffect(() => {
@@ -95,7 +96,7 @@ export function Configuracoes() {
               </button>
             </div>
           ) : (
-            <p className="text-xs text-ink-3">Só o financeiro altera o modelo do e-mail.</p>
+            <p className="text-xs text-ink-3">Seu perfil só vê o modelo do e-mail; quem tem permissão de editar Configurações pode alterar.</p>
           )}
         </section>
 

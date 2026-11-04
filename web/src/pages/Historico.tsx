@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useMemo, useState } from 'react';
+import { useBuscaDaUrl } from '../lib/buscaDaUrl';
 import { api } from '../api';
 import { useEstado } from '../state';
 import type { Envio, StatusEnvio } from '../types';
@@ -19,9 +20,11 @@ type Filtro = 'todos' | StatusEnvio;
 const COLUNAS = 'grid grid-cols-[136px_64px_minmax(200px,1.2fr)_minmax(200px,1.2fr)_minmax(220px,1.5fr)_164px] gap-3';
 
 export function Historico() {
-  const { envios, recarregarEnvios, avisar } = useEstado();
+  const { envios, recarregarEnvios, avisar, pode } = useEstado();
+  const age = pode('historico', 2) || pode('envio', 2);
   const [filtro, setFiltro] = useState<Filtro>('todos');
   const [busca, setBusca] = useState('');
+  useBuscaDaUrl(setBusca);
   const [aberto, setAberto] = useState<string | null>(null);
   const [reenviando, setReenviando] = useState<string | null>(null);
   const [verificando, setVerificando] = useState(false);
@@ -120,9 +123,11 @@ export function Historico() {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex flex-col items-end">
-            <button type="button" className="btn-secondary" disabled={verificando} onClick={verificarAgora}>
-              {verificando ? 'Conferindo…' : 'Conferir caixa de entrada agora'}
-            </button>
+            {age && (
+              <button type="button" className="btn-secondary" disabled={verificando} onClick={verificarAgora}>
+                {verificando ? 'Conferindo…' : 'Conferir caixa de entrada agora'}
+              </button>
+            )}
             <span className="mt-0.5 text-[11.5px] text-ink-3">
               {ultima ? `Última conferência: ${dataHora(ultima)} · automática a cada 5 min` : 'Conferência automática a cada 5 min'}
             </span>
@@ -197,7 +202,7 @@ export function Historico() {
                       {!e.lidoEm && !e.devolucao && <span className="text-xs text-ink-3">{e.detalhe}</span>}
                     </div>
                     <div className="flex flex-wrap gap-1.5">
-                      {!e.copiaEmEnviados && e.status !== 'falhou' && (
+                      {age && !e.copiaEmEnviados && e.status !== 'falhou' && (
                         <button
                           type="button"
                           className="btn-secondary btn-sm"
@@ -208,7 +213,7 @@ export function Historico() {
                           {copiando === e.id ? 'Guardando…' : 'Guardar cópia'}
                         </button>
                       )}
-                      {(e.status === 'devolvido' || e.status === 'falhou') && (
+                      {age && (e.status === 'devolvido' || e.status === 'falhou') && (
                         <button type="button" className="btn-primary btn-sm" disabled={reenviando === e.id} onClick={() => reenviar(e)}>
                           {reenviando === e.id ? 'Reenviando…' : 'Reenviar'}
                         </button>

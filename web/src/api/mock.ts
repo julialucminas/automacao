@@ -1,6 +1,8 @@
 import type { Api } from './index';
 import type { Cliente, Conferencia, Envio, FrotaOficina, Faturamento, Solicitacao, Usuario } from '../types';
 import { REMETENTE } from '../lib/email';
+import { PERFIS_PADRAO } from '../lib/acesso';
+import type { PerfilAcesso, UsuarioAdmin } from '../types';
 
 /*
  * Implementação SIMULADA da API, só para desenvolvimento da interface.
@@ -21,32 +23,48 @@ function dias(n: number, h = 9, m = 0): string {
 }
 
 function semente(): Banco {
-  const c = (
-    nome: string,
-    para: string[],
-    cc: string[],
-    observacoes = '',
-    apelidos: string[] = [],
-    atualizado = 30,
-  ): Cliente => ({ id: id(), nome, apelidos, cnpj: '', para, cc, observacoes, regra: 'dia', diaEmissao: null, inicioLocacao: null, periodoDias: null, frotas: [], ativo: true, atualizadoEm: dias(atualizado) });
+  const c = (nome: string, para: string[], cc: string[], observacoes = '', apelidos: string[] = [], atualizado = 30): Cliente => ({
+    id: id(),
+    nome,
+    apelidos,
+    cnpj: '',
+    para,
+    cc,
+    observacoes,
+    regra: 'dia',
+    diaEmissao: null,
+    inicioLocacao: null,
+    periodoDias: null,
+    frotas: [],
+    ativo: true,
+    atualizadoEm: dias(atualizado),
+  });
 
   const clientes = [
-    c('METALURGICA SERRA AZUL', ['financeiro@serraazul.exemplo.br'], ['compras@serraazul.exemplo.br', 'contabil@moura.exemplo.br'], 'Sempre com cópia para o contador.', ['SERRA AZUL'], 40),
+    c(
+      'METALURGICA SERRA AZUL',
+      ['financeiro@serraazul.exemplo.br'],
+      ['compras@serraazul.exemplo.br', 'contabil@moura.exemplo.br'],
+      'Sempre com cópia para o contador.',
+      ['SERRA AZUL'],
+      40,
+    ),
     c('TRANSPORTADORA PARAOPEBA', ['contasapagar@paraopeba.exemplo.br'], [], '', [], 80),
-    c('CONSTRUTORA ALTO VALE', ['adm@altovale.exemplo.br', 'obra.betim@altovale.exemplo.br'], ['diretoria@altovale.exemplo.br'], 'Duas obras ativas: a fatura vai para os dois endereços.', [], 25),
+    c(
+      'CONSTRUTORA ALTO VALE',
+      ['adm@altovale.exemplo.br', 'obra.betim@altovale.exemplo.br'],
+      ['diretoria@altovale.exemplo.br'],
+      'Duas obras ativas: a fatura vai para os dois endereços.',
+      [],
+      25,
+    ),
     c('DISTRIBUIDORA MINAS FORTE', ['financeiro@minasforte.exemplo.br'], [], 'Costuma dizer que não recebeu. Conferir o histórico antes de cobrar.', [], 100),
     c('LATICÍNIOS BOA ESPERANÇA', ['nf@boaesperanca.exemplo.br'], ['gerencia@boaesperanca.exemplo.br'], '', [], 140),
     c('CERÂMICA SANTA LUZIA', ['financeiro@santaluzia.exemplo.br'], [], 'Às vezes paga por depósito: confirmar a baixa.', [], 60),
   ];
   const [serra, paraopeba, altovale, minasforte, , santaluzia] = clientes;
 
-  const e = (
-    cli: Cliente,
-    numero: string,
-    quando: string,
-    status: Envio['status'],
-    detalhe: string,
-  ): Envio => ({
+  const e = (cli: Cliente, numero: string, quando: string, status: Envio['status'], detalhe: string): Envio => ({
     id: id(),
     enviadoEm: quando,
     referencia: '2026-09',
@@ -69,7 +87,13 @@ function semente(): Banco {
     e(paraopeba, '1223', dias(26, 9, 14), 'enviado', 'Aceito pelo UOL · sem devolução'),
     e(santaluzia, '1222', dias(26, 9, 14), 'enviado', 'Aceito pelo UOL · sem devolução'),
     e(altovale, '1221', dias(26, 9, 13), 'devolvido', 'obra.betim@altovale.exemplo.br não existe (aviso recebido 3 min depois)'),
-    e(minasforte, '1220', dias(26, 9, 13), 'lido', `Confirmação de leitura recebida em ${new Date(dias(25, 15, 42)).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}`),
+    e(
+      minasforte,
+      '1220',
+      dias(26, 9, 13),
+      'lido',
+      `Confirmação de leitura recebida em ${new Date(dias(25, 15, 42)).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}`,
+    ),
     e(serra, '1219', dias(26, 9, 12), 'enviado', 'Aceito pelo UOL · sem devolução'),
   ];
 
@@ -102,11 +126,23 @@ function salvar(b: Banco) {
 /** Para a demonstração: alguns endereços "não existem" e geram devolução. */
 const ENDERECO_QUE_DEVOLVE = /obra\.betim@|naoexiste@/i;
 
+// demonstração: perfis e usuários ficam só na memória desta aba
+let PERFIS_DEMO: PerfilAcesso[] = PERFIS_PADRAO.map((p) => ({ ...p, permissoes: { ...p.permissoes } }));
+let USUARIOS_DEMO: UsuarioAdmin[] = [
+  { id: 2, email: 'financeiro@exemplo.com', nome: 'Pessoa do financeiro', chamar: '', perfil: 'financeiro', ativo: true },
+  { id: 3, email: 'operacoes@exemplo.com', nome: 'Pessoa da operação', chamar: '', perfil: 'operacoes', ativo: true },
+];
+/** perfil e permissões do usuário da demonstração (administrador) */
+function comAcesso(u: Usuario): Usuario {
+  const p = PERFIS_DEMO.find((x) => x.id === (u.perfil === 'financeiro' || !u.perfil ? 'admin' : u.perfil)) ?? PERFIS_DEMO[0];
+  return { ...u, perfil: p.id, perfilNome: p.nome, permissoes: p.permissoes, veValores: p.veValores };
+}
+
 export const mockApi: Api = {
   async login(email, senha) {
     await espera(400);
     if (!email.trim() || !senha) throw new Error('Informe e-mail e senha.');
-    const usuario = { id: 1, nome: email.split('@')[0], email: email.trim().toLowerCase(), perfil: 'financeiro' as const };
+    const usuario = comAcesso({ id: 1, nome: email.split('@')[0], email: email.trim().toLowerCase(), perfil: 'admin' });
     salvar({ ...carregar(), usuario });
     return usuario;
   },
@@ -118,7 +154,8 @@ export const mockApi: Api = {
     if (nova.length < 8) throw new Error('A senha precisa ter pelo menos 8 caracteres.');
   },
   async usuarioAtual() {
-    return carregar().usuario;
+    const u = carregar().usuario;
+    return u ? comAcesso(u) : null;
   },
 
   async listarClientes() {
@@ -195,6 +232,43 @@ export const mockApi: Api = {
     const u = carregar().usuario;
     return u ? [{ id: 1, nome: u.nome, chamar: u.chamar ?? '', email: u.email }] : [];
   },
+  async listarPerfis() {
+    return PERFIS_DEMO;
+  },
+  async criarPerfil(d) {
+    const p: PerfilAcesso = {
+      ...d,
+      id: d.nome
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[^a-z0-9]+/g, '-'),
+      padrao: false,
+    };
+    PERFIS_DEMO = [...PERFIS_DEMO, p];
+    return p;
+  },
+  async salvarPerfil(p) {
+    PERFIS_DEMO = PERFIS_DEMO.map((x) => (x.id === p.id ? p : x));
+    return p;
+  },
+  async apagarPerfil(pid) {
+    PERFIS_DEMO = PERFIS_DEMO.filter((x) => x.id !== pid);
+  },
+  async listarUsuariosAdmin() {
+    const u = carregar().usuario;
+    return [...(u ? [{ id: 1, email: u.email, nome: u.nome, chamar: u.chamar ?? '', perfil: 'admin', ativo: true }] : []), ...USUARIOS_DEMO];
+  },
+  async criarUsuario(d) {
+    const novo: UsuarioAdmin = { id: Date.now(), email: d.email.toLowerCase(), nome: d.nome, chamar: d.chamar, perfil: d.perfil, ativo: true };
+    USUARIOS_DEMO = [...USUARIOS_DEMO, novo];
+    return novo;
+  },
+  async alterarUsuario(uid, m) {
+    const resto = { ...m };
+    delete resto.senha;
+    USUARIOS_DEMO = USUARIOS_DEMO.map((u) => (u.id === uid ? { ...u, ...resto } : u));
+    return USUARIOS_DEMO.find((u) => u.id === uid) ?? { id: uid, email: '', nome: '', chamar: '', perfil: 'admin', ativo: true };
+  },
   async listarSolicitacoes() {
     return (carregar().solicitacoes ?? []).map((s) => ({ ...s, mensagens: undefined }));
   },
@@ -209,9 +283,22 @@ export const mockApi: Api = {
     const nome = b.usuario?.nome ?? '';
     const cli = b.clientes.find((c) => c.id === n.clienteId);
     const s: Solicitacao = {
-      id: id(), criadaEm: agora, criadaPor: 1, criadaPorNome: nome, paraUsuario: n.paraUsuario, paraNome: nome, data: n.data,
-      clienteId: n.clienteId, clienteNome: cli?.nome ?? (n.clienteNome?.trim() || null), titulo: n.titulo, status: 'aberta', concluidaEm: null, concluidaPorNome: null,
-      totalMensagens: n.texto ? 1 : 0, naoLidas: 0, ultimaMensagemEm: agora,
+      id: id(),
+      criadaEm: agora,
+      criadaPor: 1,
+      criadaPorNome: nome,
+      paraUsuario: n.paraUsuario,
+      paraNome: nome,
+      data: n.data,
+      clienteId: n.clienteId,
+      clienteNome: cli?.nome ?? (n.clienteNome?.trim() || null),
+      titulo: n.titulo,
+      status: 'aberta',
+      concluidaEm: null,
+      concluidaPorNome: null,
+      totalMensagens: n.texto ? 1 : 0,
+      naoLidas: 0,
+      ultimaMensagemEm: agora,
       mensagens: n.texto ? [{ id: 1, usuarioId: 1, autor: nome, texto: n.texto, criadaEm: agora }] : [],
     };
     salvar({ ...b, solicitacoes: [...(b.solicitacoes ?? []), s] });
@@ -221,7 +308,14 @@ export const mockApi: Api = {
     const b = carregar();
     const agora = new Date().toISOString();
     const l = (b.solicitacoes ?? []).map((s) =>
-      s.id === sid ? { ...s, totalMensagens: s.totalMensagens + 1, ultimaMensagemEm: agora, mensagens: [...(s.mensagens ?? []), { id: Date.now(), usuarioId: 1, autor: b.usuario?.nome ?? '', texto, criadaEm: agora }] } : s,
+      s.id === sid
+        ? {
+            ...s,
+            totalMensagens: s.totalMensagens + 1,
+            ultimaMensagemEm: agora,
+            mensagens: [...(s.mensagens ?? []), { id: Date.now(), usuarioId: 1, autor: b.usuario?.nome ?? '', texto, criadaEm: agora }],
+          }
+        : s,
     );
     salvar({ ...b, solicitacoes: l });
     return l.find((s) => s.id === sid)!;
@@ -229,7 +323,19 @@ export const mockApi: Api = {
   async alterarSolicitacao(sid, m) {
     const b = carregar();
     const l = (b.solicitacoes ?? []).map((s) =>
-      s.id === sid ? { ...s, ...(m.data ? { data: m.data } : {}), ...(m.status ? { status: m.status, concluidaEm: m.status === 'concluida' ? new Date().toISOString() : null, concluidaPorNome: m.status === 'concluida' ? b.usuario?.nome ?? '' : null } : {}) } : s,
+      s.id === sid
+        ? {
+            ...s,
+            ...(m.data ? { data: m.data } : {}),
+            ...(m.status
+              ? {
+                  status: m.status,
+                  concluidaEm: m.status === 'concluida' ? new Date().toISOString() : null,
+                  concluidaPorNome: m.status === 'concluida' ? (b.usuario?.nome ?? '') : null,
+                }
+              : {}),
+          }
+        : s,
     );
     salvar({ ...b, solicitacoes: l });
     return l.find((s) => s.id === sid)!;
@@ -263,7 +369,10 @@ export const mockApi: Api = {
     return [...OFICINA_DEMO];
   },
   async colocarNaOficina(frota, observacao) {
-    const n = frota.trim().toUpperCase().replace(/^FT[\s-]*/, '');
+    const n = frota
+      .trim()
+      .toUpperCase()
+      .replace(/^FT[\s-]*/, '');
     if (!OFICINA_DEMO.some((o) => o.frota === n)) OFICINA_DEMO.push({ frota: n, desde: new Date().toISOString(), observacao, usuario: 'Demonstração' });
     return [...OFICINA_DEMO];
   },
@@ -278,8 +387,20 @@ export const mockApi: Api = {
   async marcarConferencia(ref, c) {
     const i = CONFERENCIAS_DEMO.findIndex((x) => x.referencia === ref && x.clienteId === c.clienteId && x.frota === c.frota);
     if (i >= 0) CONFERENCIAS_DEMO.splice(i, 1);
-    const f = carregar().clientes.find((x) => x.id === c.clienteId)?.frotas.find((x) => x.numero === c.frota);
-    const nova = { referencia: ref, clienteId: c.clienteId, frota: c.frota, status: c.status, valor: f?.valor ?? 0, descricao: f?.descricao ?? '', observacao: c.observacao ?? '', quando: new Date().toISOString(), usuario: 'Demonstração' };
+    const f = carregar()
+      .clientes.find((x) => x.id === c.clienteId)
+      ?.frotas.find((x) => x.numero === c.frota);
+    const nova = {
+      referencia: ref,
+      clienteId: c.clienteId,
+      frota: c.frota,
+      status: c.status,
+      valor: f?.valor ?? 0,
+      descricao: f?.descricao ?? '',
+      observacao: c.observacao ?? '',
+      quando: new Date().toISOString(),
+      usuario: 'Demonstração',
+    };
     CONFERENCIAS_DEMO.push(nova);
     return nova;
   },

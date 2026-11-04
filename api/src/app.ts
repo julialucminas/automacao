@@ -5,6 +5,7 @@ import { CONFIG_PADRAO, Conflito2, operacoes, type NovaMov, type TipoMov } from 
 import { monitorCaixa } from './monitor.js';
 import { carteiroReal, lerConta, servicoEnvio, type Anexo, type Carteiro } from './envio.js';
 import { conferirSenha, gerarHash, hashToken, novoToken, problemaSenha } from './senha.js';
+import { ABAS, normalizarPermissoes, perfis as tabelaPerfis, type Aba, type Acesso, type Nivel } from './permissoes.js';
 
 const COOKIE = 'sessao';
 const VALIDADE_DIAS = 30;
@@ -13,6 +14,7 @@ const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 declare module 'fastify' {
   interface FastifyRequest {
     usuario: Usuario;
+    acesso: Acesso;
   }
 }
 
@@ -51,6 +53,16 @@ function lerDiaEmissao(v: unknown): number | null | undefined {
   if (!Number.isInteger(n) || n < 1 || n > 31) throw new Invalido('Dia de emissão deve ser entre 1 e 31.');
   return n;
 }
+
+/** "Técnico de campo" → "tecnico-de-campo" (id de perfil criado na tela) */
+const semAcentoId = (s: string) =>
+  s
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 40);
 
 const DATA_ISO = /^\d{4}-\d{2}-\d{2}$/;
 function lerDataIso(v: unknown, campo: string): string | null | undefined {
@@ -161,19 +173,31 @@ export function criarApp(db: Banco, opcoes: { cookieSeguro: boolean; logger?: bo
     return reply.code(500).send({ erro: 'Erro no servidor.' });
   });
 
+  const perfis = tabelaPerfis(db);
   const exigirLogin = async (req: FastifyRequest, reply: FastifyReply) => {
     const token = req.cookies[COOKIE];
     const u = token ? repo.usuarioDaSessao(hashToken(token)) : undefined;
     if (!u) return reply.code(401).send({ erro: 'Faça login.' });
     req.usuario = u;
+    req.acesso = perfis.acessoDe(u.perfil);
   };
-  /** Só o financeiro (Angelise, Júlia) faz: editar cadastro direto, faturar, enviar, aprovar, configurar. */
-  const exigirFinanceiro = async (req: FastifyRequest, reply: FastifyReply) => {
-    await exigirLogin(req, reply);
-    if (reply.sent) return;
-    if (req.usuario.perfil !== 'financeiro') return reply.code(403).send({ erro: 'Seu usuário não tem permissão para isso. Peça a aprovação do financeiro.' });
-  };
+  const pode = (req: FastifyRequest, aba: Aba, n: Nivel = 1) => (req.acesso?.permissoes[aba] ?? 0) >= n;
+  const SEM_PERMISSAO = 'Seu usuário não tem permissão para isso. Fale com o administrador do sistema.';
+  /** Exige login e um nível mínimo em pelo menos uma das abas. */
+  const exigir =
+    (n: Nivel, ...abas: Aba[]) =>
+    async (req: FastifyRequest, reply: FastifyReply) => {
+      await exigirLogin(req, reply);
+      if (reply.sent) return;
+      if (!abas.some((a) => pode(req, a, n))) return reply.code(403).send({ erro: SEM_PERMISSAO });
+    };
+  /** quem aprova alterações de outros (movimentações e cadastro) */
+  const aprova = (req: FastifyRequest) => pode(req, 'aprovacoes', 2);
+  /** valor de cada frota: quem vê valores, ou quem confere frotas e valores no fim do mês */
+  const veValorDaFrota = (req: FastifyRequest) => req.acesso.veValores || pode(req, 'conferencia', 1);
   void SemPermissao;
+
+  const sessao = (u: Usuario, a: Acesso) => ({ id: u.id, email: u.email, nome: u.nome, chamar: u.chamar, perfil: u.perfil, perfilNome: a.perfilNome, permissoes: a.permissoes, veValores: a.veValores });
 
   // ---------- sessão ----------
   app.get('/api/saude', async () => ({ ok: true }));
@@ -196,10 +220,10 @@ export function criarApp(db: Banco, opcoes: { cookieSeguro: boolean; logger?: bo
       sameSite: 'strict',
       maxAge: VALIDADE_DIAS * 86_400,
     });
-    return { id: u.id, email: u.email, nome: u.nome, chamar: u.chamar, perfil: u.perfil };
+    return sessao(u, perfis.acessoDe(u.perfil));
   });
 
-  app.get('/api/sessao', { preHandler: exigirLogin }, async (req) => ({ id: req.usuario.id, email: req.usuario.email, nome: req.usuario.nome, chamar: req.usuario.chamar, perfil: req.usuario.perfil }));
+  app.get('/api/sessao', { preHandler: exigirLogin }, async (req) => sessao(req.usuario, req.acesso));
 
   app.put('/api/sessao/senha', { preHandler: exigirLogin }, async (req, reply) => {
     if (!podeTentar(req.ip)) return reply.code(429).send({ erro: 'Muitas tentativas. Espere 15 minutos.' });
@@ -223,25 +247,28 @@ export function criarApp(db: Banco, opcoes: { cookieSeguro: boolean; logger?: bo
   });
 
   // ---------- clientes ----------
-  app.get('/api/clientes', { preHandler: exigirLogin }, async () => repo.listarClientes());
+  app.get('/api/clientes', { preHandler: exigirLogin }, async (req) => {
+    const l = repo.listarClientes();
+    return veValorDaFrota(req) ? l : l.map((c) => ({ ...c, frotas: c.frotas.map((f) => ({ ...f, valor: 0 })) }));
+  });
 
-  app.post('/api/clientes', { preHandler: exigirFinanceiro }, async (req, reply) => {
+  app.post('/api/clientes', { preHandler: exigir(2, 'clientes') }, async (req, reply) => {
     const c = repo.salvarCliente(lerCliente(req.body), req.usuario.id);
     return reply.code(201).send(c);
   });
 
-  app.put<{ Params: { id: string } }>('/api/clientes/:id', { preHandler: exigirFinanceiro }, async (req) =>
+  app.put<{ Params: { id: string } }>('/api/clientes/:id', { preHandler: exigir(2, 'clientes') }, async (req) =>
     repo.salvarCliente(lerCliente(req.body, req.params.id), req.usuario.id),
   );
 
-  app.patch<{ Params: { id: string } }>('/api/clientes/:id', { preHandler: exigirFinanceiro }, async (req) => {
+  app.patch<{ Params: { id: string } }>('/api/clientes/:id', { preHandler: exigir(2, 'clientes') }, async (req) => {
     const b = (req.body ?? {}) as Record<string, unknown>;
     if (typeof b.ativo !== 'boolean') throw new Invalido('Campo ativo inválido.');
     repo.definirAtivo(req.params.id, b.ativo, req.usuario.id);
     return repo.buscarCliente(req.params.id);
   });
 
-  app.post<{ Params: { id: string } }>('/api/clientes/:id/apelidos', { preHandler: exigirFinanceiro }, async (req) => {
+  app.post<{ Params: { id: string } }>('/api/clientes/:id/apelidos', { preHandler: exigir(2, 'clientes', 'envio') }, async (req) => {
     const apelido = texto((req.body as Record<string, unknown> | undefined)?.apelido, 'apelido', 200).toUpperCase();
     if (!apelido) throw new Invalido('Informe o nome.');
     return repo.adicionarApelido(req.params.id, apelido, req.usuario.id);
@@ -255,7 +282,7 @@ export function criarApp(db: Banco, opcoes: { cookieSeguro: boolean; logger?: bo
     return repo.listarFaturamentos(de, ate);
   });
 
-  app.post('/api/faturamentos', { preHandler: exigirFinanceiro }, async (req, reply) => {
+  app.post('/api/faturamentos', { preHandler: exigir(2, 'envio') }, async (req, reply) => {
     const b = (req.body ?? {}) as Record<string, unknown>;
     const data = lerDataIso(b.data, 'Data');
     if (!data || typeof b.clienteId !== 'string') throw new Invalido('Informe cliente e data.');
@@ -263,7 +290,7 @@ export function criarApp(db: Banco, opcoes: { cookieSeguro: boolean; logger?: bo
     return reply.code(201).send({ ok: true });
   });
 
-  app.delete<{ Params: { clienteId: string; data: string } }>('/api/faturamentos/:clienteId/:data', { preHandler: exigirFinanceiro }, async (req) => {
+  app.delete<{ Params: { clienteId: string; data: string } }>('/api/faturamentos/:clienteId/:data', { preHandler: exigir(2, 'envio') }, async (req) => {
     const data = lerDataIso(req.params.data, 'Data');
     if (!data) throw new Invalido('Data inválida.');
     repo.desmarcarFaturado(req.params.clienteId, data, req.usuario.id);
@@ -308,39 +335,39 @@ export function criarApp(db: Banco, opcoes: { cookieSeguro: boolean; logger?: bo
 
   app.get('/api/movimentacoes', { preHandler: exigirLogin }, async () => ops.listarMovimentacoes());
   // financeiro registra já aplicando; operações registra pendente de aprovação
-  app.post('/api/movimentacoes', { preHandler: exigirLogin }, async (req, reply) =>
-    reply.code(201).send(ops.registrarMovimentacao(lerMov(req.body), req.usuario.id, req.usuario.perfil === 'financeiro')),
+  app.post('/api/movimentacoes', { preHandler: exigir(2, 'movimentacoes') }, async (req, reply) =>
+    reply.code(201).send(ops.registrarMovimentacao(lerMov(req.body), req.usuario.id, aprova(req))),
   );
-  app.post<{ Params: { id: string } }>('/api/movimentacoes/:id/aprovar', { preHandler: exigirFinanceiro }, async (req) => ops.decidirMovimentacao(req.params.id, req.usuario.id, true));
-  app.post<{ Params: { id: string } }>('/api/movimentacoes/:id/recusar', { preHandler: exigirFinanceiro }, async (req) =>
+  app.post<{ Params: { id: string } }>('/api/movimentacoes/:id/aprovar', { preHandler: exigir(2, 'aprovacoes') }, async (req) => ops.decidirMovimentacao(req.params.id, req.usuario.id, true));
+  app.post<{ Params: { id: string } }>('/api/movimentacoes/:id/recusar', { preHandler: exigir(2, 'aprovacoes') }, async (req) =>
     ops.decidirMovimentacao(req.params.id, req.usuario.id, false, texto((req.body as Record<string, unknown> | undefined)?.motivo, 'motivo', 500)),
   );
 
   // ---------- propostas (alteração de cadastro feita por operações) ----------
-  app.get('/api/propostas', { preHandler: exigirLogin }, async (req) => ops.listarPropostas(req.usuario.perfil === 'financeiro' ? undefined : req.usuario.id));
+  app.get('/api/propostas', { preHandler: exigirLogin }, async (req) => ops.listarPropostas(aprova(req) ? undefined : req.usuario.id));
   app.post('/api/propostas', { preHandler: exigirLogin }, async (req, reply) => {
     const b = (req.body ?? {}) as Record<string, unknown>;
     const id = ops.proporAlteracao(lerCliente(b, typeof b.id === 'string' ? b.id : undefined), req.usuario.id);
     return reply.code(201).send({ id });
   });
-  app.post<{ Params: { id: string } }>('/api/propostas/:id/aprovar', { preHandler: exigirFinanceiro }, async (req) => {
+  app.post<{ Params: { id: string } }>('/api/propostas/:id/aprovar', { preHandler: exigir(2, 'aprovacoes') }, async (req) => {
     ops.decidirProposta(req.params.id, req.usuario.id, true);
     return { ok: true };
   });
-  app.post<{ Params: { id: string } }>('/api/propostas/:id/recusar', { preHandler: exigirFinanceiro }, async (req) => {
+  app.post<{ Params: { id: string } }>('/api/propostas/:id/recusar', { preHandler: exigir(2, 'aprovacoes') }, async (req) => {
     ops.decidirProposta(req.params.id, req.usuario.id, false, texto((req.body as Record<string, unknown> | undefined)?.motivo, 'motivo', 500));
     return { ok: true };
   });
 
   // ---------- configurações e registro ----------
   app.get('/api/config', { preHandler: exigirLogin }, async () => ops.lerConfig());
-  app.put('/api/config', { preHandler: exigirFinanceiro }, async (req) => {
+  app.put('/api/config', { preHandler: exigir(2, 'configuracoes') }, async (req) => {
     const b = (req.body ?? {}) as Record<string, unknown>;
     const valores: Record<string, string> = {};
     for (const k of Object.keys(CONFIG_PADRAO)) if (b[k] !== undefined) valores[k] = texto(b[k], k, 5000) || CONFIG_PADRAO[k];
     return ops.salvarConfig(valores, req.usuario.id);
   });
-  app.get('/api/registro', { preHandler: exigirFinanceiro }, async () => ops.listarLog());
+  app.get('/api/registro', { preHandler: exigir(1, 'registro') }, async () => ops.listarLog());
 
   // ---------- frotas na oficina (financeiro e operações) ----------
   const lerNumFrota = (v: unknown) => {
@@ -349,12 +376,12 @@ export function criarApp(db: Banco, opcoes: { cookieSeguro: boolean; logger?: bo
     return n;
   };
   app.get('/api/oficina', { preHandler: exigirLogin }, async () => ops.listarOficina());
-  app.post('/api/oficina', { preHandler: exigirLogin }, async (req, reply) => {
+  app.post('/api/oficina', { preHandler: exigir(2, 'frotas') }, async (req, reply) => {
     const b = (req.body ?? {}) as Record<string, unknown>;
     ops.colocarNaOficina(lerNumFrota(b.frota), texto(b.observacao, 'observação', 300), req.usuario.id);
     return reply.code(201).send(ops.listarOficina());
   });
-  app.delete<{ Params: { frota: string } }>('/api/oficina/:frota', { preHandler: exigirLogin }, async (req) => {
+  app.delete<{ Params: { frota: string } }>('/api/oficina/:frota', { preHandler: exigir(2, 'frotas') }, async (req) => {
     ops.tirarDaOficina(lerNumFrota(req.params.frota), req.usuario.id);
     return ops.listarOficina();
   });
@@ -371,15 +398,121 @@ export function criarApp(db: Banco, opcoes: { cookieSeguro: boolean; logger?: bo
     return { clienteId: clienteId as string, frota };
   };
   app.get<{ Params: { ref: string } }>('/api/conferencia/:ref', { preHandler: exigirLogin }, async (req) => ops.listarConferencia(lerRef(req.params.ref)));
-  app.post<{ Params: { ref: string } }>('/api/conferencia/:ref', { preHandler: exigirLogin }, async (req) => {
+  app.post<{ Params: { ref: string } }>('/api/conferencia/:ref', { preHandler: exigir(2, 'conferencia') }, async (req) => {
     const b = (req.body ?? {}) as Record<string, unknown>;
     const status = b.status === 'alterado' ? 'alterado' : b.status === 'ok' ? 'ok' : invalido('Situação inválida.');
     return ops.marcarConferencia({ referencia: lerRef(req.params.ref), ...lerItemConf(b), status: status as 'ok' | 'alterado', observacao: texto(b.observacao, 'observação', 500) }, req.usuario.id);
   });
-  app.post<{ Params: { ref: string } }>('/api/conferencia/:ref/desmarcar', { preHandler: exigirLogin }, async (req) => {
+  app.post<{ Params: { ref: string } }>('/api/conferencia/:ref/desmarcar', { preHandler: exigir(2, 'conferencia') }, async (req) => {
     const i = lerItemConf((req.body ?? {}) as Record<string, unknown>);
     ops.desmarcarConferencia(lerRef(req.params.ref), i.clienteId, i.frota, req.usuario.id);
     return { ok: true };
+  });
+
+  // ---------- usuários e permissões (administração) ----------
+  /** Garante que sempre sobra alguém ativo que consegue administrar usuários. Roda dentro da transação da mudança. */
+  const conferirAdministrador = () => {
+    const sobra = repo.listarUsuarios().some((u) => u.ativo && perfis.acessoDe(u.perfil).permissoes.usuarios === 2);
+    if (!sobra) throw new Invalido('Essa mudança deixaria o sistema sem ninguém para administrar usuários. Mantenha pelo menos um administrador ativo.');
+  };
+  const logUsuarios = (req: FastifyRequest, acao: string, antes: unknown = null, depois: unknown = null) => repo.registrarLog('', req.usuario.id, acao, antes, depois, 'usuarios');
+  const lerPerfilCorpo = (b: Record<string, unknown>) => {
+    const nome = texto(b.nome, 'nome do perfil', 60);
+    if (!nome) throw new Invalido('Dê um nome ao perfil.');
+    return { nome, descricao: texto(b.descricao, 'descrição', 300), permissoes: normalizarPermissoes(b.permissoes), veValores: b.veValores === true };
+  };
+
+  app.get('/api/perfis', { preHandler: exigir(1, 'usuarios') }, async () => ({ abas: ABAS, perfis: perfis.listar() }));
+
+  app.post('/api/perfis', { preHandler: exigir(2, 'usuarios') }, async (req, reply) => {
+    const d = lerPerfilCorpo((req.body ?? {}) as Record<string, unknown>);
+    const base = semAcentoId(d.nome) || 'perfil';
+    let id = base;
+    for (let i = 2; perfis.buscar(id); i++) id = `${base}-${i}`;
+    const p = perfis.criar(id, d);
+    logUsuarios(req, `criou o perfil ${p.nome}`, null, p);
+    return reply.code(201).send(p);
+  });
+
+  app.put<{ Params: { id: string } }>('/api/perfis/:id', { preHandler: exigir(2, 'usuarios') }, async (req) => {
+    const antes = perfis.buscar(req.params.id);
+    if (!antes) throw new NaoEncontrado('Perfil não encontrado.');
+    const d = lerPerfilCorpo((req.body ?? {}) as Record<string, unknown>);
+    const p = db.transaction(() => {
+      const salvo = perfis.salvar(req.params.id, d);
+      conferirAdministrador();
+      return salvo;
+    })();
+    logUsuarios(req, `alterou as permissões do perfil ${p.nome}`, antes, p);
+    return p;
+  });
+
+  app.delete<{ Params: { id: string } }>('/api/perfis/:id', { preHandler: exigir(2, 'usuarios') }, async (req) => {
+    const p = perfis.buscar(req.params.id);
+    if (!p) throw new NaoEncontrado('Perfil não encontrado.');
+    if (p.padrao) throw new Invalido('Os perfis que vêm com o sistema não podem ser apagados. Ajuste as permissões dele.');
+    const usando = repo.listarUsuarios().filter((u) => u.perfil === p.id);
+    if (usando.length) throw new Invalido(`Ainda há ${usando.length} pessoa(s) com esse perfil: ${usando.map((u) => u.nome).join(', ')}. Troque o perfil delas antes.`);
+    perfis.apagar(p.id);
+    logUsuarios(req, `apagou o perfil ${p.nome}`, p, null);
+    return { ok: true };
+  });
+
+  app.get('/api/admin/usuarios', { preHandler: exigir(1, 'usuarios') }, async () => repo.listarUsuarios());
+
+  const lerPerfilId = (v: unknown) => {
+    const id = texto(v, 'perfil', 60);
+    if (!perfis.buscar(id)) throw new Invalido('Escolha um perfil.');
+    return id;
+  };
+
+  app.post('/api/admin/usuarios', { preHandler: exigir(2, 'usuarios') }, async (req, reply) => {
+    const b = (req.body ?? {}) as Record<string, unknown>;
+    const email = texto(b.email, 'e-mail', 200).toLowerCase();
+    if (!EMAIL.test(email)) throw new Invalido('E-mail inválido.');
+    if (repo.emailEmUso(email)) throw new Conflito('Já existe um usuário com esse e-mail. Se ele foi desativado, reative na lista.');
+    const nome = texto(b.nome, 'nome', 120);
+    if (!nome) throw new Invalido('Informe o nome.');
+    const senha = typeof b.senha === 'string' ? b.senha : '';
+    const problema = problemaSenha(senha);
+    if (problema) throw new Invalido(problema);
+    const u = repo.criarUsuario(email, nome, await gerarHash(senha), texto(b.chamar, 'como chamar', 40), lerPerfilId(b.perfil));
+    logUsuarios(req, `criou o usuário ${u.nome} (${u.email}) com perfil ${perfis.acessoDe(u.perfil).perfilNome}`);
+    return reply.code(201).send(repo.buscarUsuario(u.id));
+  });
+
+  app.patch<{ Params: { id: string } }>('/api/admin/usuarios/:id', { preHandler: exigir(2, 'usuarios') }, async (req) => {
+    const id = Number(req.params.id);
+    const antes = repo.buscarUsuario(id);
+    if (!antes) throw new NaoEncontrado('Usuário não encontrado.');
+    const b = (req.body ?? {}) as Record<string, unknown>;
+    const d = {
+      nome: b.nome === undefined ? undefined : texto(b.nome, 'nome', 120) || invalido('Informe o nome.'),
+      chamar: b.chamar === undefined ? undefined : texto(b.chamar, 'como chamar', 40),
+      perfil: b.perfil === undefined ? undefined : lerPerfilId(b.perfil),
+      ativo: b.ativo === undefined ? undefined : b.ativo === true,
+    };
+    let hashNovo: string | null = null;
+    if (b.senha !== undefined) {
+      const senha = typeof b.senha === 'string' ? b.senha : '';
+      const problema = problemaSenha(senha);
+      if (problema) throw new Invalido(problema);
+      hashNovo = await gerarHash(senha);
+    }
+    db.transaction(() => {
+      repo.alterarUsuario(id, d);
+      conferirAdministrador();
+      if (hashNovo) repo.definirSenhaPorId(id, hashNovo);
+    })();
+    const depois = repo.buscarUsuario(id)!;
+    const mudou: string[] = [];
+    if (d.perfil && d.perfil !== antes.perfil) mudou.push(`perfil ${perfis.acessoDe(antes.perfil).perfilNome} → ${perfis.acessoDe(d.perfil).perfilNome}`);
+    if (d.ativo !== undefined && d.ativo !== antes.ativo) mudou.push(d.ativo ? 'reativou' : 'desativou');
+    if (d.nome && d.nome !== antes.nome) mudou.push(`nome "${d.nome}"`);
+    if (d.chamar !== undefined && d.chamar !== antes.chamar) mudou.push(`saudação "${d.chamar}"`);
+    if (hashNovo) mudou.push('definiu uma senha nova');
+    if (mudou.length) logUsuarios(req, `usuário ${depois.nome}: ${mudou.join(', ')}`);
+    return depois;
   });
 
   // ---------- usuários e solicitações ----------
@@ -424,7 +557,7 @@ export function criarApp(db: Banco, opcoes: { cookieSeguro: boolean; logger?: bo
   });
 
   // ---------- envios ----------
-  app.get('/api/envios', { preHandler: exigirLogin }, async () => repo.listarEnvios());
+  app.get('/api/envios', { preHandler: exigir(1, 'envio', 'historico') }, async () => repo.listarEnvios());
 
   const envio = servicoEnvio(db, repo, opcoes.pastaDados ?? '/dados', opcoes.carteiro ?? carteiroReal, opcoes.esperaCopiaMs);
   const SEM_CONTA = 'O e-mail da empresa ainda não foi configurado no servidor. Nenhum e-mail foi enviado.';
@@ -442,7 +575,7 @@ export function criarApp(db: Banco, opcoes: { cookieSeguro: boolean; logger?: bo
     ultimaVerificacao: monitor.ultimaVerificacao(),
   }));
   // olha a caixa de entrada agora (devoluções e confirmações de leitura)
-  app.post('/api/envios/verificar', { preHandler: exigirFinanceiro }, async () => {
+  app.post('/api/envios/verificar', { preHandler: exigir(2, 'historico', 'envio') }, async () => {
     const r = await monitor.verificar();
     if (r.erro) throw new Conflito(`Não conseguiu abrir a caixa de entrada do e-mail: ${r.erro}`);
     return { lidas: r.lidas, atualizados: r.atualizados, ultimaVerificacao: monitor.ultimaVerificacao() };
@@ -474,7 +607,7 @@ export function criarApp(db: Banco, opcoes: { cookieSeguro: boolean; logger?: bo
   };
   const limite = { bodyLimit: 40 * 1024 * 1024 };
 
-  app.post('/api/envios', { preHandler: exigirFinanceiro, ...limite }, async (req, reply) => {
+  app.post('/api/envios', { preHandler: exigir(2, 'envio'), ...limite }, async (req, reply) => {
     if (!envio.configurado()) return reply.code(503).send({ erro: SEM_CONTA });
     const b = (req.body ?? {}) as Record<string, unknown>;
     const p = lerPedido(b);
@@ -488,7 +621,7 @@ export function criarApp(db: Banco, opcoes: { cookieSeguro: boolean; logger?: bo
     return envio.enviar({ ...p, cliente }, remetente(), req.usuario.id);
   });
 
-  app.post('/api/envios/teste', { preHandler: exigirFinanceiro, ...limite }, async (req, reply) => {
+  app.post('/api/envios/teste', { preHandler: exigir(2, 'envio'), ...limite }, async (req, reply) => {
     if (!envio.configurado()) return reply.code(503).send({ erro: SEM_CONTA });
     const p = lerPedido((req.body ?? {}) as Record<string, unknown>);
     const r = await envio.testar(req.usuario.email, p.assunto, p.corpo, p.anexos, remetente(), p.numero);
@@ -496,7 +629,7 @@ export function criarApp(db: Banco, opcoes: { cookieSeguro: boolean; logger?: bo
     return r;
   });
 
-  app.post<{ Params: { id: string } }>('/api/envios/:id/copiar', { preHandler: exigirFinanceiro }, async (req, reply) => {
+  app.post<{ Params: { id: string } }>('/api/envios/:id/copiar', { preHandler: exigir(2, 'historico', 'envio') }, async (req, reply) => {
     if (!envio.configurado()) return reply.code(503).send({ erro: SEM_CONTA });
     try {
       return await envio.copiarDeNovo(req.params.id, req.usuario.id);
@@ -508,7 +641,7 @@ export function criarApp(db: Banco, opcoes: { cookieSeguro: boolean; logger?: bo
     }
   });
 
-  app.post<{ Params: { id: string } }>('/api/envios/:id/reenviar', { preHandler: exigirFinanceiro }, async (req, reply) => {
+  app.post<{ Params: { id: string } }>('/api/envios/:id/reenviar', { preHandler: exigir(2, 'historico', 'envio') }, async (req, reply) => {
     if (!envio.configurado()) return reply.code(503).send({ erro: SEM_CONTA });
     try {
       return await envio.reenviar(req.params.id, remetente(), req.usuario.id);

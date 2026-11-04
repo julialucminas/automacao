@@ -32,7 +32,10 @@ const totalFrotas = (c: Cliente) => c.frotas.reduce((s, f) => s + f.valor, 0);
 const somarDias = (iso: string, n: number) => new Date(Date.parse(iso + 'T00:00:00Z') + n * 86400_000).toISOString().slice(0, 10);
 
 export function Calendario() {
-  const { clientes, avisar, solicitacoes, ehFinanceiro } = useEstado();
+  const { clientes, avisar, solicitacoes, pode } = useEstado();
+  /** faturas aparecem para quem vê o Envio do mês; os outros veem só as locações */
+  const ehFinanceiro = pode('envio');
+  const marcaFaturado = pode('envio', 2);
   const navegar = useNavigate();
   const hoje = hojeIso();
   const [ano, setAno] = useState(Number(hoje.slice(0, 4)));
@@ -410,7 +413,7 @@ export function Calendario() {
               <div className="w-[120px]">
                 <Chip tom={STATUS[i.status].tom}>{STATUS[i.status].rotulo}</Chip>
               </div>
-              {ehFinanceiro && (
+              {marcaFaturado && (
                 <button type="button" disabled={salvando} onClick={() => alternar(i)} className={i.marca ? 'btn-secondary btn-sm' : 'btn-primary btn-sm'}>
                   {i.marca ? 'Desmarcar' : 'Marcar faturado'}
                 </button>
@@ -506,7 +509,7 @@ export function Calendario() {
               <button type="button" className="btn-secondary" onClick={() => setAberto(null)}>
                 Fechar
               </button>
-              {ehFinanceiro && (
+              {marcaFaturado && (
                 <button type="button" className={aberto.marca ? 'btn-secondary' : 'btn-primary'} disabled={salvando} onClick={() => alternar(aberto)}>
                   {aberto.marca ? 'Desmarcar faturado' : 'Marcar como faturado'}
                 </button>

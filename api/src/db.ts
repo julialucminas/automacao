@@ -79,7 +79,8 @@ export type Envio = {
   devolucao?: string;
 };
 
-export type Perfil = 'financeiro' | 'operacoes';
+/** id de um perfil da tabela perfis (admin, financeiro, operacoes, tecnico, diretoria ou criado pelo administrador) */
+export type Perfil = string;
 export type Usuario = { id: number; email: string; nome: string; chamar: string; perfil: Perfil };
 
 export type Mensagem = { id: number; usuarioId: number; autor: string; texto: string; criadaEm: string };
@@ -279,6 +280,15 @@ const MIGRACOES = [
    );`,
   // 12: cliente que paga sem boleto
   `ALTER TABLE clientes ADD COLUMN sem_boleto INTEGER NOT NULL DEFAULT 0;`,
+  // 13: perfis com permissões por aba (configuráveis na tela Usuários e permissões); Júlia vira administradora
+  `CREATE TABLE perfis (
+     id TEXT PRIMARY KEY,
+     nome TEXT NOT NULL,
+     descricao TEXT NOT NULL DEFAULT '',
+     permissoes TEXT NOT NULL,
+     ve_valores INTEGER NOT NULL DEFAULT 0
+   );
+   UPDATE usuarios SET perfil = 'admin' WHERE email = 'juliamaria@lucminas.com.br';`,
 ];
 
 export function abrirBanco(caminho: string) {
@@ -370,6 +380,31 @@ export function repositorio(db: Banco) {
         .prepare('INSERT INTO usuarios (email, nome, senha_hash, criado_em, chamar, perfil) VALUES (?, ?, ?, ?, ?, ?)')
         .run(email.toLowerCase(), nome, senhaHash, agora(), chamar, perfil);
       return { id: Number(r.lastInsertRowid), email: email.toLowerCase(), nome, chamar, perfil };
+    },
+    buscarUsuario(id: number): (Usuario & { ativo: boolean }) | undefined {
+      const u = db.prepare('SELECT id, email, nome, chamar, perfil, ativo FROM usuarios WHERE id = ?').get(id) as (Usuario & { ativo: number }) | undefined;
+      return u ? { ...u, ativo: !!u.ativo } : undefined;
+    },
+    /** Tela Usuários e permissões: muda nome, saudação, perfil e se está ativo. Desativar encerra as sessões. */
+    alterarUsuario(id: number, d: { nome?: string; chamar?: string; perfil?: Perfil; ativo?: boolean }) {
+      const atual = db.prepare('SELECT * FROM usuarios WHERE id = ?').get(id) as { nome: string; chamar: string; perfil: string; ativo: number } | undefined;
+      if (!atual) throw new NaoEncontrado('Usuário não encontrado.');
+      db.prepare('UPDATE usuarios SET nome = ?, chamar = ?, perfil = ?, ativo = ? WHERE id = ?').run(
+        d.nome ?? atual.nome,
+        d.chamar ?? atual.chamar,
+        d.perfil ?? atual.perfil,
+        d.ativo === undefined ? atual.ativo : d.ativo ? 1 : 0,
+        id,
+      );
+      if (d.ativo === false) db.prepare('DELETE FROM sessoes WHERE usuario_id = ?').run(id);
+    },
+    /** Senha definida pelo administrador: encerra as sessões da pessoa. */
+    definirSenhaPorId(id: number, senhaHash: string) {
+      db.prepare('UPDATE usuarios SET senha_hash = ? WHERE id = ?').run(senhaHash, id);
+      db.prepare('DELETE FROM sessoes WHERE usuario_id = ?').run(id);
+    },
+    emailEmUso(email: string): boolean {
+      return !!db.prepare('SELECT 1 FROM usuarios WHERE email = ?').get(email.toLowerCase());
     },
     definirPerfil(email: string, perfil: Perfil): boolean {
       return db.prepare('UPDATE usuarios SET perfil = ? WHERE email = ?').run(perfil, email.toLowerCase()).changes > 0;

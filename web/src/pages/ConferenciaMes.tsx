@@ -22,7 +22,9 @@ function mudarMes(ref: string, delta: number) {
 }
 
 export function ConferenciaMes() {
-  const { clientes, propostas, ehFinanceiro, proporCliente, salvarCliente, avisar } = useEstado();
+  const { clientes, propostas, pode, proporCliente, salvarCliente, avisar } = useEstado();
+  const ehFinanceiro = pode('clientes', 2);
+  const confere = pode('conferencia', 2);
   const aguardando = new Set(propostas.filter((p) => p.status === 'pendente' && p.clienteId).map((p) => p.clienteId));
   const [ref, setRef] = useState(referenciaAtual());
   const [marcas, setMarcas] = useState<Conferencia[] | null>(null);
@@ -154,7 +156,14 @@ export function ConferenciaMes() {
           </span>
           <span className="text-ink-3">{conferidas === total && total > 0 ? 'Conferência do mês completa :)' : `${total - conferidas} faltando`}</span>
         </div>
-        <div className="mt-2 h-2.5 overflow-hidden rounded-full bg-line-soft" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} aria-label="Progresso da conferência">
+        <div
+          className="mt-2 h-2.5 overflow-hidden rounded-full bg-line-soft"
+          role="progressbar"
+          aria-valuenow={pct}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-label="Progresso da conferência"
+        >
           <div className="h-full rounded-full bg-brand transition-all" style={{ width: `${pct}%` }} />
         </div>
       </div>
@@ -201,33 +210,46 @@ export function ConferenciaMes() {
                     <span className="block font-semibold">{l.cliente.nome}</span>
                     <span className="block text-xs text-ink-3">{l.frota.descricao || 'sem descrição'}</span>
                   </span>
-                  <span className={`w-[120px] text-right text-[15px] font-bold ${l.frota.valor ? '' : 'text-bad'}`}>{l.frota.valor ? formatarReais(l.frota.valor) : 'sem valor'}</span>
+                  <span className={`w-[120px] text-right text-[15px] font-bold ${l.frota.valor ? '' : 'text-bad'}`}>
+                    {l.frota.valor ? formatarReais(l.frota.valor) : 'sem valor'}
+                  </span>
                   <span className="flex min-w-[250px] flex-wrap items-center justify-end gap-2">
                     {l.situacao === 'ok' && (
                       <>
                         <Chip tom="ok">
                           <IcCheck tamanho={12} className="mr-1" /> Correta
                         </Chip>
-                        <button type="button" className="btn btn-sm text-ink-3 underline" disabled={ocupado === k} onClick={() => desfazer(l)}>
-                          Desfazer
-                        </button>
+                        {confere && (
+                          <button type="button" className="btn btn-sm text-ink-3 underline" disabled={ocupado === k} onClick={() => desfazer(l)}>
+                            Desfazer
+                          </button>
+                        )}
                       </>
                     )}
                     {l.situacao === 'alterado' && (
                       <>
                         <Chip tom="warn">{aguardando.has(l.cliente.id) ? 'Correção aguardando aprovação' : 'Correção apontada'}</Chip>
-                        <button type="button" className="btn btn-sm text-ink-3 underline" disabled={ocupado === k} onClick={() => desfazer(l)}>
-                          Desfazer
-                        </button>
+                        {confere && (
+                          <button type="button" className="btn btn-sm text-ink-3 underline" disabled={ocupado === k} onClick={() => desfazer(l)}>
+                            Desfazer
+                          </button>
+                        )}
                       </>
                     )}
-                    {(l.situacao === 'pendente' || l.situacao === 'mudou') && (
+                    {!confere && (l.situacao === 'pendente' || l.situacao === 'mudou') && <Chip tom="neutro">A conferir</Chip>}
+                    {confere && (l.situacao === 'pendente' || l.situacao === 'mudou') && (
                       <>
                         {l.situacao === 'mudou' && <Chip tom="info">Valor mudou: confira de novo</Chip>}
                         <button type="button" className="btn-secondary btn-sm" onClick={() => setEditando(editando === k ? null : k)}>
                           Corrigir
                         </button>
-                        <button type="button" className="btn btn-sm bg-ok text-white hover:opacity-90" disabled={ocupado === k} onClick={() => marcarOk(l)} aria-label={`FT${l.frota.numero} de ${l.cliente.nome} está correta`}>
+                        <button
+                          type="button"
+                          className="btn btn-sm bg-ok text-white hover:opacity-90"
+                          disabled={ocupado === k}
+                          onClick={() => marcarOk(l)}
+                          aria-label={`FT${l.frota.numero} de ${l.cliente.nome} está correta`}
+                        >
                           <IcCheck tamanho={14} /> Correto
                         </button>
                       </>
