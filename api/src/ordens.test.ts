@@ -115,6 +115,11 @@ describe('ordens de serviço', () => {
 
     // escritório encerra e manda o relatório
     expect((await como('fabricio')('POST', `/api/ordens/${o.id}/encerrar`, {})).statusCode).toBe(403);
+    // relatório ao cliente vem desligado: nada sai até ligar em Configurações
+    expect((await como('julia')('GET', '/api/config')).json()['os.relatorioCliente']).toBe('nao');
+    expect((await como('junior')('POST', `/api/ordens/${o.id}/relatorio`, { pdf: pdfDeTeste('OS 1').toString('base64') })).json().relatorio).toMatchObject({ enviado: false, detalhe: expect.stringMatching(/desligado/) });
+    expect(enviados).toHaveLength(0);
+    await como('julia')('PUT', '/api/config', { 'os.relatorioCliente': 'sim' });
     const r = (await como('junior')('POST', `/api/ordens/${o.id}/encerrar`, { proximaPreventiva: 26260, enviar: true, pdf: pdfDeTeste('OS 1').toString('base64') })).json();
     expect(r.ordem).toMatchObject({ status: 'encerrada', encerradaPor: 'Júnior', relatorioPara: 'manutencao@capivari.com' });
     expect(r.relatorio.enviado).toBe(true);

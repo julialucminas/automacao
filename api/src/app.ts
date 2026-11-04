@@ -374,6 +374,7 @@ export function criarApp(db: Banco, opcoes: { cookieSeguro: boolean; logger?: bo
     const b = (req.body ?? {}) as Record<string, unknown>;
     const valores: Record<string, string> = {};
     for (const k of Object.keys(CONFIG_PADRAO)) if (b[k] !== undefined) valores[k] = texto(b[k], k, 5000) || CONFIG_PADRAO[k];
+    if (valores['os.relatorioCliente'] && !['sim', 'nao'].includes(valores['os.relatorioCliente'])) throw new Invalido('Opção inválida.');
     if (valores['manutencao.tipos']) valores['manutencao.tipos'] = validarTipos(valores['manutencao.tipos']);
     if (valores['manutencao.perifericos']) valores['manutencao.perifericos'] = validarPerifericos(valores['manutencao.perifericos']);
     return ops.salvarConfig(valores, req.usuario.id);
@@ -770,6 +771,7 @@ export function criarApp(db: Banco, opcoes: { cookieSeguro: boolean; logger?: bo
 
   /** Manda o relatório (PDF feito na tela) para o cliente, pelo e-mail da empresa. */
   const enviarRelatorio = async (req: FastifyRequest, o: Ordem, b: Record<string, unknown>) => {
+    if (ops.lerConfig()['os.relatorioCliente'] !== 'sim') return { enviado: false, detalhe: 'O envio do relatório ao cliente está desligado em Configurações.' };
     if (!envio.configurado()) return { enviado: false, detalhe: SEM_CONTA };
     const pdf = Buffer.from(typeof b.pdf === 'string' ? b.pdf : '', 'base64');
     if (pdf.subarray(0, 4).toString('latin1') !== '%PDF') throw new Invalido('O relatório em PDF não veio.');

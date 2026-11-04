@@ -228,7 +228,7 @@ export type Proposta = {
 export type ItemLog = { id: number; quando: string; usuario: string; area: string; acao: string; clienteId: string; clienteNome: string; antes: unknown; depois: unknown };
 export type ConfigEmail = Record<'email.remetente' | 'email.assunto' | 'email.corpo' | 'email.corpoSemBoleto', string> &
   /** regras da manutenção (JSON), editadas em Configurações */
-  Partial<Record<'manutencao.tipos' | 'manutencao.perifericos', string>>;
+  Partial<Record<'manutencao.tipos' | 'manutencao.perifericos' | 'os.relatorioCliente', string>>;
 
 export type TipoVisita = { sigla: string; nome: string; dias?: number; horas?: number };
 export type PerifericoId = 'motorPartida' | 'filtroAr' | 'correia' | 'oleoTransmissao' | 'oleoHidraulico';

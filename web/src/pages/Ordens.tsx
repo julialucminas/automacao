@@ -408,6 +408,8 @@ function DetalheOS({ ordem, gerencia, fechar, mudou }: { ordem: Ordem | null; ge
   const [cancelando, setCancelando] = useState(false);
   const [motivo, setMotivo] = useState('');
   const [enviarRel, setEnviarRel] = useState(true);
+  // envio ao cliente só quando ligado em Configurações → Manutenção
+  const relatorioLigado = config?.['os.relatorioCliente'] === 'sim';
   const [proxima, setProxima] = useState('');
   const [ocupado, setOcupado] = useState('');
   useEffect(() => {
@@ -464,8 +466,8 @@ function DetalheOS({ ordem, gerencia, fechar, mudou }: { ordem: Ordem | null; ge
       const p = proxima.trim() ? Number(proxima.replace(/\./g, '').replace(',', '.')) : null;
       const r = await api.encerrarOrdem(o.id, {
         proximaPreventiva: p,
-        enviar: enviarRel && emails.length > 0,
-        ...(enviarRel && emails.length ? { pdf: (await pdf()).base64 } : {}),
+        enviar: relatorioLigado && enviarRel && emails.length > 0,
+        ...(relatorioLigado && enviarRel && emails.length ? { pdf: (await pdf()).base64 } : {}),
       });
       avisar(
         r.relatorio
@@ -637,13 +639,15 @@ function DetalheOS({ ordem, gerencia, fechar, mudou }: { ordem: Ordem | null; ge
               <input className="input font-normal" inputMode="decimal" value={proxima} onChange={(e) => setProxima(e.target.value)} />
             </label>
           )}
-          <label className="flex items-start gap-2 text-[14px]">
-            <input type="checkbox" className="mt-1" checked={enviarRel && emails.length > 0} disabled={!emails.length} onChange={(e) => setEnviarRel(e.target.checked)} />
-            <span>
-              Mandar o relatório em PDF para o cliente
-              <span className="block text-xs text-ink-3">{emails.length ? emails.join(', ') : 'O cliente não tem e-mail no cadastro.'}</span>
-            </span>
-          </label>
+          {relatorioLigado && (
+            <label className="flex items-start gap-2 text-[14px]">
+              <input type="checkbox" className="mt-1" checked={enviarRel && emails.length > 0} disabled={!emails.length} onChange={(e) => setEnviarRel(e.target.checked)} />
+              <span>
+                Mandar o relatório em PDF para o cliente
+                <span className="block text-xs text-ink-3">{emails.length ? emails.join(', ') : 'O cliente não tem e-mail no cadastro.'}</span>
+              </span>
+            </label>
+          )}
           <div className="flex flex-wrap gap-2">
             <button type="button" className="btn-primary" disabled={!!ocupado} onClick={() => void encerrar()}>
               {ocupado === 'encerrar' ? 'Encerrando…' : 'Encerrar OS'}
@@ -661,7 +665,7 @@ function DetalheOS({ ordem, gerencia, fechar, mudou }: { ordem: Ordem | null; ge
             {ocupado === 'pdf' ? 'Gerando…' : 'Baixar relatório (PDF)'}
           </button>
         )}
-        {gerencia && o.status === 'encerrada' && emails.length > 0 && (
+        {relatorioLigado && gerencia && o.status === 'encerrada' && emails.length > 0 && (
           <button type="button" className="btn-secondary" disabled={!!ocupado} onClick={() => void reenviar()}>
             {ocupado === 'reenviar' ? 'Enviando…' : o.relatorioEm ? 'Reenviar relatório' : 'Enviar relatório ao cliente'}
           </button>

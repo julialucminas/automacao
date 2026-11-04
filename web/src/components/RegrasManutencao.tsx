@@ -133,6 +133,28 @@ export function RegrasManutencao() {
           <p className="text-xs text-ink-3">Vale para as próximas trocas registradas. O que veio da planilha mantém a data que já estava lá.</p>
         </div>
       </div>
+      <label className="flex items-start gap-2.5 rounded-[10px] bg-[#F8F7F3] p-3 text-[14px]">
+        <input
+          type="checkbox"
+          className="mt-1"
+          disabled={!edita}
+          checked={config?.['os.relatorioCliente'] === 'sim'}
+          onChange={async (e) => {
+            try {
+              await salvarConfig({ 'os.relatorioCliente': e.target.checked ? 'sim' : 'nao' });
+              avisar(e.target.checked ? 'O relatório da OS passa a poder ir ao cliente ao encerrar.' : 'O relatório da OS não vai mais para o cliente.');
+            } catch (err) {
+              avisar(err instanceof Error ? err.message : 'Não foi possível salvar.', 'bad');
+            }
+          }}
+        />
+        <span>
+          <b>Mandar o relatório da OS para o cliente</b>
+          <span className="block text-xs text-ink-3">
+            Desligado: o relatório em PDF fica só para baixar no sistema. Ligado: ao encerrar a OS, dá para mandar por e-mail ao cliente.
+          </span>
+        </span>
+      </label>
       {edita ? (
         <div className="flex flex-wrap justify-between gap-2">
           <button

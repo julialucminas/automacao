@@ -103,6 +103,8 @@ export const CONFIG_PADRAO: Record<string, string> = {
     { sigla: 'C', nome: 'Preventiva C', horas: 500 },
     { sigla: 'D', nome: 'Preventiva D', horas: 1000 },
   ]),
+  // relatório da OS por e-mail ao cliente: desligado até a empresa decidir ligar (Configurações)
+  'os.relatorioCliente': 'nao',
   'manutencao.perifericos': JSON.stringify([
     { id: 'motorPartida', nome: 'Motor de partida', dias: 120 },
     { id: 'filtroAr', nome: 'Filtro de ar', dias: 90 },
