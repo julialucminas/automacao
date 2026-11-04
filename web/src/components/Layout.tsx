@@ -57,6 +57,8 @@ export function useMenu(): ItemMenu[] {
       clientes: [clientes.filter((c) => c.ativo).length, false],
     };
     const [n, alerta] = badge[a.id] ?? [0, false];
+    // a ficha de cada máquina usa a mesma permissão da relação de frotas
+    if (a.id === 'frotas') itens.push({ aba: 'frotas', rotulo: 'Equipamentos', rota: '/equipamentos', grupo: 'frota', badge: 0, alerta: false });
     itens.push({ aba: a.id, rotulo: a.id === 'calendario' && !pode('envio') ? 'Calendário de locações' : a.rotulo, rota: a.rota, grupo: a.grupo, badge: n, alerta });
   }
   return itens;

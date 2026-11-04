@@ -5,7 +5,7 @@
  */
 import { mockApi } from './mock';
 import { httpApi } from './http';
-import type { Cliente, ClienteInput, ConfigEmail, Conferencia, FrotaOficina, Envio, Faturamento, ItemLog, Movimentacao, NovaMovimentacao, NovaSolicitacao, PerfilAcesso, Pessoa, Proposta, Solicitacao, Usuario, UsuarioAdmin } from '../types';
+import type { Cliente, ClienteInput, ConfigEmail, Conferencia, FrotaOficina, Envio, Faturamento, ItemLog, Movimentacao, NovaMovimentacao, NovaSolicitacao, PerfilAcesso, Pessoa, Proposta, Solicitacao, Usuario, UsuarioAdmin, DadosEquipamento, Equipamento, NovaPeca, PecaHistorico } from '../types';
 
 export type EnvioPedido = {
   referencia: string;
@@ -60,6 +60,15 @@ export interface Api {
   listarConferencia(referencia: string): Promise<Conferencia[]>;
   marcarConferencia(referencia: string, c: { clienteId: string; frota: string; status: 'ok' | 'alterado'; observacao?: string }): Promise<Conferencia>;
   desmarcarConferencia(referencia: string, clienteId: string, frota: string): Promise<void>;
+
+  // equipamentos e histórico de peças
+  listarEquipamentos(): Promise<Equipamento[]>;
+  salvarEquipamento(frota: string, dados: DadosEquipamento): Promise<Equipamento>;
+  importarEquipamentos(lista: { frota: string; dados: DadosEquipamento }[]): Promise<{ novos: number; atualizados: number; iguais: number }>;
+  historicoDaFrota(frota: string): Promise<PecaHistorico[]>;
+  buscarHistorico(q: string, frota?: string): Promise<PecaHistorico[]>;
+  resumoHistorico(): Promise<{ origem: string; linhas: number; de: string; ate: string }[]>;
+  importarHistorico(linhas: NovaPeca[]): Promise<{ linhas: number }>;
 
   // usuários e permissões (administração)
   listarPerfis(): Promise<PerfilAcesso[]>;

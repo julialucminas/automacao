@@ -289,6 +289,30 @@ const MIGRACOES = [
      ve_valores INTEGER NOT NULL DEFAULT 0
    );
    UPDATE usuarios SET perfil = 'admin' WHERE email = 'juliamaria@lucminas.com.br';`,
+  // 14: ficha de cada equipamento (frota) e histórico de peças e serviços (importado do Auvo e, depois, das OS)
+  `CREATE TABLE equipamentos (
+     frota TEXT PRIMARY KEY,
+     dados TEXT NOT NULL DEFAULT '{}',
+     atualizado_em TEXT NOT NULL,
+     atualizado_por INTEGER REFERENCES usuarios(id)
+   );
+   CREATE TABLE historico_pecas (
+     id INTEGER PRIMARY KEY,
+     data TEXT NOT NULL,
+     frota TEXT,
+     ativo TEXT NOT NULL DEFAULT '',
+     cliente TEXT NOT NULL DEFAULT '',
+     tecnico TEXT NOT NULL DEFAULT '',
+     pendencia TEXT NOT NULL DEFAULT '',
+     codigo TEXT NOT NULL DEFAULT '',
+     descricao TEXT NOT NULL DEFAULT '',
+     quantidade REAL NOT NULL DEFAULT 1,
+     valor_unitario INTEGER NOT NULL DEFAULT 0,
+     valor_total INTEGER NOT NULL DEFAULT 0,
+     horimetro REAL,
+     origem TEXT NOT NULL DEFAULT 'auvo'
+   );
+   CREATE INDEX historico_pecas_frota ON historico_pecas(frota, data);`,
 ];
 
 export function abrirBanco(caminho: string) {

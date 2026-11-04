@@ -2,7 +2,7 @@ import type { Api } from './index';
 import type { Cliente, Conferencia, Envio, FrotaOficina, Faturamento, Solicitacao, Usuario } from '../types';
 import { REMETENTE } from '../lib/email';
 import { PERFIS_PADRAO } from '../lib/acesso';
-import type { PerfilAcesso, UsuarioAdmin } from '../types';
+import type { Equipamento, PecaHistorico, PerfilAcesso, UsuarioAdmin } from '../types';
 
 /*
  * Implementação SIMULADA da API, só para desenvolvimento da interface.
@@ -126,6 +126,9 @@ function salvar(b: Banco) {
 /** Para a demonstração: alguns endereços "não existem" e geram devolução. */
 const ENDERECO_QUE_DEVOLVE = /obra\.betim@|naoexiste@/i;
 
+const EQUIP_DEMO = new Map<string, Equipamento>();
+let HIST_DEMO: PecaHistorico[] = [];
+
 // demonstração: perfis e usuários ficam só na memória desta aba
 let PERFIS_DEMO: PerfilAcesso[] = PERFIS_PADRAO.map((p) => ({ ...p, permissoes: { ...p.permissoes } }));
 let USUARIOS_DEMO: UsuarioAdmin[] = [
@@ -231,6 +234,59 @@ export const mockApi: Api = {
   async listarUsuarios() {
     const u = carregar().usuario;
     return u ? [{ id: 1, nome: u.nome, chamar: u.chamar ?? '', email: u.email }] : [];
+  },
+  // demonstração: fichas e histórico só na memória desta aba
+  async listarEquipamentos() {
+    return [...EQUIP_DEMO.values()];
+  },
+  async salvarEquipamento(frota, dados) {
+    const atual = EQUIP_DEMO.get(frota) ?? { frota, atualizadoEm: '', atualizadoPor: '' };
+    const novo = { ...atual, ...dados, atualizadoEm: new Date().toISOString(), atualizadoPor: 'Demonstração' };
+    EQUIP_DEMO.set(frota, novo);
+    return novo;
+  },
+  async importarEquipamentos(lista) {
+    let novos = 0;
+    for (const { frota, dados } of lista) {
+      if (!EQUIP_DEMO.has(frota)) novos++;
+      const limpos = Object.fromEntries(Object.entries(dados).filter(([, v]) => v !== null));
+      EQUIP_DEMO.set(frota, {
+        ...(EQUIP_DEMO.get(frota) ?? { frota, atualizadoEm: '', atualizadoPor: '' }),
+        ...limpos,
+        atualizadoEm: new Date().toISOString(),
+        atualizadoPor: 'Demonstração',
+      });
+    }
+    return { novos, atualizados: lista.length - novos, iguais: 0 };
+  },
+  async historicoDaFrota(frota) {
+    return HIST_DEMO.filter((p) => p.frota === frota);
+  },
+  async buscarHistorico(q, frota) {
+    const ps = q
+      .toUpperCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .split(/\s+/)
+      .filter(Boolean);
+    return HIST_DEMO.filter(
+      (p) =>
+        (!frota || p.frota === frota) &&
+        ps.every((x) =>
+          `${p.descricao} ${p.codigo} ${p.pendencia} ${p.cliente} ${p.tecnico}`
+            .toUpperCase()
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .includes(x),
+        ),
+    );
+  },
+  async resumoHistorico() {
+    return HIST_DEMO.length ? [{ origem: 'auvo', linhas: HIST_DEMO.length, de: HIST_DEMO[HIST_DEMO.length - 1].data, ate: HIST_DEMO[0].data }] : [];
+  },
+  async importarHistorico(linhas) {
+    HIST_DEMO = linhas.map((l, i) => ({ ...l, id: i + 1 })).sort((a, b) => b.data.localeCompare(a.data));
+    return { linhas: linhas.length };
   },
   async listarPerfis() {
     return PERFIS_DEMO;

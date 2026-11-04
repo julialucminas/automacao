@@ -5,6 +5,7 @@ import { CONFIG_PADRAO, Conflito2, operacoes, type NovaMov, type TipoMov } from 
 import { monitorCaixa } from './monitor.js';
 import { carteiroReal, lerConta, servicoEnvio, type Anexo, type Carteiro } from './envio.js';
 import { conferirSenha, gerarHash, hashToken, novoToken, problemaSenha } from './senha.js';
+import { CAMPOS_VALOR, DadoInvalido, equipamentos as tabelaEquipamentos, lerDados, normalizarFrota, type Equipamento, type NovaPeca, type PecaHistorico } from './equipamentos.js';
 import { ABAS, normalizarPermissoes, perfis as tabelaPerfis, type Aba, type Acesso, type Nivel } from './permissoes.js';
 
 const COOKIE = 'sessao';
@@ -162,7 +163,7 @@ export function criarApp(db: Banco, opcoes: { cookieSeguro: boolean; logger?: bo
   app.register(cookie);
 
   app.setErrorHandler((err, _req, reply) => {
-    if (err instanceof Invalido) return reply.code(400).send({ erro: err.message });
+    if (err instanceof Invalido || err instanceof DadoInvalido) return reply.code(400).send({ erro: err.message });
     if (err instanceof NaoEncontrado) return reply.code(404).send({ erro: err.message });
     if (err instanceof Conflito || err instanceof Conflito2) return reply.code(409).send({ erro: err.message });
     if (err instanceof SemPermissao) return reply.code(403).send({ erro: err.message });
@@ -407,6 +408,91 @@ export function criarApp(db: Banco, opcoes: { cookieSeguro: boolean; logger?: bo
     const i = lerItemConf((req.body ?? {}) as Record<string, unknown>);
     ops.desmarcarConferencia(lerRef(req.params.ref), i.clienteId, i.frota, req.usuario.id);
     return { ok: true };
+  });
+
+  // ---------- equipamentos (ficha de cada frota) e histórico de peças ----------
+  const equip = tabelaEquipamentos(db);
+  const semValoresEquip = (req: FastifyRequest, e: Equipamento): Equipamento => {
+    if (req.acesso.veValores) return e;
+    const c = { ...e };
+    for (const k of CAMPOS_VALOR) delete c[k];
+    return c;
+  };
+  const semValoresPeca = (req: FastifyRequest, p: PecaHistorico): PecaHistorico => (req.acesso.veValores ? p : { ...p, valorUnitario: 0, valorTotal: 0 });
+  const lerFrotaParam = (v: unknown) => {
+    const f = normalizarFrota(v);
+    if (!f || f.length > 20) throw new Invalido('Frota inválida.');
+    return f;
+  };
+
+  app.get('/api/equipamentos', { preHandler: exigir(1, 'frotas') }, async (req) => equip.listar().map((e) => semValoresEquip(req, e)));
+
+  app.put<{ Params: { frota: string } }>('/api/equipamentos/:frota', { preHandler: exigir(2, 'frotas') }, async (req) => {
+    const frota = lerFrotaParam(req.params.frota);
+    const dados = lerDados((req.body as Record<string, unknown> | undefined)?.dados);
+    if (!req.acesso.veValores) for (const k of CAMPOS_VALOR) delete dados[k];
+    const r = equip.salvar(frota, dados, req.usuario.id);
+    if (r.mudou.length) repo.registrarLog('', req.usuario.id, `${r.novo ? 'criou' : 'editou'} a ficha da FT${frota}: ${r.mudou.join(', ')}`, null, null, 'equipamento');
+    return semValoresEquip(req, r.equipamento);
+  });
+
+  app.post('/api/equipamentos/importar', { preHandler: exigir(2, 'frotas'), bodyLimit: 5 * 1024 * 1024 }, async (req) => {
+    const b = (req.body ?? {}) as Record<string, unknown>;
+    if (!Array.isArray(b.equipamentos) || b.equipamentos.length > 3000) throw new Invalido('Lista de equipamentos inválida.');
+    const lista = b.equipamentos.map((x: Record<string, unknown>) => ({ frota: lerFrotaParam(x?.frota), dados: lerDados(x?.dados) }));
+    if (!req.acesso.veValores) for (const l of lista) for (const k of CAMPOS_VALOR) delete l.dados[k];
+    const r = equip.importar(lista, req.usuario.id);
+    repo.registrarLog('', req.usuario.id, `importou a planilha de equipamentos: ${r.novos} novos, ${r.atualizados} atualizados`, null, null, 'equipamento');
+    return r;
+  });
+
+  app.get<{ Params: { frota: string } }>('/api/equipamentos/:frota/historico', { preHandler: exigir(1, 'frotas') }, async (req) =>
+    equip.historicoDaFrota(lerFrotaParam(req.params.frota)).map((p) => semValoresPeca(req, p)),
+  );
+
+  app.get<{ Querystring: { q?: string; frota?: string } }>('/api/historico-pecas', { preHandler: exigir(1, 'frotas') }, async (req) => {
+    const q = texto(req.query.q, 'busca', 200);
+    const frota = req.query.frota ? lerFrotaParam(req.query.frota) : null;
+    if (!q && !frota) throw new Invalido('Digite o que procurar.');
+    return equip.buscarHistorico(q, frota).map((p) => semValoresPeca(req, p));
+  });
+
+  app.get('/api/historico-pecas/resumo', { preHandler: exigir(1, 'frotas') }, async () => equip.resumoHistorico());
+
+  const lerPeca = (x: Record<string, unknown>, i: number): NovaPeca => {
+    const data = lerDataIso(x?.data, `Data (linha ${i + 1})`);
+    if (!data) throw new Invalido(`Linha ${i + 1} sem data.`);
+    const num = (v: unknown, campo: string, inteiro: boolean) => {
+      if (v === null || v === undefined || v === '') return null;
+      const n = Number(v);
+      if (!Number.isFinite(n) || Math.abs(n) > 1e12) throw new Invalido(`${campo} inválido na linha ${i + 1}.`);
+      return inteiro ? Math.round(n) : n;
+    };
+    const frota = x.frota ? normalizarFrota(x.frota) : '';
+    return {
+      data,
+      frota: frota && frota.length <= 20 ? frota : null,
+      ativo: texto(x.ativo, 'ativo', 60),
+      cliente: texto(x.cliente, 'cliente', 200),
+      tecnico: texto(x.tecnico, 'técnico', 100),
+      pendencia: texto(x.pendencia, 'pendência', 2000),
+      codigo: texto(x.codigo, 'código', 100),
+      descricao: texto(x.descricao, 'descrição', 500),
+      quantidade: num(x.quantidade, 'Quantidade', false) ?? 1,
+      valorUnitario: num(x.valorUnitario, 'Valor', true) ?? 0,
+      valorTotal: num(x.valorTotal, 'Valor', true) ?? 0,
+      horimetro: num(x.horimetro, 'Horímetro', false),
+      origem: 'auvo',
+    };
+  };
+
+  app.post('/api/historico-pecas/importar', { preHandler: exigir(2, 'frotas'), bodyLimit: 30 * 1024 * 1024 }, async (req) => {
+    const b = (req.body ?? {}) as Record<string, unknown>;
+    if (!Array.isArray(b.linhas) || b.linhas.length > 100_000) throw new Invalido('Histórico inválido.');
+    const linhas = b.linhas.map((x: Record<string, unknown>, i: number) => lerPeca(x ?? {}, i));
+    const r = equip.substituirHistorico('auvo', linhas);
+    repo.registrarLog('', req.usuario.id, `importou o histórico do Auvo: ${r.linhas} linhas (substituiu o anterior)`, null, null, 'equipamento');
+    return r;
   });
 
   // ---------- usuários e permissões (administração) ----------

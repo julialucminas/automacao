@@ -2,7 +2,16 @@
 
 /** Equipamento (frota) alugado. valor em centavos. */
 /** Equipamento (frota) alugado. valor em centavos. Os campos de locação vêm das movimentações. */
-export type Frota = { numero: string; valor: number; descricao: string; inicio?: string | null; fim?: string | null; contrato?: string; gas?: number; frete?: '' | 'lucminas' | 'cliente' };
+export type Frota = {
+  numero: string;
+  valor: number;
+  descricao: string;
+  inicio?: string | null;
+  fim?: string | null;
+  contrato?: string;
+  gas?: number;
+  frete?: '' | 'lucminas' | 'cliente';
+};
 
 export type Cliente = {
   id: string;
@@ -59,14 +68,7 @@ export type ArquivoLido = {
   blob: Blob;
 };
 
-export type StatusItem =
-  | 'pronto'
-  | 'sem_boleto'
-  | 'sem_cadastro'
-  | 'sem_email'
-  | 'boleto_sem_fatura'
-  | 'numero_duplicado'
-  | 'enviado';
+export type StatusItem = 'pronto' | 'sem_boleto' | 'sem_cadastro' | 'sem_email' | 'boleto_sem_fatura' | 'numero_duplicado' | 'enviado';
 
 export type ItemLote = {
   numero: string;
@@ -167,7 +169,14 @@ export type Solicitacao = {
   mensagens?: Mensagem[];
 };
 
-export type NovaSolicitacao = { paraUsuario: number; data: string; clienteId: string | null; /** quando não é um cliente cadastrado */ clienteNome?: string; titulo: string; texto: string };
+export type NovaSolicitacao = {
+  paraUsuario: number;
+  data: string;
+  clienteId: string | null;
+  /** quando não é um cliente cadastrado */ clienteNome?: string;
+  titulo: string;
+  texto: string;
+};
 
 export type TipoMov = 'locacao' | 'devolucao' | 'troca';
 export type DadosMov = {
@@ -233,3 +242,57 @@ export type Conferencia = {
 
 /** Frota parada na oficina (pode estar ou não com um cliente). */
 export type FrotaOficina = { frota: string; desde: string; observacao: string; usuario: string };
+
+/** Ficha de um equipamento (frota). Valores em centavos; datas AAAA-MM-DD. Campos de compra e contrato só chegam para quem vê valores. */
+export type DadosEquipamento = {
+  descricao?: string | null;
+  marca?: string | null;
+  modelo?: string | null;
+  serie?: string | null;
+  ano?: number | null;
+  combustivel?: string | null;
+  capacidade?: number | null;
+  torre?: string | null;
+  acessorios?: string | null;
+  situacao?: string | null;
+  situacaoMotivo?: string | null;
+  horimetro?: number | null;
+  horimetroEm?: string | null;
+  mediaDia?: number | null;
+  regiao?: string | null;
+  tecnico?: string | null;
+  tipoVisita?: string | null;
+  ultimaVisita?: string | null;
+  proximaPreventiva?: number | null;
+  intervaloVisitaDias?: number | null;
+  compraValor?: number | null;
+  compraNf?: string | null;
+  compraData?: string | null;
+  fornecedor?: string | null;
+  contratoNumero?: string | null;
+  contratoVencimento?: string | null;
+  contratoValor?: number | null;
+  contratoReajuste?: number | null;
+  contratoObs?: string | null;
+  observacoes?: string | null;
+};
+export type Equipamento = DadosEquipamento & { frota: string; atualizadoEm: string; atualizadoPor: string };
+
+/** Peça ou serviço lançado numa máquina (vindo do Auvo e, depois, das ordens de serviço). Valores em centavos. */
+export type PecaHistorico = {
+  id: number;
+  data: string;
+  frota: string | null;
+  ativo: string;
+  cliente: string;
+  tecnico: string;
+  pendencia: string;
+  codigo: string;
+  descricao: string;
+  quantidade: number;
+  valorUnitario: number;
+  valorTotal: number;
+  horimetro: number | null;
+  origem: string;
+};
+export type NovaPeca = Omit<PecaHistorico, 'id'>;

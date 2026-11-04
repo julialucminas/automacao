@@ -37,12 +37,12 @@ export function useBusca(q: string): Resultado[] {
               tipo: 'Frota',
               titulo: `FT${f.numero}`,
               detalhe: `${c.nome}${c.ativo ? '' : ' (desativado)'}${f.descricao ? ` · ${f.descricao}` : ''}`,
-              rota: `/frotas?busca=${encodeURIComponent(f.numero)}`,
+              rota: `/equipamentos?busca=${encodeURIComponent(f.numero)}`,
             });
           }
       for (const o of oficina)
         if (!vistas.has(o.frota) && o.frota === num)
-          r.push({ tipo: 'Frota', titulo: `FT${o.frota}`, detalhe: `na oficina${o.observacao ? ` · ${o.observacao}` : ''}`, rota: `/frotas?busca=${encodeURIComponent(o.frota)}` });
+          r.push({ tipo: 'Frota', titulo: `FT${o.frota}`, detalhe: `na oficina${o.observacao ? ` · ${o.observacao}` : ''}`, rota: `/equipamentos?busca=${encodeURIComponent(o.frota)}` });
     }
     if (pode('clientes') || pode('frotas')) {
       for (const c of clientes) {

@@ -12,11 +12,7 @@ const TONS: Record<Tom, string> = {
 };
 
 export function Chip({ tom, children }: { tom: Tom; children: ReactNode }) {
-  return (
-    <span className={`inline-flex items-center whitespace-nowrap rounded-full px-2.5 py-[3px] text-xs font-semibold ${TONS[tom]}`}>
-      {children}
-    </span>
-  );
+  return <span className={`inline-flex items-center whitespace-nowrap rounded-full px-2.5 py-[3px] text-xs font-semibold ${TONS[tom]}`}>{children}</span>;
 }
 
 /** Mantém o foco dentro do diálogo e fecha com Esc. */
@@ -52,17 +48,7 @@ function useDialogo(aberto: boolean, fechar: () => void) {
   return ref;
 }
 
-export function Modal({
-  aberto,
-  fechar,
-  titulo,
-  children,
-}: {
-  aberto: boolean;
-  fechar: () => void;
-  titulo: string;
-  children: ReactNode;
-}) {
+export function Modal({ aberto, fechar, titulo, children }: { aberto: boolean; fechar: () => void; titulo: string; children: ReactNode }) {
   const ref = useDialogo(aberto, fechar);
   if (!aberto) return null;
   return (
@@ -80,17 +66,26 @@ export function Gaveta({
   fechar,
   titulo,
   children,
+  largo,
 }: {
   aberto: boolean;
   fechar: () => void;
   titulo: string;
   children: ReactNode;
+  /** ficha com mais informação (ex.: equipamento) */
+  largo?: boolean;
 }) {
   const ref = useDialogo(aberto, fechar);
   if (!aberto) return null;
   return (
     <div className="fixed inset-0 z-30 flex justify-end bg-ink/45" onMouseDown={(e) => e.target === e.currentTarget && fechar()}>
-      <div ref={ref} role="dialog" aria-modal="true" aria-label={titulo} className="flex h-full w-full max-w-[500px] flex-col gap-4 overflow-y-auto bg-white p-6">
+      <div
+        ref={ref}
+        role="dialog"
+        aria-modal="true"
+        aria-label={titulo}
+        className={`flex h-full w-full ${largo ? 'max-w-[760px]' : 'max-w-[500px]'} flex-col gap-4 overflow-y-auto bg-white p-6`}
+      >
         <div className="flex items-center justify-between gap-3">
           <h2 className="text-xl font-bold">{titulo}</h2>
           <button type="button" data-fechar aria-label="Fechar" onClick={fechar} className="flex h-11 w-11 items-center justify-center rounded-lg text-ink-2 hover:bg-canvas">

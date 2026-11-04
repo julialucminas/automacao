@@ -15,6 +15,7 @@ import { Configuracoes } from './pages/Configuracoes';
 import { ConferenciaMes } from './pages/ConferenciaMes';
 import { Inicio } from './pages/Inicio';
 import { Usuarios } from './pages/Usuarios';
+import { Equipamentos } from './pages/Equipamentos';
 import { useMenu } from './components/Layout';
 import type { Aba } from './lib/acesso';
 import type { ReactNode } from 'react';
@@ -26,6 +27,7 @@ const TELAS: [Aba, string, ReactNode][] = [
   ['movimentacoes', '/movimentacoes', <Movimentacoes />],
   ['conferencia', '/conferencia', <ConferenciaMes />],
   ['calendario', '/calendario', <Calendario />],
+  ['frotas', '/equipamentos', <Equipamentos />],
   ['frotas', '/frotas', <Frotas />],
   ['envio', '/envio', <Envio />],
   ['historico', '/historico', <Historico />],
@@ -42,8 +44,8 @@ function RotasLogado() {
   return (
     <Routes>
       <Route element={<Layout />}>
-        {TELAS.filter(([aba]) => pode(aba, aba === 'envio' ? 2 : 1)).map(([aba, rota, tela]) => (
-          <Route key={aba} path={rota} element={tela} />
+        {TELAS.filter(([aba]) => pode(aba, aba === 'envio' ? 2 : 1)).map(([, rota, tela]) => (
+          <Route key={rota} path={rota} element={tela} />
         ))}
         {/* aprovações (quem aprova) ou "Minhas alterações" (quem propõe) */}
         <Route path="/aprovacoes" element={<Aprovacoes />} />

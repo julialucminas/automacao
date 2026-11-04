@@ -121,6 +121,13 @@ export const httpApi: Api = {
     await chamar('POST', `/api/conferencia/${ref}/desmarcar`, { clienteId, frota });
   },
 
+  listarEquipamentos: () => chamar('GET', '/api/equipamentos'),
+  salvarEquipamento: (frota, dados) => chamar('PUT', `/api/equipamentos/${encodeURIComponent(frota)}`, { dados }),
+  importarEquipamentos: (equipamentos) => chamar('POST', '/api/equipamentos/importar', { equipamentos }, 180_000),
+  historicoDaFrota: (frota) => chamar('GET', `/api/equipamentos/${encodeURIComponent(frota)}/historico`),
+  buscarHistorico: (q, frota) => chamar('GET', `/api/historico-pecas?q=${encodeURIComponent(q)}${frota ? `&frota=${encodeURIComponent(frota)}` : ''}`),
+  resumoHistorico: () => chamar('GET', '/api/historico-pecas/resumo'),
+  importarHistorico: (linhas) => chamar('POST', '/api/historico-pecas/importar', { linhas }, 300_000),
   listarPerfis: async () => (await chamar<{ perfis: import('../types').PerfilAcesso[] }>('GET', '/api/perfis')).perfis,
   criarPerfil: (p) => chamar('POST', '/api/perfis', p),
   salvarPerfil: (p) => chamar('PUT', `/api/perfis/${encodeURIComponent(p.id)}`, p),
