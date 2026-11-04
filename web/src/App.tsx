@@ -17,6 +17,7 @@ import { Inicio } from './pages/Inicio';
 import { Usuarios } from './pages/Usuarios';
 import { Equipamentos } from './pages/Equipamentos';
 import { Manutencao } from './pages/Manutencao';
+import { AppDono } from './pages/AppDono';
 import { useMenu } from './components/Layout';
 import type { Aba } from './lib/acesso';
 import type { ReactNode } from 'react';
@@ -42,9 +43,12 @@ const TELAS: [Aba, string, ReactNode][] = [
 function RotasLogado() {
   const { pode } = useEstado();
   const menu = useMenu();
-  const primeira = pode('inicio') ? '/inicio' : (menu[0]?.rota ?? '/inicio');
+  // quem só consulta (o dono) abre direto no app do celular
+  const soConsulta = !(['envio', 'manutencao', 'movimentacoes', 'clientes', 'frotas', 'conferencia', 'usuarios'] as const).some((a) => pode(a, 2));
+  const primeira = pode('appDono') && soConsulta ? '/app' : pode('inicio') ? '/inicio' : (menu[0]?.rota ?? '/inicio');
   return (
     <Routes>
+      {pode('appDono') && <Route path="/app" element={<AppDono />} />}
       <Route element={<Layout />}>
         {TELAS.filter(([aba]) => pode(aba, aba === 'envio' ? 2 : 1)).map(([, rota, tela]) => (
           <Route key={rota} path={rota} element={tela} />

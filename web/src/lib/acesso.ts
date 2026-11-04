@@ -17,6 +17,7 @@ export const GRUPOS: { id: Grupo; rotulo: string }[] = [
 
 export type Aba =
   | 'inicio'
+  | 'appDono'
   | 'solicitacoes'
   | 'manutencao'
   | 'movimentacoes'
@@ -36,6 +37,7 @@ export type DefAba = { id: Aba; rotulo: string; grupo: Grupo; rota: string; ve: 
 /** Ordem = ordem no menu. "ve"/"edita" explicam o nível na tela de permissões. */
 export const ABAS: DefAba[] = [
   { id: 'inicio', rotulo: 'Painel do dia', grupo: 'inicio', rota: '/inicio', ve: 'vê o resumo', edita: 'vê o resumo' },
+  { id: 'appDono', rotulo: 'App do dono', grupo: 'inicio', rota: '/app', ve: 'resumo e busca no celular', edita: 'resumo e busca no celular' },
   { id: 'solicitacoes', rotulo: 'Solicitações', grupo: 'inicio', rota: '/solicitacoes', ve: 'lê as conversas', edita: 'abre e responde solicitações' },
   { id: 'manutencao', rotulo: 'Painel de manutenção', grupo: 'operacao', rota: '/manutencao', ve: 'vê o painel e as pendências', edita: 'registra visita e pendências' },
   { id: 'movimentacoes', rotulo: 'Movimentações', grupo: 'operacao', rota: '/movimentacoes', ve: 'vê o que foi registrado', edita: 'registra locação, troca e devolução' },
@@ -52,7 +54,7 @@ export const ABAS: DefAba[] = [
 ];
 
 /** Abas em que "edita" não muda nada além de "vê": a tela mostra só Não vê / Vê. */
-export const SO_VER: Aba[] = ['inicio', 'calendario', 'registro'];
+export const SO_VER: Aba[] = ['inicio', 'appDono', 'calendario', 'registro'];
 
 export const NIVEIS: { n: Nivel; rotulo: string }[] = [
   { n: 0, rotulo: 'Não vê' },
@@ -72,7 +74,7 @@ export const PERFIS_PADRAO: PerfilAcesso[] = [
     id: 'financeiro',
     nome: 'Financeiro',
     descricao: 'Faturas, envio, clientes e aprovações.',
-    permissoes: com(2, { usuarios: 0, registro: 1, manutencao: 1 }),
+    permissoes: com(2, { usuarios: 0, registro: 1, manutencao: 1, appDono: 0 }),
     veValores: true,
     padrao: true,
   },

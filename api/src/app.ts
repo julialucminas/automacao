@@ -461,6 +461,12 @@ export function criarApp(db: Banco, opcoes: { cookieSeguro: boolean; logger?: bo
     return equip.buscarHistorico(q, frota).map((p) => semValoresPeca(req, p));
   });
 
+  app.get<{ Querystring: { desde?: string } }>('/api/historico-pecas/por-frota', { preHandler: exigir(1, 'frotas') }, async (req) => {
+    const desde = lerDataIso(req.query.desde, 'Data inicial') ?? '0000-01-01';
+    const l = equip.gastosPorFrota(desde);
+    return req.acesso.veValores ? l : l.map((x) => ({ ...x, total: 0 }));
+  });
+
   app.get('/api/historico-pecas/resumo', { preHandler: exigir(1, 'frotas') }, async () => equip.resumoHistorico());
 
   const lerPeca = (x: Record<string, unknown>, i: number): NovaPeca => {

@@ -8,6 +8,7 @@ import type { Banco } from './db.js';
 
 export const ABAS = [
   'inicio',
+  'appDono',
   'solicitacoes',
   'manutencao',
   'movimentacoes',
@@ -37,7 +38,7 @@ export const PERFIS_PADRAO: Omit<Perfil, 'padrao'>[] = [
     id: 'financeiro',
     nome: 'Financeiro',
     descricao: 'Faturas, envio, clientes e aprovações.',
-    permissoes: com(2, { usuarios: 0, registro: 1, manutencao: 1 }),
+    permissoes: com(2, { usuarios: 0, registro: 1, manutencao: 1, appDono: 0 }),
     veValores: true,
   },
   {

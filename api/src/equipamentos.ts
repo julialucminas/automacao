@@ -233,6 +233,15 @@ export function equipamentos(db: Banco) {
       }
       return r;
     },
+    /** Gasto com peças e serviços por frota desde uma data (para "máquinas que mais dão gasto"). */
+    gastosPorFrota(desde: string) {
+      return db
+        .prepare(
+          `SELECT frota, SUM(valor_total) AS total, COUNT(*) AS lancamentos, COUNT(DISTINCT data) AS visitas, MAX(data) AS ultima
+           FROM historico_pecas WHERE frota IS NOT NULL AND data >= ? GROUP BY frota ORDER BY total DESC`,
+        )
+        .all(desde) as { frota: string; total: number; lancamentos: number; visitas: number; ultima: string }[];
+    },
     resumoHistorico() {
       return db.prepare('SELECT origem, COUNT(*) AS linhas, MIN(data) AS de, MAX(data) AS ate FROM historico_pecas GROUP BY origem').all() as {
         origem: string;

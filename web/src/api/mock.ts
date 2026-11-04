@@ -282,6 +282,19 @@ export const mockApi: Api = {
         ),
     );
   },
+  async gastosPorFrota(desde) {
+    const m = new Map<string, { frota: string; total: number; lancamentos: number; dias: Set<string>; ultima: string }>();
+    for (const p of HIST_DEMO)
+      if (p.frota && p.data >= desde) {
+        const x = m.get(p.frota) ?? { frota: p.frota, total: 0, lancamentos: 0, ultima: '', dias: new Set<string>() };
+        x.total += p.valorTotal;
+        x.lancamentos++;
+        x.dias.add(p.data);
+        x.ultima = p.data > x.ultima ? p.data : x.ultima;
+        m.set(p.frota, x);
+      }
+    return [...m.values()].map((x) => ({ frota: x.frota, total: x.total, lancamentos: x.lancamentos, ultima: x.ultima, visitas: x.dias.size })).sort((a, b) => b.total - a.total);
+  },
   async resumoHistorico() {
     return HIST_DEMO.length ? [{ origem: 'auvo', linhas: HIST_DEMO.length, de: HIST_DEMO[HIST_DEMO.length - 1].data, ate: HIST_DEMO[0].data }] : [];
   },

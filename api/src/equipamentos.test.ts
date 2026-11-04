@@ -76,3 +76,21 @@ describe('equipamentos', () => {
     expect((await como('julia')('POST', '/api/historico-pecas/importar', { linhas: [{ data: '28/11/2025' }] })).statusCode).toBe(400);
   });
 });
+
+describe('gastos por frota (app do dono)', () => {
+  it('soma por frota desde a data; sem valores para quem não vê', async () => {
+    const linhas = [
+      { data: '2025-11-28', frota: '40', descricao: 'A', valorTotal: 12000 },
+      { data: '2026-01-10', frota: '40', descricao: 'B', valorTotal: 5000 },
+      { data: '2026-01-10', frota: '40', descricao: 'C', valorTotal: 1000 },
+      { data: '2026-02-01', frota: '12', descricao: 'D', valorTotal: 90000 },
+      { data: '2024-01-01', frota: '12', descricao: 'antigo', valorTotal: 1 },
+    ];
+    await como('julia')('POST', '/api/historico-pecas/importar', { linhas });
+    expect((await como('julia')('GET', '/api/historico-pecas/por-frota?desde=2025-01-01')).json()).toEqual([
+      { frota: '12', total: 90000, lancamentos: 1, visitas: 1, ultima: '2026-02-01' },
+      { frota: '40', total: 18000, lancamentos: 3, visitas: 2, ultima: '2026-01-10' },
+    ]);
+    expect((await como('junior')('GET', '/api/historico-pecas/por-frota?desde=2025-01-01')).json()[0].total).toBe(0);
+  });
+});

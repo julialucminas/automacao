@@ -78,12 +78,18 @@ validado em `api/src/manutencao.ts`). Status da linha = visita (dias desde a úl
 reimportar a planilha troca só as abertas de origem 'planilha' e não reabre as resolvidas. Registrar visita
 grava na ficha e lança no histórico com origem 'sistema' (a importação do Auvo não apaga).
 
+## App do dono (fase 4, nov/2026)
+Rota `/app` (fora do Layout, layout de celular com abas Hoje, Buscar, Dinheiro, Gastos, Avisos), aba de permissão
+`appDono` (só Administrador e Diretoria). Quem só consulta (sem nível 2 nas abas de trabalho) abre direto em `/app`.
+Busca em linguagem falada: `web/src/lib/buscaDono.ts` ("motor de partida frota 40"). Gastos por frota:
+`GET /api/historico-pecas/por-frota?desde=`. Instalável no celular (manifest + ícones em `web/public`).
+Dono: Arnaldo, arnaldo@lucminas.com.br, perfil diretoria.
+
 ## Navegação
 Menu lateral com 6 grupos (Início, Operação, Frota, Financeiro, Clientes, Administração), Painel do dia em
 `/inicio` (cartões conforme o perfil) e busca no topo (`components/BuscaGeral.tsx`; as telas leem `?busca=`).
 
 ## Próximo passo (nov/2026)
-Fases 1 (navegação e permissões), 2 (equipamentos + importação) e 3 (painel de manutenção) feitas. Próximas: 4 app do dono (busca "motor de partida
-frota 40"), 5 ordens de serviço no celular dos técnicos (offline), 6 serviços externos (só etapas, sem automação).
+Fases 1 (navegação e permissões), 2 (equipamentos + importação) e 3 (painel de manutenção) feitas. Próximas: 5 ordens de serviço no celular dos técnicos (offline), 6 serviços externos (só etapas, sem automação).
 Sem integração com o Auvo. A planilha real do Júnior NÃO vai para o repositório. Requisitos levantados com base em Auvo,
 Produttivo, Field Control e softwares de locação — ver documento de requisitos.

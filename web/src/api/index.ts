@@ -92,6 +92,7 @@ export interface Api {
   importarEquipamentos(lista: { frota: string; dados: DadosEquipamento }[]): Promise<{ novos: number; atualizados: number; iguais: number }>;
   historicoDaFrota(frota: string): Promise<PecaHistorico[]>;
   buscarHistorico(q: string, frota?: string): Promise<PecaHistorico[]>;
+  gastosPorFrota(desde: string): Promise<{ frota: string; total: number; lancamentos: number; visitas: number; ultima: string }[]>;
   resumoHistorico(): Promise<{ origem: string; linhas: number; de: string; ate: string }[]>;
   importarHistorico(linhas: NovaPeca[]): Promise<{ linhas: number }>;
 

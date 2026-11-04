@@ -126,6 +126,7 @@ export const httpApi: Api = {
   importarEquipamentos: (equipamentos) => chamar('POST', '/api/equipamentos/importar', { equipamentos }, 180_000),
   historicoDaFrota: (frota) => chamar('GET', `/api/equipamentos/${encodeURIComponent(frota)}/historico`),
   buscarHistorico: (q, frota) => chamar('GET', `/api/historico-pecas?q=${encodeURIComponent(q)}${frota ? `&frota=${encodeURIComponent(frota)}` : ''}`),
+  gastosPorFrota: (desde) => chamar('GET', `/api/historico-pecas/por-frota?desde=${desde}`),
   resumoHistorico: () => chamar('GET', '/api/historico-pecas/resumo'),
   importarHistorico: (linhas) => chamar('POST', '/api/historico-pecas/importar', { linhas }, 300_000),
   listarPendencias: (todas) => chamar('GET', `/api/pendencias${todas ? '?todas=1' : ''}`),
