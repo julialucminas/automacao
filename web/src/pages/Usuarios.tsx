@@ -14,7 +14,7 @@ function gerarSenha(): string {
   return `${p[a[0] % p.length]}-${p[a[1] % p.length]}-${p[a[2] % p.length]}-${(a[3] % 90) + 10}`;
 }
 
-type Aba = 'pessoas' | 'perfis';
+type Aba = 'pessoas' | 'perfis' | 'copias';
 
 export function Usuarios() {
   const { pode, usuario, avisar } = useEstado();
@@ -44,12 +44,7 @@ export function Usuarios() {
         <p className="text-[13px] text-ink-3">Quem entra no sistema e o que cada perfil vê. Toda mudança fica no Registro.</p>
       </div>
       <div className="flex w-fit rounded-[10px] border border-line-strong bg-white p-0.5" role="tablist">
-        {(
-          [
-            ['pessoas', 'Pessoas'],
-            ['perfis', 'Perfis e permissões'],
-          ] as const
-        ).map(([k, r]) => (
+        {([['pessoas', 'Pessoas'], ['perfis', 'Perfis e permissões'], ...(edita ? ([['copias', 'Cópias de segurança']] as const) : [])] as const).map(([k, r]) => (
           <button
             key={k}
             type="button"
@@ -65,6 +60,8 @@ export function Usuarios() {
       {erro && <p className="rounded-xl bg-bad-soft p-4 text-bad-strong">{erro}</p>}
       {!usuarios ? (
         !erro && <p className="text-ink-3">Carregando…</p>
+      ) : aba === 'copias' ? (
+        <Copias />
       ) : aba === 'pessoas' ? (
         <Pessoas usuarios={usuarios} perfis={perfis} edita={edita} euId={usuario?.id} recarregar={recarregar} avisar={avisar} />
       ) : (
@@ -522,5 +519,46 @@ function NovoPerfil({ aberto, base, fechar, criado }: { aberto: boolean; base: P
         </div>
       </form>
     </Modal>
+  );
+}
+
+function Copias() {
+  const [lista, setLista] = useState<{ arquivo: string; bytes: number }[] | null>(null);
+  useEffect(() => {
+    api.listarCopias().then(setLista, () => setLista([]));
+  }, []);
+  return (
+    <section className="flex max-w-[720px] flex-col gap-4">
+      <div className="rounded-xl border border-line bg-white p-5 text-[14px]">
+        <p>
+          O banco de dados fica no servidor da Hostinger, na pasta <code>/opt/faturas-dados</code>. O sistema grava sozinho <b>uma cópia por dia</b> e guarda as dos últimos 30
+          dias.
+        </p>
+        <p className="mt-2 text-ink-2">
+          Essas cópias ficam no mesmo servidor: protegem contra erro e coisa apagada sem querer, mas não contra perder o servidor. Por isso, baixe uma cópia de vez em quando (uma
+          vez por semana é um bom ritmo) e guarde no computador ou no Google Drive da empresa.
+        </p>
+        <a href="/api/admin/copia-agora" className="btn-primary mt-4 inline-flex" download>
+          Baixar cópia do banco agora
+        </a>
+      </div>
+      <div>
+        <h2 className="mb-2 text-[12px] font-bold uppercase tracking-wide text-ink-3">Cópias automáticas no servidor</h2>
+        {lista === null ? (
+          <p className="text-ink-3">Carregando…</p>
+        ) : lista.length === 0 ? (
+          <p className="text-ink-3">A primeira cópia é feita logo depois da próxima atualização do sistema.</p>
+        ) : (
+          <ul className="flex flex-col divide-y divide-line-soft rounded-xl border border-line bg-white">
+            {lista.map((c) => (
+              <li key={c.arquivo} className="flex justify-between px-4 py-2 text-[13.5px]">
+                <span>{c.arquivo.slice(8, 18).split('-').reverse().join('/')}</span>
+                <span className="text-ink-3">{(c.bytes / 1_048_576).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} MB</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </section>
   );
 }

@@ -141,6 +141,7 @@ export const httpApi: Api = {
     await chamar('DELETE', `/api/perfis/${encodeURIComponent(id)}`);
   },
   listarUsuariosAdmin: () => chamar('GET', '/api/admin/usuarios'),
+  listarCopias: () => chamar('GET', '/api/admin/copias'),
   criarUsuario: (u) => chamar('POST', '/api/admin/usuarios', u),
   alterarUsuario: (id, m) => chamar('PATCH', `/api/admin/usuarios/${id}`, m),
 

@@ -3,6 +3,11 @@ import cookie from '@fastify/cookie';
 import { Conflito, NaoEncontrado, repositorio, type Banco, type ClienteInput, type Frota, type Usuario } from './db.js';
 import { CONFIG_PADRAO, Conflito2, operacoes, type NovaMov, type TipoMov } from './operacoes.js';
 import { monitorCaixa } from './monitor.js';
+import { agendarCopias, listarCopias } from './backup.js';
+import { createReadStream } from 'node:fs';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join as juntarCaminho } from 'node:path';
 import { carteiroReal, lerConta, servicoEnvio, type Anexo, type Carteiro } from './envio.js';
 import { conferirSenha, gerarHash, hashToken, novoToken, problemaSenha } from './senha.js';
 import { CAMPOS_VALOR, DadoInvalido, equipamentos as tabelaEquipamentos, lerDados, normalizarFrota, type Equipamento, type NovaPeca, type PecaHistorico } from './equipamentos.js';
@@ -681,6 +686,25 @@ export function criarApp(db: Banco, opcoes: { cookieSeguro: boolean; logger?: bo
     if (hashNovo) mudou.push('definiu uma senha nova');
     if (mudou.length) logUsuarios(req, `usuário ${depois.nome}: ${mudou.join(', ')}`);
     return depois;
+  });
+
+  // ---------- cópias de segurança ----------
+  if (opcoes.monitorar && opcoes.pastaDados) {
+    const parar = agendarCopias(db, opcoes.pastaDados, (m) => app.log.info(m));
+    app.addHook('onClose', async () => parar());
+  }
+  app.get('/api/admin/copias', { preHandler: exigir(2, 'usuarios') }, async () => listarCopias(opcoes.pastaDados ?? '/dados'));
+  /** Baixa uma cópia do banco feita agora (para guardar fora do servidor). */
+  app.get('/api/admin/copia-agora', { preHandler: exigir(2, 'usuarios') }, async (req, reply) => {
+    const pasta = mkdtempSync(juntarCaminho(tmpdir(), 'copia-'));
+    const arq = juntarCaminho(pasta, 'faturas.db');
+    await db.backup(arq);
+    repo.registrarLog('', req.usuario.id, 'baixou uma cópia do banco de dados', null, null, 'usuarios');
+    const nome = `lucminas-banco-${new Date().toISOString().slice(0, 10)}.db`;
+    reply.header('Content-Type', 'application/octet-stream').header('Content-Disposition', `attachment; filename="${nome}"`);
+    const fluxo = createReadStream(arq);
+    fluxo.on('close', () => rmSync(pasta, { recursive: true, force: true }));
+    return reply.send(fluxo);
   });
 
   // ---------- usuários e solicitações ----------

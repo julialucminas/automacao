@@ -119,3 +119,27 @@ describe('permissões por perfil', () => {
     expect((await adm('DELETE', '/api/perfis/financeiro')).statusCode).toBe(400);
   });
 });
+
+describe('cópias de segurança', () => {
+  it('cópia do dia, sem repetir, apaga as de mais de 30 dias; download só para o administrador', async () => {
+    const { mkdtempSync, readdirSync, writeFileSync } = await import('node:fs');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+    const { copiaDoDia, listarCopias } = await import('./backup.js');
+    const pasta = mkdtempSync(join(tmpdir(), 'copias-'));
+    const db = abrirBanco(':memory:');
+    const { mkdirSync } = await import('node:fs');
+    mkdirSync(join(pasta, 'copias'));
+    writeFileSync(join(pasta, 'copias', 'faturas-2026-09-01.db'), 'velha');
+    expect((await copiaDoDia(db, pasta, new Date('2026-11-04T12:00:00Z'))).feita).toBe(true);
+    expect((await copiaDoDia(db, pasta, new Date('2026-11-04T18:00:00Z'))).feita).toBe(false);
+    expect(readdirSync(join(pasta, 'copias'))).toEqual(['faturas-2026-11-04.db']);
+    expect(listarCopias(pasta).map((c) => c.arquivo)).toEqual(['faturas-2026-11-04.db']);
+
+    const r = await como('julia')('GET', '/api/admin/copia-agora');
+    expect(r.statusCode).toBe(200);
+    expect(r.headers['content-disposition']).toMatch(/lucminas-banco-/);
+    expect(r.rawPayload.subarray(0, 15).toString()).toBe('SQLite format 3');
+    expect((await como('angeli')('GET', '/api/admin/copia-agora')).statusCode).toBe(403);
+  });
+});

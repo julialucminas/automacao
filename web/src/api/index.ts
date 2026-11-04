@@ -109,6 +109,7 @@ export interface Api {
   salvarPerfil(p: PerfilAcesso): Promise<PerfilAcesso>;
   apagarPerfil(id: string): Promise<void>;
   listarUsuariosAdmin(): Promise<UsuarioAdmin[]>;
+  listarCopias(): Promise<{ arquivo: string; bytes: number }[]>;
   criarUsuario(u: { email: string; nome: string; chamar: string; perfil: string; senha: string }): Promise<UsuarioAdmin>;
   alterarUsuario(id: number, mudanca: { nome?: string; chamar?: string; perfil?: string; ativo?: boolean; senha?: string }): Promise<UsuarioAdmin>;
 

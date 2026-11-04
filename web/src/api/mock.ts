@@ -360,6 +360,9 @@ export const mockApi: Api = {
   async apagarPerfil(pid) {
     PERFIS_DEMO = PERFIS_DEMO.filter((x) => x.id !== pid);
   },
+  async listarCopias() {
+    return [];
+  },
   async listarUsuariosAdmin() {
     const u = carregar().usuario;
     return [...(u ? [{ id: 1, email: u.email, nome: u.nome, chamar: u.chamar ?? '', perfil: 'admin', ativo: true }] : []), ...USUARIOS_DEMO];
