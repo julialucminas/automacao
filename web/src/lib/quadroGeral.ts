@@ -4,7 +4,7 @@
  * e o histórico de peças e serviços do Auvo.
  * Cada aba é procurada pelo cabeçalho, então colunas a mais ou a menos não quebram a leitura.
  */
-import type { Cliente, DadosEquipamento, FrotaOficina, NovaPeca } from '../types';
+import type { Cliente, DadosEquipamento, FrotaOficina, NovaPeca, NovaPendencia, PerifericoId } from '../types';
 import { abrirXlsx, serialParaIso, type Valor } from './xlsxLeve';
 import { chaveEmpresa, semAcento } from './normalizar';
 
@@ -111,6 +111,7 @@ export type Divergencia = { frota: string; naPlanilha: string; noSistema: string
 export type LeituraQuadro = {
   fichas: FichaImportada[];
   historico: NovaPeca[];
+  pendencias: NovaPendencia[];
   abasLidas: string[];
   avisos: string[];
   divergencias: Divergencia[];
@@ -248,6 +249,69 @@ export function lerContratos(linhas: Valor[][], m: Map<string, FichaImportada>) 
   return n;
 }
 
+/** Ordem dos blocos na aba Periféricos. Motor de partida e filtro de ar vencem por data; os outros por horímetro. */
+const BLOCOS_PERIFERICOS: { id: PerifericoId; porData: boolean }[] = [
+  { id: 'motorPartida', porData: true },
+  { id: 'filtroAr', porData: true },
+  { id: 'correia', porData: false },
+  { id: 'oleoTransmissao', porData: false },
+  { id: 'oleoHidraulico', porData: false },
+];
+
+/** Periféricos: última troca (data e horímetro) e a próxima, por frota. "Ñ APLICA" vira "não se aplica". */
+export function lerPerifericos(linhas: Valor[][], m: Map<string, FichaImportada>) {
+  const h = acharCabecalho(linhas, ['FROTA', 'CLIENTE', 'HORIMETRO', 'TIPO', 'DATA', 'PROXIMA TROCA']);
+  if (!h) return 0;
+  const cFrota = h.col('FROTA', 1) >= 0 ? h.col('FROTA', 1) : h.col('FROTA');
+  // DATA nº 0 é a última visita; os periféricos começam no DATA nº 1, em blocos de 4 (data, horímetro, rodado, próxima)
+  const inicio = BLOCOS_PERIFERICOS.map((_, i) => h.col('DATA', i + 1));
+  let n = 0;
+  for (const l of linhas.slice(h.linha + 1)) {
+    const frota = normalizarFrota(l[cFrota]);
+    if (!frota) continue;
+    const d: Record<string, string | number | null> = {};
+    const naoAplica: string[] = [];
+    BLOCOS_PERIFERICOS.forEach((b, i) => {
+      const c = inicio[i];
+      if (c < 0) return;
+      if (/^(Ñ|N[ÃA]O) APLICA$/i.test(String(l[c] ?? '').trim())) return naoAplica.push(b.id);
+      const data = lerDataPlanilha(l[c]);
+      if (!data) return;
+      d[`${b.id}Data`] = data;
+      d[`${b.id}Horimetro`] = lerHorimetro(l[c + 1]);
+      if (b.porData) d[`${b.id}ProximaData`] = lerDataPlanilha(l[c + 3]);
+      else {
+        const prox = numero(l[c + 3]);
+        d[`${b.id}ProximaHoras`] = prox && prox > 0 ? prox : null;
+      }
+    });
+    if (naoAplica.length) d.perifericosNaoAplica = naoAplica.join(',');
+    juntar(m, frota, d as DadosEquipamento);
+    n++;
+  }
+  return n;
+}
+
+/** Pendências abertas (só as linhas com descrição). */
+export function lerPendencias(linhas: Valor[][]): NovaPendencia[] {
+  const h = acharCabecalho(linhas, ['CLIENTE', 'FROTA', 'TECNICO', 'DESCRICAO']);
+  if (!h) return [];
+  const r: NovaPendencia[] = [];
+  for (const l of linhas.slice(h.linha + 1)) {
+    const frota = normalizarFrota(l[h.col('FROTA')]);
+    const descricao = texto(l[h.col('DESCRICAO')]);
+    if (!frota || !/\d/.test(frota) || !descricao) continue;
+    r.push({
+      frota,
+      cliente: texto(l[h.col('CLIENTE')]) ?? '',
+      abertaEm: lerDataPlanilha(l[h.col('DATA ABERTURA')]) ?? new Date().toISOString().slice(0, 10),
+      tecnico: nomeTecnico(l[h.col('TECNICO')]),
+      descricao,
+    });
+  }
+  return r;
+}
+
 export function lerHistoricoAuvo(linhas: Valor[][]): NovaPeca[] {
   const h = acharCabecalho(linhas, ['DATA', 'CLIENTE', 'ATIVO', 'TECNICO']);
   if (!h) return [];
@@ -314,8 +378,8 @@ export async function lerQuadroGeral(arquivo: Blob | ArrayBuffer | Uint8Array, c
     const nome = achar(re);
     if (!nome) return avisos.push(`Não achei a aba "${rotulo}".`);
     const n = f(await pasta.ler(nome, colunas));
-    if (n) abasLidas.push(`${nome} (${n} linhas)`);
-    else avisos.push(`A aba "${nome}" não tem o cabeçalho esperado; foi ignorada.`);
+    if (n > 0) abasLidas.push(`${nome} (${n} linhas)`);
+    else if (n === 0) avisos.push(`A aba "${nome}" não tem o cabeçalho esperado; foi ignorada.`);
   };
   // a ordem importa: a Relação de frota manda na identificação; as outras completam
   await passo(/^RELACAO DE FROTA/, 'Relação de frota', (l) => lerRelacaoFrota(l, m));
@@ -324,6 +388,12 @@ export async function lerQuadroGeral(arquivo: Blob | ArrayBuffer | Uint8Array, c
   await passo(/^QUADRO PREVENTIVA$/, 'Quadro preventiva', (l) => lerQuadroPreventiva(l, m, false));
   await passo(/^QUADRO PREVENTIVA \(ELETRICA\)/, 'Quadro preventiva (elétrica)', (l) => lerQuadroPreventiva(l, m, true));
   await passo(/^CONTRATOS/, 'Contratos', (l) => lerContratos(l, m));
+  await passo(/^PERIFERICOS/, 'Periféricos', (l) => lerPerifericos(l, m));
+  let pendencias: NovaPendencia[] = [];
+  await passo(/^PENDENCIA/, 'Pendência', (l) => {
+    pendencias = lerPendencias(l);
+    return pendencias.length || -1;
+  });
   let historico: NovaPeca[] = [];
   await passo(
     /^HISTORICO AUVO/,
@@ -335,5 +405,5 @@ export async function lerQuadroGeral(arquivo: Blob | ArrayBuffer | Uint8Array, c
     14,
   );
   const fichas = [...m.values()].sort((a, b) => a.frota.localeCompare(b.frota, 'pt-BR', { numeric: true }));
-  return { fichas, historico, abasLidas, avisos, divergencias: acharDivergencias(fichas, clientes, oficina) };
+  return { fichas, historico, pendencias, abasLidas, avisos, divergencias: acharDivergencias(fichas, clientes, oficina) };
 }

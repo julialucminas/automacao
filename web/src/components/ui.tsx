@@ -52,7 +52,7 @@ export function Modal({ aberto, fechar, titulo, children }: { aberto: boolean; f
   const ref = useDialogo(aberto, fechar);
   if (!aberto) return null;
   return (
-    <div className="fixed inset-0 z-20 flex items-center justify-center bg-ink/45 p-4" onMouseDown={(e) => e.target === e.currentTarget && fechar()}>
+    <div className="fixed inset-0 z-40 flex items-center justify-center bg-ink/45 p-4" onMouseDown={(e) => e.target === e.currentTarget && fechar()}>
       <div ref={ref} role="dialog" aria-modal="true" aria-label={titulo} className="flex w-full max-w-[480px] flex-col gap-3.5 rounded-2xl bg-white p-6">
         <h2 className="text-xl font-bold">{titulo}</h2>
         {children}

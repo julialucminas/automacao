@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { api } from '../api';
 import { useEstado } from '../state';
-import type { DadosEquipamento, Equipamento, PecaHistorico } from '../types';
+import type { DadosEquipamento, Equipamento, PecaHistorico, RegraPeriferico } from '../types';
+import { regrasDe, situacaoPerifericos } from '../lib/manutencao';
 import { COMBUSTIVEIS, SITUACOES, TIPOS_VISITA, horasParaPreventiva, montarEquipamentos, nomeEquipamento, type LinhaEquipamento, type Situacao } from '../lib/equipamentos';
 import { chaveEmpresa, semAcento } from '../lib/normalizar';
-import { dataBr } from '../lib/calendario';
+import { dataBr, hojeIso } from '../lib/calendario';
 import { formatarReais, lerReais, reaisParaCampo } from '../lib/dinheiro';
 import { useBuscaDaUrl } from '../lib/buscaDaUrl';
 import { Chip, Gaveta } from '../components/ui';
@@ -193,13 +194,19 @@ function Item({ rotulo, children, largo }: { rotulo: string; children: ReactNode
   );
 }
 
-function Ficha({
+export function Ficha({
   linha,
   fechar,
   edita,
   veValores,
   salvo,
+  acoes,
+  extra,
 }: {
+  /** botões a mais no topo (ex.: Registrar visita, no painel) */
+  acoes?: ReactNode;
+  /** blocos a mais antes do histórico (ex.: pendências, no painel) */
+  extra?: ReactNode;
   linha: LinhaEquipamento | null;
   fechar: () => void;
   edita: boolean;
@@ -207,6 +214,7 @@ function Ficha({
   salvo: (e: Equipamento) => void;
 }) {
   const [editando, setEditando] = useState(false);
+  const { config } = useEstado();
   useEffect(() => setEditando(false), [linha?.frota]);
   if (!linha) return <Gaveta aberto={false} fechar={fechar} titulo="" largo children={null} />;
   const f = linha.ficha ?? ({} as Partial<Equipamento>);
@@ -222,11 +230,14 @@ function Ficha({
           {linha.oficina?.observacao && <Chip tom="warn">{linha.oficina.observacao}</Chip>}
           {linha.contratoVencido && <Chip tom="bad">contrato vencido</Chip>}
         </span>
-        {edita && !editando && (
-          <button type="button" className="btn-secondary btn-sm" onClick={() => setEditando(true)}>
-            Editar ficha
-          </button>
-        )}
+        <span className="flex flex-wrap gap-2">
+          {!editando && acoes}
+          {edita && !editando && (
+            <button type="button" className="btn-secondary btn-sm" onClick={() => setEditando(true)}>
+              Editar ficha
+            </button>
+          )}
+        </span>
       </div>
 
       {editando ? (
@@ -314,6 +325,8 @@ function Ficha({
               )}
             </Bloco>
           )}
+          <Perifericos ficha={linha.ficha} regras={regrasDe(config).perifericos} />
+          {extra}
           <HistoricoPecas frota={linha.frota} veValores={veValores} />
           {linha.ficha?.atualizadoEm && (
             <p className="text-xs text-ink-3">
@@ -324,6 +337,39 @@ function Ficha({
         </>
       )}
     </Gaveta>
+  );
+}
+
+function Perifericos({ ficha, regras }: { ficha: Equipamento | null; regras: RegraPeriferico[] }) {
+  const lista = situacaoPerifericos(ficha, regras, hojeIso());
+  const naoAplica = (ficha?.perifericosNaoAplica ?? '')
+    .split(',')
+    .map((x) => regras.find((r) => r.id === x.trim())?.nome)
+    .filter(Boolean);
+  if (!lista.length && !naoAplica.length) return null;
+  return (
+    <section className="flex flex-col gap-2">
+      <h3 className="text-[12px] font-bold uppercase tracking-wide text-ink-3">Periféricos</h3>
+      <ul className="flex flex-col divide-y divide-line-soft rounded-xl border border-line">
+        {lista.map((p) => (
+          <li key={p.id} className="flex flex-wrap items-center justify-between gap-2 px-3.5 py-2 text-[13px]">
+            <span>
+              <b>{p.nome}</b>
+              <span className="text-ink-3">
+                {' '}
+                · trocado em {p.ultima ? dataBr(p.ultima) : '—'}
+                {ficha?.[`${p.id}Horimetro`] != null && ` com ${num(ficha[`${p.id}Horimetro`])} h`}
+              </span>
+            </span>
+            <span className="flex items-center gap-2">
+              <span className="text-ink-2">próxima {p.proxima}</span>
+              {p.vencido ? <Chip tom="bad">vencido</Chip> : p.atencao ? <Chip tom="warn">vence logo</Chip> : <Chip tom="ok">ok</Chip>}
+            </span>
+          </li>
+        ))}
+      </ul>
+      {naoAplica.length > 0 && <p className="text-xs text-ink-3">Não se aplica nesta máquina: {naoAplica.join(', ')}.</p>}
+    </section>
   );
 }
 

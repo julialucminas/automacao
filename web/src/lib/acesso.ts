@@ -18,6 +18,7 @@ export const GRUPOS: { id: Grupo; rotulo: string }[] = [
 export type Aba =
   | 'inicio'
   | 'solicitacoes'
+  | 'manutencao'
   | 'movimentacoes'
   | 'conferencia'
   | 'calendario'
@@ -36,6 +37,7 @@ export type DefAba = { id: Aba; rotulo: string; grupo: Grupo; rota: string; ve: 
 export const ABAS: DefAba[] = [
   { id: 'inicio', rotulo: 'Painel do dia', grupo: 'inicio', rota: '/inicio', ve: 'vê o resumo', edita: 'vê o resumo' },
   { id: 'solicitacoes', rotulo: 'Solicitações', grupo: 'inicio', rota: '/solicitacoes', ve: 'lê as conversas', edita: 'abre e responde solicitações' },
+  { id: 'manutencao', rotulo: 'Painel de manutenção', grupo: 'operacao', rota: '/manutencao', ve: 'vê o painel e as pendências', edita: 'registra visita e pendências' },
   { id: 'movimentacoes', rotulo: 'Movimentações', grupo: 'operacao', rota: '/movimentacoes', ve: 'vê o que foi registrado', edita: 'registra locação, troca e devolução' },
   { id: 'conferencia', rotulo: 'Conferência de frotas', grupo: 'operacao', rota: '/conferencia', ve: 'vê a conferência do mês', edita: 'marca ✓ e envia correções' },
   { id: 'calendario', rotulo: 'Calendário', grupo: 'operacao', rota: '/calendario', ve: 'vê o calendário', edita: 'vê o calendário' },
@@ -66,12 +68,19 @@ const com = (base: Nivel, extra: Partial<Record<Aba, Nivel>>): Permissoes => ({ 
 /** Os mesmos perfis padrão do servidor (usados na demonstração, sem servidor). */
 export const PERFIS_PADRAO: PerfilAcesso[] = [
   { id: 'admin', nome: 'Administrador', descricao: 'Tudo, inclusive usuários e permissões.', permissoes: tudo(2), veValores: true, padrao: true },
-  { id: 'financeiro', nome: 'Financeiro', descricao: 'Faturas, envio, clientes e aprovações.', permissoes: com(2, { usuarios: 0, registro: 1 }), veValores: true, padrao: true },
+  {
+    id: 'financeiro',
+    nome: 'Financeiro',
+    descricao: 'Faturas, envio, clientes e aprovações.',
+    permissoes: com(2, { usuarios: 0, registro: 1, manutencao: 1 }),
+    veValores: true,
+    padrao: true,
+  },
   {
     id: 'operacoes',
     nome: 'Operações',
     descricao: 'Movimentações, conferência e frotas. Alterações de cadastro vão para aprovação.',
-    permissoes: com(0, { inicio: 2, solicitacoes: 2, movimentacoes: 2, conferencia: 2, calendario: 1, frotas: 2 }),
+    permissoes: com(0, { inicio: 2, solicitacoes: 2, manutencao: 2, movimentacoes: 2, conferencia: 2, calendario: 1, frotas: 2 }),
     veValores: false,
     padrao: true,
   },
@@ -79,7 +88,7 @@ export const PERFIS_PADRAO: PerfilAcesso[] = [
     id: 'tecnico',
     nome: 'Técnico',
     descricao: 'Técnico de campo: vê as frotas e os clientes, sem valores.',
-    permissoes: com(0, { inicio: 2, solicitacoes: 2, frotas: 1, clientes: 1 }),
+    permissoes: com(0, { inicio: 2, solicitacoes: 2, manutencao: 1, frotas: 1, clientes: 1 }),
     veValores: false,
     padrao: true,
   },

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { RegrasManutencao } from '../components/RegrasManutencao';
 import { useEstado } from '../state';
 import type { ConfigEmail } from '../types';
 import { MODELO_PADRAO, preencher, REMETENTE, referenciaAtual, referenciaPorExtenso, VARIAVEIS } from '../lib/email';
@@ -37,7 +38,7 @@ export function Configuracoes() {
     <div className="flex flex-col gap-5">
       <div>
         <h1 className="text-xl font-bold">Configurações</h1>
-        <p className="text-[13px] text-ink-3">Texto do e-mail que vai junto com a fatura e o boleto.</p>
+        <p className="text-[13px] text-ink-3">Texto do e-mail que vai junto com a fatura e o boleto, e as regras da manutenção.</p>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
@@ -61,7 +62,14 @@ export function Configuracoes() {
             <label htmlFor="cfg-corpo" className="label">
               Texto do e-mail
             </label>
-            <textarea id="cfg-corpo" rows={11} disabled={!ehFinanceiro} className="input resize-y py-2.5 text-[13.5px] leading-relaxed" value={c['email.corpo']} onChange={(e) => setC({ ...c, 'email.corpo': e.target.value })} />
+            <textarea
+              id="cfg-corpo"
+              rows={11}
+              disabled={!ehFinanceiro}
+              className="input resize-y py-2.5 text-[13.5px] leading-relaxed"
+              value={c['email.corpo']}
+              onChange={(e) => setC({ ...c, 'email.corpo': e.target.value })}
+            />
           </div>
           <div className="flex flex-col gap-1.5">
             <label htmlFor="cfg-corpo-sem" className="label">
@@ -127,6 +135,7 @@ export function Configuracoes() {
           </div>
         </section>
       </div>
+      <RegrasManutencao />
     </div>
   );
 }

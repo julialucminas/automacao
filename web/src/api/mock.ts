@@ -2,7 +2,7 @@ import type { Api } from './index';
 import type { Cliente, Conferencia, Envio, FrotaOficina, Faturamento, Solicitacao, Usuario } from '../types';
 import { REMETENTE } from '../lib/email';
 import { PERFIS_PADRAO } from '../lib/acesso';
-import type { Equipamento, PecaHistorico, PerfilAcesso, UsuarioAdmin } from '../types';
+import type { Equipamento, PecaHistorico, Pendencia, PerfilAcesso, UsuarioAdmin } from '../types';
 
 /*
  * Implementação SIMULADA da API, só para desenvolvimento da interface.
@@ -128,6 +128,7 @@ const ENDERECO_QUE_DEVOLVE = /obra\.betim@|naoexiste@/i;
 
 const EQUIP_DEMO = new Map<string, Equipamento>();
 let HIST_DEMO: PecaHistorico[] = [];
+let PEND_DEMO: Pendencia[] = [];
 
 // demonstração: perfis e usuários ficam só na memória desta aba
 let PERFIS_DEMO: PerfilAcesso[] = PERFIS_PADRAO.map((p) => ({ ...p, permissoes: { ...p.permissoes } }));
@@ -287,6 +288,42 @@ export const mockApi: Api = {
   async importarHistorico(linhas) {
     HIST_DEMO = linhas.map((l, i) => ({ ...l, id: i + 1 })).sort((a, b) => b.data.localeCompare(a.data));
     return { linhas: linhas.length };
+  },
+  async listarPendencias(todas) {
+    return PEND_DEMO.filter((p) => todas || p.status === 'aberta');
+  },
+  async criarPendencia(p) {
+    const n: Pendencia = { ...p, id: Date.now(), status: 'aberta', resolvidaEm: null, resolvidaPor: '', resolucao: '', origem: 'sistema' };
+    PEND_DEMO = [n, ...PEND_DEMO];
+    return n;
+  },
+  async resolverPendencia(pid, resolver, resolucao) {
+    PEND_DEMO = PEND_DEMO.map((p) =>
+      p.id === pid
+        ? {
+            ...p,
+            status: resolver ? 'resolvida' : 'aberta',
+            resolucao: resolucao ?? '',
+            resolvidaEm: resolver ? new Date().toISOString() : null,
+            resolvidaPor: resolver ? 'Demonstração' : '',
+          }
+        : p,
+    );
+    return PEND_DEMO.find((p) => p.id === pid)!;
+  },
+  async importarPendencias(lista) {
+    PEND_DEMO = [
+      ...PEND_DEMO.filter((p) => p.origem !== 'planilha'),
+      ...lista.map((p, i) => ({ ...p, id: i + 1, status: 'aberta' as const, resolvidaEm: null, resolvidaPor: '', resolucao: '', origem: 'planilha' })),
+    ];
+    return { abertas: lista.length, jaResolvidas: 0 };
+  },
+  async registrarVisita(frota, v) {
+    return mockApi.salvarEquipamento(frota, {
+      ultimaVisita: v.data,
+      ...(v.horimetro !== null ? { horimetro: v.horimetro, horimetroEm: v.data } : {}),
+      ...(v.proximaPreventiva !== null ? { proximaPreventiva: v.proximaPreventiva } : {}),
+    });
   },
   async listarPerfis() {
     return PERFIS_DEMO;

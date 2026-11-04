@@ -16,6 +16,7 @@ import { ConferenciaMes } from './pages/ConferenciaMes';
 import { Inicio } from './pages/Inicio';
 import { Usuarios } from './pages/Usuarios';
 import { Equipamentos } from './pages/Equipamentos';
+import { Manutencao } from './pages/Manutencao';
 import { useMenu } from './components/Layout';
 import type { Aba } from './lib/acesso';
 import type { ReactNode } from 'react';
@@ -24,6 +25,7 @@ import type { ReactNode } from 'react';
 const TELAS: [Aba, string, ReactNode][] = [
   ['inicio', '/inicio', <Inicio />],
   ['solicitacoes', '/solicitacoes', <Solicitacoes />],
+  ['manutencao', '/manutencao', <Manutencao />],
   ['movimentacoes', '/movimentacoes', <Movimentacoes />],
   ['conferencia', '/conferencia', <ConferenciaMes />],
   ['calendario', '/calendario', <Calendario />],

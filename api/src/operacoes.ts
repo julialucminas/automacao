@@ -95,6 +95,21 @@ export const CONFIG_PADRAO: Record<string, string> = {
   // quando a fatura vai sem boleto (cliente paga por PIX, depósito…)
   'email.corpoSemBoleto':
     'Prezados,\n\nSegue em anexo a fatura de locação nº {numero}, referente a {mes}.\n\nEm caso de dúvida, é só responder este e-mail.\n\nAtenciosamente,\nFinanceiro · Lucminas Empilhadeiras',
+  // regras da manutenção (painel): tipos de visita e periféricos, editáveis em Configurações
+  'manutencao.tipos': JSON.stringify([
+    { sigla: 'CF', nome: 'Conferência', dias: 30 },
+    { sigla: 'CR', nome: 'Corretiva (cliente chama)' },
+    { sigla: 'B', nome: 'Preventiva B', horas: 350 },
+    { sigla: 'C', nome: 'Preventiva C', horas: 500 },
+    { sigla: 'D', nome: 'Preventiva D', horas: 1000 },
+  ]),
+  'manutencao.perifericos': JSON.stringify([
+    { id: 'motorPartida', nome: 'Motor de partida', dias: 120 },
+    { id: 'filtroAr', nome: 'Filtro de ar', dias: 90 },
+    { id: 'correia', nome: 'Correia dentada', horas: 2000 },
+    { id: 'oleoTransmissao', nome: 'Óleo de transmissão', horas: 3000 },
+    { id: 'oleoHidraulico', nome: 'Óleo hidráulico', horas: 2000 },
+  ]),
 };
 
 const agora = () => new Date().toISOString();

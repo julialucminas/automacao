@@ -70,12 +70,20 @@ Importação do Quadro Geral pela tela (`components/ImportarQuadro.tsx` + `lib/q
 `lib/xlsxLeve.ts` existe porque a aba do Auvo declara 16 mil colunas e trava o read-excel-file.
 Na Programação, "DUDU" = Eduardo DLuca e "EDUARDO" = Eduardo Silva; no Auvo, "Eduardo" fica como está (não dá para saber).
 
+## Painel de manutenção (fase 3, nov/2026)
+Rota `/manutencao`, aba de permissão `manutencao` (perfis antigos ganham o nível padrão de abas novas
+automaticamente em `permissoes.ts`). Regras em Configurações (`manutencao.tipos`, `manutencao.perifericos`, JSON
+validado em `api/src/manutencao.ts`). Status da linha = visita (dias desde a última > intervalo) e preventiva
+(horas faltam < 0); periféricos vencidos aparecem à parte. Pendências: tabela `pendencias` (migração 15);
+reimportar a planilha troca só as abertas de origem 'planilha' e não reabre as resolvidas. Registrar visita
+grava na ficha e lança no histórico com origem 'sistema' (a importação do Auvo não apaga).
+
 ## Navegação
 Menu lateral com 6 grupos (Início, Operação, Frota, Financeiro, Clientes, Administração), Painel do dia em
 `/inicio` (cartões conforme o perfil) e busca no topo (`components/BuscaGeral.tsx`; as telas leem `?busca=`).
 
 ## Próximo passo (nov/2026)
-Fases 1 (navegação e permissões) e 2 (equipamentos + importação do Quadro Geral) feitas. Próximas: 3 painel de manutenção (aba Programação; tipos CF 30 dias,
+Fases 1 (navegação e permissões), 2 (equipamentos + importação) e 3 (painel de manutenção) feitas. Próximas: (3 era o painel de manutenção (aba Programação; tipos CF 30 dias,
 CR corretiva, B 350 h, C 500 h, D 1000 h, editáveis em Configurações), 4 app do dono (busca "motor de partida
 frota 40"), 5 ordens de serviço no celular dos técnicos (offline), 6 serviços externos (só etapas, sem automação).
 Sem integração com o Auvo. A planilha real do Júnior NÃO vai para o repositório. Requisitos levantados com base em Auvo,

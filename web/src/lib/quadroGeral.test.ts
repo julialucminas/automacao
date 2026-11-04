@@ -149,7 +149,7 @@ describe('Quadro Geral Manutenção', () => {
       ],
     });
     const r = await lerQuadroGeral(arq, [cli('CAPIVARI LTDA', ['40']), cli('ATUAL VIDROS', ['2']), cli('PANEX', ['95'])], []);
-    expect(r.avisos).toEqual(['Não achei a aba "Quadro preventiva".']);
+    expect(r.avisos).toEqual(['Não achei a aba "Quadro preventiva".', 'Não achei a aba "Periféricos".', 'Não achei a aba "Pendência".']);
     expect(r.fichas.map((f) => f.frota)).toEqual(['2', '40', '95']);
     expect(r.fichas[1].dados).toEqual({
       descricao: 'HYSTER H50FT',

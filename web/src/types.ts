@@ -226,7 +226,37 @@ export type Proposta = {
   resultado: ClienteInput;
 };
 export type ItemLog = { id: number; quando: string; usuario: string; area: string; acao: string; clienteId: string; clienteNome: string; antes: unknown; depois: unknown };
-export type ConfigEmail = Record<'email.remetente' | 'email.assunto' | 'email.corpo' | 'email.corpoSemBoleto', string>;
+export type ConfigEmail = Record<'email.remetente' | 'email.assunto' | 'email.corpo' | 'email.corpoSemBoleto', string> &
+  /** regras da manutenção (JSON), editadas em Configurações */
+  Partial<Record<'manutencao.tipos' | 'manutencao.perifericos', string>>;
+
+export type TipoVisita = { sigla: string; nome: string; dias?: number; horas?: number };
+export type PerifericoId = 'motorPartida' | 'filtroAr' | 'correia' | 'oleoTransmissao' | 'oleoHidraulico';
+export type RegraPeriferico = { id: PerifericoId; nome: string; dias?: number; horas?: number };
+export type Pendencia = {
+  id: number;
+  frota: string;
+  cliente: string;
+  abertaEm: string;
+  tecnico: string;
+  descricao: string;
+  status: 'aberta' | 'resolvida';
+  resolvidaEm: string | null;
+  resolvidaPor: string;
+  resolucao: string;
+  origem: string;
+};
+export type NovaPendencia = { frota: string; cliente: string; abertaEm: string; tecnico: string; descricao: string };
+export type Visita = {
+  data: string;
+  horimetro: number | null;
+  tipo: string;
+  tecnico: string;
+  cliente: string;
+  proximaPreventiva: number | null;
+  perifericos: PerifericoId[];
+  observacao: string;
+};
 
 export type Conferencia = {
   referencia: string;
@@ -275,7 +305,9 @@ export type DadosEquipamento = {
   contratoReajuste?: number | null;
   contratoObs?: string | null;
   observacoes?: string | null;
-};
+  perifericosNaoAplica?: string | null;
+} & Partial<Record<`${PerifericoId}Data` | `${PerifericoId}ProximaData`, string | null>> &
+  Partial<Record<`${PerifericoId}Horimetro` | `${PerifericoId}ProximaHoras`, number | null>>;
 export type Equipamento = DadosEquipamento & { frota: string; atualizadoEm: string; atualizadoPor: string };
 
 /** Peça ou serviço lançado numa máquina (vindo do Auvo e, depois, das ordens de serviço). Valores em centavos. */

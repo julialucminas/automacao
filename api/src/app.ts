@@ -6,6 +6,8 @@ import { monitorCaixa } from './monitor.js';
 import { carteiroReal, lerConta, servicoEnvio, type Anexo, type Carteiro } from './envio.js';
 import { conferirSenha, gerarHash, hashToken, novoToken, problemaSenha } from './senha.js';
 import { CAMPOS_VALOR, DadoInvalido, equipamentos as tabelaEquipamentos, lerDados, normalizarFrota, type Equipamento, type NovaPeca, type PecaHistorico } from './equipamentos.js';
+import { manutencao as tabelaManutencao, validarPerifericos, validarTipos } from './manutencao.js';
+import { PERIFERICOS, type Periferico } from './equipamentos.js';
 import { ABAS, normalizarPermissoes, perfis as tabelaPerfis, type Aba, type Acesso, type Nivel } from './permissoes.js';
 
 const COOKIE = 'sessao';
@@ -366,6 +368,8 @@ export function criarApp(db: Banco, opcoes: { cookieSeguro: boolean; logger?: bo
     const b = (req.body ?? {}) as Record<string, unknown>;
     const valores: Record<string, string> = {};
     for (const k of Object.keys(CONFIG_PADRAO)) if (b[k] !== undefined) valores[k] = texto(b[k], k, 5000) || CONFIG_PADRAO[k];
+    if (valores['manutencao.tipos']) valores['manutencao.tipos'] = validarTipos(valores['manutencao.tipos']);
+    if (valores['manutencao.perifericos']) valores['manutencao.perifericos'] = validarPerifericos(valores['manutencao.perifericos']);
     return ops.salvarConfig(valores, req.usuario.id);
   });
   app.get('/api/registro', { preHandler: exigir(1, 'registro') }, async () => ops.listarLog());
@@ -493,6 +497,78 @@ export function criarApp(db: Banco, opcoes: { cookieSeguro: boolean; logger?: bo
     const r = equip.substituirHistorico('auvo', linhas);
     repo.registrarLog('', req.usuario.id, `importou o histórico do Auvo: ${r.linhas} linhas (substituiu o anterior)`, null, null, 'equipamento');
     return r;
+  });
+
+  // ---------- painel de manutenção: pendências e visitas ----------
+  const manut = tabelaManutencao(db, () => ops.lerConfig());
+  const lerPendencia = (x: Record<string, unknown>, i?: number) => {
+    const onde = i === undefined ? '' : ` (linha ${i + 1})`;
+    const frota = lerFrotaParam(x?.frota);
+    const descricao = texto(x?.descricao, 'descrição', 2000);
+    if (!descricao) throw new Invalido(`Descreva a pendência${onde}.`);
+    return {
+      frota,
+      cliente: texto(x.cliente, 'cliente', 200),
+      abertaEm: lerDataIso(x.abertaEm, `Data${onde}`) ?? new Date().toISOString().slice(0, 10),
+      tecnico: texto(x.tecnico, 'técnico', 100),
+      descricao,
+    };
+  };
+
+  app.get<{ Querystring: { todas?: string } }>('/api/pendencias', { preHandler: exigir(1, 'manutencao', 'frotas') }, async (req) => manut.listarPendencias(req.query.todas === '1'));
+
+  app.post('/api/pendencias', { preHandler: exigir(2, 'manutencao') }, async (req, reply) => {
+    const p = manut.criarPendencia(lerPendencia((req.body ?? {}) as Record<string, unknown>), req.usuario.id);
+    repo.registrarLog('', req.usuario.id, `abriu pendência na FT${p.frota}: ${p.descricao}`, null, null, 'manutencao');
+    return reply.code(201).send(p);
+  });
+
+  for (const acao of ['resolver', 'reabrir'] as const)
+    app.post<{ Params: { id: string } }>(`/api/pendencias/:id/${acao}`, { preHandler: exigir(2, 'manutencao') }, async (req) => {
+      const resolucao = texto((req.body as Record<string, unknown> | undefined)?.resolucao, 'o que foi feito', 2000);
+      const p = manut.resolverPendencia(Number(req.params.id), acao === 'resolver', resolucao, req.usuario.id);
+      if (!p) throw new NaoEncontrado('Pendência não encontrada.');
+      repo.registrarLog('', req.usuario.id, `${acao === 'resolver' ? 'resolveu' : 'reabriu'} pendência na FT${p.frota}: ${p.descricao}${resolucao ? ` → ${resolucao}` : ''}`, null, null, 'manutencao');
+      return p;
+    });
+
+  app.post('/api/pendencias/importar', { preHandler: exigir(2, 'manutencao', 'frotas'), bodyLimit: 2 * 1024 * 1024 }, async (req) => {
+    const b = (req.body ?? {}) as Record<string, unknown>;
+    if (!Array.isArray(b.pendencias) || b.pendencias.length > 5000) throw new Invalido('Lista de pendências inválida.');
+    const r = manut.importarPendencias(b.pendencias.map((x: Record<string, unknown>, i: number) => lerPendencia(x ?? {}, i)));
+    repo.registrarLog('', req.usuario.id, `importou ${r.abertas} pendências da planilha`, null, null, 'manutencao');
+    return r;
+  });
+
+  app.post<{ Params: { frota: string } }>('/api/equipamentos/:frota/visita', { preHandler: exigir(2, 'manutencao') }, async (req) => {
+    const frota = lerFrotaParam(req.params.frota);
+    const b = (req.body ?? {}) as Record<string, unknown>;
+    const data = lerDataIso(b.data, 'Data da visita');
+    if (!data) throw new Invalido('Informe a data da visita.');
+    if (data > new Date(Date.now() + 86_400_000).toISOString().slice(0, 10)) throw new Invalido('A data da visita está no futuro.');
+    const num = (v: unknown, campo: string) => {
+      if (v === null || v === undefined || v === '') return null;
+      const n = Number(v);
+      if (!Number.isFinite(n) || n < 0 || n > 1_000_000) throw new Invalido(`${campo} inválido.`);
+      return Math.round(n * 10) / 10;
+    };
+    const perifericos = Array.isArray(b.perifericos) ? b.perifericos.filter((p): p is Periferico => PERIFERICOS.includes(p as Periferico)) : [];
+    const r = manut.registrarVisita(
+      frota,
+      {
+        data,
+        horimetro: num(b.horimetro, 'Horímetro'),
+        tipo: texto(b.tipo, 'tipo', 10).toUpperCase(),
+        tecnico: texto(b.tecnico, 'técnico', 100),
+        cliente: texto(b.cliente, 'cliente', 200),
+        proximaPreventiva: num(b.proximaPreventiva, 'Próxima preventiva'),
+        perifericos,
+        observacao: texto(b.observacao, 'observação', 2000),
+      },
+      req.usuario.id,
+    );
+    repo.registrarLog('', req.usuario.id, `registrou visita ${r.tipo.sigla} na FT${frota} em ${data}${perifericos.length ? ` (trocou ${perifericos.length} periférico${perifericos.length > 1 ? 's' : ''})` : ''}`, null, null, 'manutencao');
+    return semValoresEquip(req, r.equipamento);
   });
 
   // ---------- usuários e permissões (administração) ----------

@@ -5,6 +5,9 @@ import { api } from '../api';
 import { dataCurta, hojeIso, paraData, paraIso, proximasDatas, regraDoCliente } from '../lib/calendario';
 import { referenciaAtual, referenciaPorExtenso } from '../lib/email';
 import { formatarReais } from '../lib/dinheiro';
+import { montarEquipamentos } from '../lib/equipamentos';
+import { montarPainel, regrasDe, type LinhaPainel } from '../lib/manutencao';
+import type { Pendencia } from '../types';
 
 const somarDias = (iso: string, n: number) => paraIso(new Date(paraData(iso).getTime() + n * 86_400_000));
 
@@ -36,7 +39,7 @@ function Numero({ n, rotulo, tom = 'ink' }: { n: number | string; rotulo: string
 
 /** Primeira tela de todo mundo: cada um vê só o que é dele. */
 export function Inicio() {
-  const { usuario, clientes, envios, oficina, movimentacoes, propostas, pendentesParaMim, aprova, pode, veValores } = useEstado();
+  const { usuario, clientes, envios, oficina, movimentacoes, propostas, pendentesParaMim, aprova, pode, veValores, config } = useEstado();
   const hoje = hojeIso();
   const ref = referenciaAtual();
   const nome = usuario?.chamar?.trim() || usuario?.nome.trim().split(/\s+/)[0] || '';
@@ -69,6 +72,19 @@ export function Inicio() {
   const pendentes = movimentacoes.filter((m) => m.status === 'pendente').length + propostas.filter((p) => p.status === 'pendente').length;
 
   // conferência do mês
+  // painel de manutenção (quem vê a manutenção)
+  const veManutencao = pode('manutencao');
+  const [painel, setPainel] = useState<{ linhas: LinhaPainel[]; pendencias: Pendencia[] } | null>(null);
+  useEffect(() => {
+    if (!veManutencao) return;
+    Promise.all([api.listarEquipamentos(), api.listarPendencias()]).then(
+      ([f, p]) => setPainel({ linhas: montarPainel(montarEquipamentos(f, clientes, oficina), regrasDe(config), p), pendencias: p }),
+      () => setPainel(null),
+    );
+  }, [veManutencao, clientes, oficina, config]);
+  const atrasadas = painel?.linhas.filter((l) => l.status === 'atrasado') ?? [];
+  const semana = painel?.linhas.filter((l) => l.status === 'atencao') ?? [];
+
   const [conferidas, setConferidas] = useState<number | null>(null);
   const confere = pode('conferencia', 2);
   useEffect(() => {
@@ -168,6 +184,29 @@ export function Inicio() {
                     <span className="shrink-0 text-ink-3">termina {dataCurta(f.fim!)}</span>
                   </li>
                 ))}
+              </ul>
+            )}
+          </Cartao>
+        )}
+
+        {veManutencao && painel && painel.linhas.length > 0 && (
+          <Cartao titulo="Manutenção" link="/manutencao" rotuloLink="Painel" destaque={atrasadas.length > 0}>
+            <div className="flex flex-wrap gap-6">
+              <Numero n={atrasadas.length} rotulo="atrasadas" tom={atrasadas.length ? 'bad' : 'ok'} />
+              <Numero n={semana.length} rotulo="vencem esta semana" tom={semana.length ? 'warn' : 'ink'} />
+              <Numero n={painel.pendencias.length} rotulo="pendências abertas" />
+            </div>
+            {atrasadas.length > 0 && (
+              <ul className="flex flex-col gap-1 border-t border-line-soft pt-2 text-[13px]">
+                {atrasadas.slice(0, 5).map((l) => (
+                  <li key={l.frota} className="flex justify-between gap-2">
+                    <span className="truncate">
+                      <b className="font-mono">FT{l.frota}</b> · {l.linha.cliente?.nome ?? 'sem cliente'}
+                    </span>
+                    <span className="shrink-0 text-bad">{l.motivos[0]}</span>
+                  </li>
+                ))}
+                {atrasadas.length > 5 && <li className="text-xs text-ink-3">e mais {atrasadas.length - 5}</li>}
               </ul>
             )}
           </Cartao>

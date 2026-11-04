@@ -15,6 +15,7 @@ export function ImportarQuadro({ aberto, fechar, terminou }: { aberto: boolean; 
   const [etapa, setEtapa] = useState<Etapa>({ tipo: 'escolher' });
   const [fichasSim, setFichasSim] = useState(true);
   const [histSim, setHistSim] = useState(true);
+  const [pendSim, setPendSim] = useState(true);
   const [erro, setErro] = useState('');
   const input = useRef<HTMLInputElement>(null);
 
@@ -35,6 +36,7 @@ export function ImportarQuadro({ aberto, fechar, terminou }: { aberto: boolean; 
       if (!r.fichas.length && !r.historico.length) throw new Error('Não achei as abas do Quadro Geral nesta planilha (Relação de frota, Programação, Histórico Auvo…).');
       setFichasSim(r.fichas.length > 0);
       setHistSim(r.historico.length > 0);
+      setPendSim(r.pendencias.length > 0);
       setEtapa({ tipo: 'previa', r, nome: f.name });
     } catch (e) {
       setErro(e instanceof Error ? e.message : 'Não foi possível ler a planilha.');
@@ -55,6 +57,11 @@ export function ImportarQuadro({ aberto, fechar, terminou }: { aberto: boolean; 
         const x = await api.importarHistorico(r.historico);
         resumo.push(`Histórico do Auvo: ${x.linhas.toLocaleString('pt-BR')} lançamentos (o que havia antes foi substituído, sem duplicar).`);
       }
+      if (pendSim && r.pendencias.length) {
+        setEtapa({ tipo: 'enviando', texto: `Gravando ${r.pendencias.length} pendências…` });
+        const x = await api.importarPendencias(r.pendencias);
+        resumo.push(`Pendências: ${x.abertas} abertas${x.jaResolvidas ? ` (${x.jaResolvidas} já tinham sido resolvidas no sistema e ficaram fechadas)` : ''}.`);
+      }
       setEtapa({ tipo: 'pronto', resumo });
       avisar('Planilha importada. Tudo ficou no Registro.');
       terminou();
@@ -70,7 +77,7 @@ export function ImportarQuadro({ aberto, fechar, terminou }: { aberto: boolean; 
         <div className="flex flex-col gap-4">
           <p className="text-[14px] text-ink-2">
             Escolha a planilha de controle do Júnior (<b>.xlsx</b>). O sistema lê as abas <b>Relação de frota</b>, <b>Valor frota</b>, <b>Programação</b>, <b>Quadro preventiva</b>,{' '}
-            <b>Contratos</b> e <b>Histórico Auvo</b>, mostra o que encontrou e só grava depois que você confirmar.
+            <b>Periféricos</b>, <b>Pendência</b>, <b>Contratos</b> e <b>Histórico Auvo</b>, mostra o que encontrou e só grava depois que você confirmar.
           </p>
           <ul className="list-disc pl-5 text-[13px] text-ink-2">
             <li>A planilha não é guardada: só os dados vão para o sistema.</li>
@@ -104,7 +111,7 @@ export function ImportarQuadro({ aberto, fechar, terminou }: { aberto: boolean; 
 
       {etapa.tipo === 'previa' && (
         <div className="flex flex-col gap-4">
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid gap-3 sm:grid-cols-3">
             <label className="flex items-start gap-2.5 rounded-xl border border-line p-3.5">
               <input type="checkbox" className="mt-1" checked={fichasSim} disabled={!etapa.r.fichas.length} onChange={(e) => setFichasSim(e.target.checked)} />
               <span>
@@ -122,6 +129,13 @@ export function ImportarQuadro({ aberto, fechar, terminou }: { aberto: boolean; 
                     · {new Set(etapa.r.historico.map((h) => h.frota).filter(Boolean)).size} frotas
                   </span>
                 )}
+              </span>
+            </label>
+            <label className="flex items-start gap-2.5 rounded-xl border border-line p-3.5">
+              <input type="checkbox" className="mt-1" checked={pendSim} disabled={!etapa.r.pendencias.length} onChange={(e) => setPendSim(e.target.checked)} />
+              <span>
+                <b className="text-[22px] leading-none">{etapa.r.pendencias.length}</b> pendências abertas
+                <span className="block text-xs text-ink-3">vão para o Painel de manutenção; as já resolvidas no sistema não reabrem</span>
               </span>
             </label>
           </div>
@@ -168,7 +182,7 @@ export function ImportarQuadro({ aberto, fechar, terminou }: { aberto: boolean; 
             <button type="button" className="btn-secondary" onClick={() => setEtapa({ tipo: 'escolher' })}>
               Escolher outra
             </button>
-            <button type="button" className="btn-primary" disabled={!fichasSim && !histSim} onClick={() => void importar(etapa.r)}>
+            <button type="button" className="btn-primary" disabled={!fichasSim && !histSim && !pendSim} onClick={() => void importar(etapa.r)}>
               Importar
             </button>
           </div>

@@ -5,6 +5,13 @@
  */
 import type { Banco } from './db.js';
 
+export const PERIFERICOS = ['motorPartida', 'filtroAr', 'correia', 'oleoTransmissao', 'oleoHidraulico'] as const;
+export type Periferico = (typeof PERIFERICOS)[number];
+function periferico<P extends string>(p: P) {
+  return { [`${p}Data`]: 'data', [`${p}Horimetro`]: 'numero', [`${p}ProximaData`]: 'data', [`${p}ProximaHoras`]: 'numero' } as Record<`${P}Data` | `${P}ProximaData`, 'data'> &
+    Record<`${P}Horimetro` | `${P}ProximaHoras`, 'numero'>;
+}
+
 /** Campos da ficha. Texto, número ou data (AAAA-MM-DD). Valores em centavos. */
 export const CAMPOS_EQUIPAMENTO = {
   // identificação
@@ -44,6 +51,14 @@ export const CAMPOS_EQUIPAMENTO = {
   contratoReajuste: 'centavos',
   contratoObs: 'texto',
   observacoes: 'texto',
+  // periféricos: última troca (data e horímetro) e a próxima (por data ou por horímetro)
+  ...periferico('motorPartida'),
+  ...periferico('filtroAr'),
+  ...periferico('correia'),
+  ...periferico('oleoTransmissao'),
+  ...periferico('oleoHidraulico'),
+  /** periféricos que não existem nesta máquina, separados por vírgula (ex.: "correia,oleoHidraulico") */
+  perifericosNaoAplica: 'texto',
 } as const;
 export type CampoEquipamento = keyof typeof CAMPOS_EQUIPAMENTO;
 export type DadosEquipamento = Partial<Record<CampoEquipamento, string | number | null>>;
@@ -200,15 +215,15 @@ export function equipamentos(db: Banco) {
       return { linhas: linhas.length };
     },
     historicoDaFrota(frota: string): PecaHistorico[] {
-      return (db.prepare('SELECT * FROM historico_pecas WHERE frota = ? ORDER BY data DESC, id DESC').all(frota) as Record<string, unknown>[]).map(pecaDeLinha);
+      return (db.prepare('SELECT * FROM historico_pecas WHERE frota = ? ORDER BY data DESC, id ASC').all(frota) as Record<string, unknown>[]).map(pecaDeLinha);
     },
     /** Busca por palavras, sem ligar para acento ou maiúscula: todas precisam aparecer em peça, código, pendência, cliente ou técnico. */
     buscarHistorico(texto: string, frota: string | null, limite = 500): PecaHistorico[] {
       const palavras = semAcento(texto).split(/\s+/).filter(Boolean);
       const linhas = (
         frota
-          ? db.prepare('SELECT * FROM historico_pecas WHERE frota = ? ORDER BY data DESC, id DESC').all(frota)
-          : db.prepare('SELECT * FROM historico_pecas ORDER BY data DESC, id DESC').all()
+          ? db.prepare('SELECT * FROM historico_pecas WHERE frota = ? ORDER BY data DESC, id ASC').all(frota)
+          : db.prepare('SELECT * FROM historico_pecas ORDER BY data DESC, id ASC').all()
       ) as Record<string, unknown>[];
       const r: PecaHistorico[] = [];
       for (const l of linhas) {

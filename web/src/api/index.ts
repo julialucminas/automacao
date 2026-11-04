@@ -5,7 +5,32 @@
  */
 import { mockApi } from './mock';
 import { httpApi } from './http';
-import type { Cliente, ClienteInput, ConfigEmail, Conferencia, FrotaOficina, Envio, Faturamento, ItemLog, Movimentacao, NovaMovimentacao, NovaSolicitacao, PerfilAcesso, Pessoa, Proposta, Solicitacao, Usuario, UsuarioAdmin, DadosEquipamento, Equipamento, NovaPeca, PecaHistorico } from '../types';
+import type {
+  Cliente,
+  ClienteInput,
+  ConfigEmail,
+  Conferencia,
+  FrotaOficina,
+  Envio,
+  Faturamento,
+  ItemLog,
+  Movimentacao,
+  NovaMovimentacao,
+  NovaSolicitacao,
+  PerfilAcesso,
+  Pessoa,
+  Proposta,
+  Solicitacao,
+  Usuario,
+  UsuarioAdmin,
+  DadosEquipamento,
+  Equipamento,
+  NovaPeca,
+  NovaPendencia,
+  PecaHistorico,
+  Pendencia,
+  Visita,
+} from '../types';
 
 export type EnvioPedido = {
   referencia: string;
@@ -69,6 +94,13 @@ export interface Api {
   buscarHistorico(q: string, frota?: string): Promise<PecaHistorico[]>;
   resumoHistorico(): Promise<{ origem: string; linhas: number; de: string; ate: string }[]>;
   importarHistorico(linhas: NovaPeca[]): Promise<{ linhas: number }>;
+
+  // painel de manutenção
+  listarPendencias(todas?: boolean): Promise<Pendencia[]>;
+  criarPendencia(p: NovaPendencia): Promise<Pendencia>;
+  resolverPendencia(id: number, resolver: boolean, resolucao?: string): Promise<Pendencia>;
+  importarPendencias(lista: NovaPendencia[]): Promise<{ abertas: number; jaResolvidas: number }>;
+  registrarVisita(frota: string, v: Visita): Promise<Equipamento>;
 
   // usuários e permissões (administração)
   listarPerfis(): Promise<PerfilAcesso[]>;

@@ -313,6 +313,22 @@ const MIGRACOES = [
      origem TEXT NOT NULL DEFAULT 'auvo'
    );
    CREATE INDEX historico_pecas_frota ON historico_pecas(frota, data);`,
+  // 15: pendências de manutenção por frota (vindas da planilha ou abertas no sistema)
+  `CREATE TABLE pendencias (
+     id INTEGER PRIMARY KEY,
+     frota TEXT NOT NULL,
+     cliente TEXT NOT NULL DEFAULT '',
+     aberta_em TEXT NOT NULL,
+     tecnico TEXT NOT NULL DEFAULT '',
+     descricao TEXT NOT NULL,
+     status TEXT NOT NULL DEFAULT 'aberta',
+     resolvida_em TEXT,
+     resolvida_por INTEGER REFERENCES usuarios(id),
+     resolucao TEXT NOT NULL DEFAULT '',
+     origem TEXT NOT NULL DEFAULT 'sistema',
+     criada_por INTEGER REFERENCES usuarios(id)
+   );
+   CREATE INDEX pendencias_frota ON pendencias(frota, status);`,
 ];
 
 export function abrirBanco(caminho: string) {

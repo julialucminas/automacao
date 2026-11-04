@@ -9,6 +9,7 @@ import type { Banco } from './db.js';
 export const ABAS = [
   'inicio',
   'solicitacoes',
+  'manutencao',
   'movimentacoes',
   'conferencia',
   'calendario',
@@ -36,21 +37,21 @@ export const PERFIS_PADRAO: Omit<Perfil, 'padrao'>[] = [
     id: 'financeiro',
     nome: 'Financeiro',
     descricao: 'Faturas, envio, clientes e aprovações.',
-    permissoes: com(2, { usuarios: 0, registro: 1 }),
+    permissoes: com(2, { usuarios: 0, registro: 1, manutencao: 1 }),
     veValores: true,
   },
   {
     id: 'operacoes',
     nome: 'Operações',
     descricao: 'Movimentações, conferência e frotas. Alterações de cadastro vão para aprovação.',
-    permissoes: com(0, { inicio: 2, solicitacoes: 2, movimentacoes: 2, conferencia: 2, calendario: 1, frotas: 2 }),
+    permissoes: com(0, { inicio: 2, solicitacoes: 2, manutencao: 2, movimentacoes: 2, conferencia: 2, calendario: 1, frotas: 2 }),
     veValores: false,
   },
   {
     id: 'tecnico',
     nome: 'Técnico',
     descricao: 'Técnico de campo: vê as frotas e os clientes, sem valores.',
-    permissoes: com(0, { inicio: 2, solicitacoes: 2, frotas: 1, clientes: 1 }),
+    permissoes: com(0, { inicio: 2, solicitacoes: 2, manutencao: 1, frotas: 1, clientes: 1 }),
     veValores: false,
   },
   {
@@ -85,6 +86,16 @@ export function perfis(db: Banco) {
   // perfis padrão que ainda não existem entram sozinhos (instalação nova ou perfil novo numa versão nova)
   const inserir = db.prepare('INSERT OR IGNORE INTO perfis (id, nome, descricao, permissoes, ve_valores) VALUES (?, ?, ?, ?, ?)');
   for (const p of PERFIS_PADRAO) inserir.run(p.id, p.nome, p.descricao, JSON.stringify(p.permissoes), p.veValores ? 1 : 0);
+
+  // aba nova numa versão nova: perfis que já existiam ganham o nível padrão dela (o resto do que o administrador mudou fica)
+  for (const r of db.prepare('SELECT id, permissoes FROM perfis').all() as { id: string; permissoes: string }[]) {
+    const atual = JSON.parse(r.permissoes) as Record<string, unknown>;
+    const faltam = ABAS.filter((a) => !(a in atual));
+    if (!faltam.length) continue;
+    const padrao = PERFIS_PADRAO.find((p) => p.id === r.id)?.permissoes;
+    for (const a of faltam) atual[a] = padrao?.[a] ?? 0;
+    db.prepare('UPDATE perfis SET permissoes = ? WHERE id = ?').run(JSON.stringify(atual), r.id);
+  }
 
   const buscar = (id: string) => {
     const r = db.prepare('SELECT * FROM perfis WHERE id = ?').get(id) as Linha | undefined;
