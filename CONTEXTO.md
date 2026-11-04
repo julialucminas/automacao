@@ -100,11 +100,17 @@ configuráveis. A OS guarda uma cópia do formulário (`execucao.formulario`) e 
 mudar o modelo não mexe nas OS já abertas. OS antigas seguem com o `checklist` fixo.
 Cópias do banco: uma por dia em `/opt/faturas-dados/copias` (30 dias) + botão de baixar (Usuários e permissões).
 
+## Serviços externos (fase 6, nov/2026)
+Tabela `servicos_externos` (migração 18), módulo `api/src/externos.ts`, aba de permissão `externos`, tela `/externos`
+(quadro por etapa). Etapas: pedido → orçamento → enviado → aprovado/recusado → execução → concluído (a cobrar) → cobrado.
+Sem automação (nada de e-mail ou boleto): só etapa, responsável, previsão, nº da OS e histórico de quem mudou.
+Valor do orçamento só para quem vê valores (os outros recebem null e não conseguem mudar).
+
 ## Navegação
 Menu lateral com 6 grupos (Início, Operação, Frota, Financeiro, Clientes, Administração), Painel do dia em
 `/inicio` (cartões conforme o perfil) e busca no topo (`components/BuscaGeral.tsx`; as telas leem `?busca=`).
 
 ## Próximo passo (nov/2026)
-Fases 1 (navegação e permissões), 2 (equipamentos + importação) e 3 (painel de manutenção) feitas. Fases 4 (app do dono) e 5 (ordens de serviço, com modelos de OS) feitas. Próxima: 6 serviços externos (só etapas, sem automação).
+Fases 1 (navegação e permissões), 2 (equipamentos + importação) e 3 (painel de manutenção) feitas. Fases 4 (app do dono) e 5 (ordens de serviço, com modelos de OS) feitas. Fase 6 (serviços externos) feita. Todas as fases do documento de requisitos estão entregues; próximos ajustes vêm do uso.
 Sem integração com o Auvo. A planilha real do Júnior NÃO vai para o repositório. Requisitos levantados com base em Auvo,
 Produttivo, Field Control e softwares de locação — ver documento de requisitos.

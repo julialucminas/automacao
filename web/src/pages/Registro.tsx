@@ -16,6 +16,9 @@ const AREAS: Record<string, { rotulo: string; tom: Tom }> = {
   conferencia: { rotulo: 'Conferência', tom: 'ok' },
   configuracao: { rotulo: 'Configuração', tom: 'neutro' },
   usuarios: { rotulo: 'Usuários e permissões', tom: 'info' },
+  manutencao: { rotulo: 'Manutenção', tom: 'warn' },
+  ordem: { rotulo: 'Ordem de serviço', tom: 'info' },
+  externos: { rotulo: 'Serviço externo', tom: 'neutro' },
 };
 
 export function Registro() {

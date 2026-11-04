@@ -406,3 +406,27 @@ export type NovaOrdem = {
 };
 export type TecnicoOS = { id: number; nome: string; chamar: string; escritorio: boolean };
 export type ResultadoRelatorio = { ordem: Ordem; relatorio: { enviado: boolean; detalhe: string } | null };
+
+export type EtapaExterno = 'pedido' | 'orcamento' | 'enviado' | 'aprovado' | 'execucao' | 'concluido' | 'cobrado' | 'recusado';
+export type PassoExterno = { etapa: EtapaExterno; em: string; por: string; obs: string };
+export type ServicoExterno = {
+  id: number;
+  clienteId: string | null;
+  clienteNome: string;
+  contato: string;
+  equipamento: string;
+  descricao: string;
+  etapa: EtapaExterno;
+  /** centavos; null para quem não vê valores */
+  valor: number | null;
+  responsavelId: number | null;
+  responsavelNome: string;
+  osNumero: number | null;
+  previsao: string | null;
+  obs: string;
+  historico: PassoExterno[];
+  criadoPor: string;
+  criadoEm: string;
+  atualizadoEm: string;
+};
+export type DadosExterno = Partial<Pick<ServicoExterno, 'clienteId' | 'clienteNome' | 'contato' | 'equipamento' | 'descricao' | 'valor' | 'responsavelId' | 'osNumero' | 'previsao' | 'obs'>>;

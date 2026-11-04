@@ -7,7 +7,7 @@ import { referenciaAtual, referenciaPorExtenso } from '../lib/email';
 import { formatarReais } from '../lib/dinheiro';
 import { montarEquipamentos } from '../lib/equipamentos';
 import { montarPainel, regrasDe, type LinhaPainel } from '../lib/manutencao';
-import type { Ordem, Pendencia } from '../types';
+import type { Ordem, Pendencia, ServicoExterno } from '../types';
 
 const somarDias = (iso: string, n: number) => paraIso(new Date(paraData(iso).getTime() + n * 86_400_000));
 
@@ -94,6 +94,16 @@ export function Inicio() {
   const osRevisar = ordens?.filter((o) => o.status === 'concluida').length ?? 0;
   const osAndamento = ordens?.filter((o) => o.status === 'execucao' || o.status === 'aguardando_peca').length ?? 0;
   const osAtrasadas = ordens?.filter((o) => ['aberta', 'agendada'].includes(o.status) && o.agendadaPara && o.agendadaPara < hoje).length ?? 0;
+
+  // serviços externos: o que está parado esperando alguém da casa
+  const veExternos = pode('externos');
+  const [externos, setExternos] = useState<ServicoExterno[] | null>(null);
+  useEffect(() => {
+    if (veExternos) api.listarExternos().then(setExternos, () => setExternos(null));
+  }, [veExternos]);
+  const extOrcar = externos?.filter((s) => s.etapa === 'pedido' || s.etapa === 'orcamento').length ?? 0;
+  const extCobrar = externos?.filter((s) => s.etapa === 'concluido').length ?? 0;
+  const extAndamento = externos?.filter((s) => ['enviado', 'aprovado', 'execucao'].includes(s.etapa)).length ?? 0;
 
   const [conferidas, setConferidas] = useState<number | null>(null);
   const confere = pode('conferencia', 2);
@@ -228,6 +238,16 @@ export function Inicio() {
               <Numero n={osRevisar} rotulo="para revisar e encerrar" tom={osRevisar ? 'warn' : 'ink'} />
               <Numero n={osAndamento} rotulo="em execução" />
               <Numero n={osAtrasadas} rotulo="agendadas atrasadas" tom={osAtrasadas ? 'bad' : 'ink'} />
+            </div>
+          </Cartao>
+        )}
+
+        {veExternos && externos && externos.some((s) => s.etapa !== 'cobrado' && s.etapa !== 'recusado') && (
+          <Cartao titulo="Serviços externos" link="/externos" destaque={extOrcar + extCobrar > 0}>
+            <div className="flex flex-wrap gap-6">
+              <Numero n={extOrcar} rotulo="para orçar" tom={extOrcar ? 'warn' : 'ink'} />
+              <Numero n={extAndamento} rotulo="em andamento" />
+              <Numero n={extCobrar} rotulo="concluídos a cobrar" tom={extCobrar ? 'warn' : 'ink'} />
             </div>
           </Cartao>
         )}

@@ -1,5 +1,5 @@
 import type { Api, EnvioPedido } from './index';
-import type { ModeloOS } from '../types';
+import type { ModeloOS, ServicoExterno } from '../types';
 
 /** Implementação real: conversa com o servidor em /api. */
 
@@ -144,6 +144,10 @@ export const httpApi: Api = {
   salvarExecucao: (id, d) => chamar('PUT', `/api/ordens/${id}/execucao`, d),
   fotoOrdem: (id, imagem, campoId) => chamar('POST', `/api/ordens/${id}/fotos`, { imagem, ...(campoId ? { campoId } : {}) }, 120_000),
   listarModelosOS: () => chamar<{ modelos: ModeloOS[] }>('GET', '/api/modelos-os').then((r) => r.modelos),
+  listarExternos: () => chamar<{ servicos: ServicoExterno[] }>('GET', '/api/externos').then((r) => r.servicos),
+  criarExterno: (d) => chamar('POST', '/api/externos', d),
+  alterarExterno: (id, d) => chamar('PATCH', `/api/externos/${id}`, d),
+  etapaExterno: (id, etapa, obs) => chamar('POST', `/api/externos/${id}/etapa`, { etapa, obs }),
   criarModeloOS: (m) => chamar('POST', '/api/modelos-os', m),
   salvarModeloOS: (id, m) => chamar('PUT', `/api/modelos-os/${encodeURIComponent(id)}`, m),
   tirarFotoOrdem: (id, nome) => chamar('DELETE', `/api/ordens/${id}/fotos/${encodeURIComponent(nome)}`),

@@ -37,6 +37,9 @@ import type {
   Pendencia,
   Visita,
   ModeloOS,
+  DadosExterno,
+  EtapaExterno,
+  ServicoExterno,
 } from '../types';
 
 export type EnvioPedido = {
@@ -120,6 +123,10 @@ export interface Api {
   salvarExecucao(id: string, d: Partial<ExecucaoOS> & { aguardandoPeca?: boolean }): Promise<Ordem>;
   fotoOrdem(id: string, imagemBase64: string, campoId?: string): Promise<Ordem>;
   listarModelosOS(): Promise<ModeloOS[]>;
+  listarExternos(): Promise<ServicoExterno[]>;
+  criarExterno(d: DadosExterno): Promise<ServicoExterno>;
+  alterarExterno(id: number, d: DadosExterno): Promise<ServicoExterno>;
+  etapaExterno(id: number, etapa: EtapaExterno, obs: string): Promise<ServicoExterno>;
   criarModeloOS(m: Partial<ModeloOS>): Promise<ModeloOS>;
   salvarModeloOS(id: string, m: Partial<ModeloOS>): Promise<ModeloOS>;
   tirarFotoOrdem(id: string, nome: string): Promise<Ordem>;

@@ -366,6 +366,26 @@ const MIGRACOES = [
      atualizado_por INTEGER REFERENCES usuarios(id)
    );
    ALTER TABLE ordens ADD COLUMN modelo_id TEXT;`,
+  // 18: serviços externos (só as etapas: pedido → orçamento → aprovado → execução → cobrado)
+  `CREATE TABLE servicos_externos (
+     id INTEGER PRIMARY KEY AUTOINCREMENT,
+     cliente_id TEXT REFERENCES clientes(id),
+     cliente_nome TEXT NOT NULL DEFAULT '',
+     contato TEXT NOT NULL DEFAULT '',
+     equipamento TEXT NOT NULL DEFAULT '',
+     descricao TEXT NOT NULL DEFAULT '',
+     etapa TEXT NOT NULL DEFAULT 'pedido',
+     valor INTEGER,
+     responsavel_id INTEGER REFERENCES usuarios(id),
+     os_numero INTEGER,
+     previsao TEXT,
+     obs TEXT NOT NULL DEFAULT '',
+     historico TEXT NOT NULL DEFAULT '[]',
+     criado_por INTEGER REFERENCES usuarios(id),
+     criado_em TEXT NOT NULL,
+     atualizado_em TEXT NOT NULL
+   );
+   CREATE INDEX externos_etapa ON servicos_externos(etapa);`,
 ];
 
 export function abrirBanco(caminho: string) {

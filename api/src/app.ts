@@ -12,6 +12,7 @@ import { carteiroReal, lerConta, servicoEnvio, type Anexo, type Carteiro } from 
 import { conferirSenha, gerarHash, hashToken, novoToken, problemaSenha } from './senha.js';
 import { CAMPOS_VALOR, DadoInvalido, equipamentos as tabelaEquipamentos, lerDados, normalizarFrota, type Equipamento, type NovaPeca, type PecaHistorico } from './equipamentos.js';
 import { CHECKLISTS, STATUS_OS, TIPOS_OS, ordens as tabelaOrdens, type ItemChecklist, type Local, type Ordem, type TipoOS } from './ordens.js';
+import { ETAPAS, externos as tabelaExternos, type DadosExterno, type Etapa, type ServicoExterno } from './externos.js';
 import { TIPOS_CAMPO, lerModelo, lerRespostas, modelos as tabelaModelos } from './modelos.js';
 import { manutencao as tabelaManutencao, validarPerifericos, validarTipos } from './manutencao.js';
 import { PERIFERICOS, type Periferico } from './equipamentos.js';
@@ -618,6 +619,67 @@ export function criarApp(db: Banco, opcoes: { cookieSeguro: boolean; logger?: bo
     return id;
   };
   const logOS = (req: FastifyRequest, o: Ordem, acao: string) => repo.registrarLog(o.clienteId ?? '', req.usuario.id, `OS ${o.numero} (FT${o.frota}): ${acao}`, null, null, 'ordem');
+
+  // ---------- serviços externos (só etapas) ----------
+  const ext = tabelaExternos(db);
+  const semValorExterno = (req: FastifyRequest, s: ServicoExterno): ServicoExterno => (req.acesso.veValores ? s : { ...s, valor: null });
+  const lerExterno = (req: FastifyRequest, b: Record<string, unknown>, novo: boolean): Partial<DadosExterno> => {
+    const opc = <T>(k: string, f: (v: unknown) => T): T | undefined => (b[k] === undefined ? undefined : f(b[k]));
+    const d: Partial<DadosExterno> = {
+      clienteNome: opc('clienteNome', (v) => texto(v, 'cliente', 200)),
+      contato: opc('contato', (v) => texto(v, 'contato', 300)),
+      equipamento: opc('equipamento', (v) => texto(v, 'equipamento', 300)),
+      descricao: opc('descricao', (v) => texto(v, 'descrição', 4000)),
+      obs: opc('obs', (v) => texto(v, 'observação', 4000)),
+      previsao: opc('previsao', (v) => (v === null || v === '' ? null : typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : invalido('Data inválida.'))),
+      osNumero: opc('osNumero', (v) => (v === null || v === '' ? null : Number.isInteger(Number(v)) && Number(v) > 0 ? Number(v) : invalido('Número da OS inválido.'))),
+      responsavelId: opc('responsavelId', (v) => {
+        if (v === null || v === '') return null;
+        const id = Number(v);
+        if (!repo.buscarUsuario(id)) invalido('Responsável não encontrado.');
+        return id;
+      }),
+      clienteId: opc('clienteId', (v) => {
+        if (v === null || v === '') return null;
+        if (typeof v !== 'string') return invalido('Cliente inválido.');
+        repo.buscarCliente(v);
+        return v;
+      }),
+    };
+    // valor: só quem vê valores muda (os outros nem recebem)
+    if (b.valor !== undefined && req.acesso.veValores)
+      d.valor = b.valor === null || b.valor === '' ? null : Number.isInteger(b.valor) && (b.valor as number) >= 0 && (b.valor as number) < 1e11 ? (b.valor as number) : invalido('Valor inválido.');
+    if (novo) {
+      if (!d.clienteNome && d.clienteId) d.clienteNome = repo.buscarCliente(d.clienteId).nome;
+      if (!d.clienteNome) invalido('Informe o cliente.');
+      if (!d.descricao && !d.equipamento) invalido('Diga o que é o serviço.');
+    }
+    return d;
+  };
+  const resumoExterno = (s: ServicoExterno) => `serviço externo nº ${s.id} (${s.clienteNome}${s.equipamento ? `, ${s.equipamento}` : ''})`;
+
+  app.get('/api/externos', { preHandler: exigir(1, 'externos') }, async (req) => ({ etapas: ETAPAS, servicos: ext.listar().map((s) => semValorExterno(req, s)) }));
+  app.post('/api/externos', { preHandler: exigir(2, 'externos') }, async (req, reply) => {
+    const d = lerExterno(req, (req.body ?? {}) as Record<string, unknown>, true);
+    const s = ext.criar(
+      { clienteId: null, clienteNome: '', contato: '', equipamento: '', descricao: '', valor: null, responsavelId: null, osNumero: null, previsao: null, obs: '', ...Object.fromEntries(Object.entries(d).filter(([, v]) => v !== undefined)) },
+      req.usuario.id,
+    );
+    repo.registrarLog(s.clienteId ?? '', req.usuario.id, `cadastrou o ${resumoExterno(s)}`, null, null, 'externos');
+    return reply.code(201).send(semValorExterno(req, s));
+  });
+  app.patch<{ Params: { id: string } }>('/api/externos/:id', { preHandler: exigir(2, 'externos') }, async (req) => {
+    const { antes, depois } = ext.alterar(Number(req.params.id), lerExterno(req, (req.body ?? {}) as Record<string, unknown>, false));
+    repo.registrarLog(depois.clienteId ?? '', req.usuario.id, `alterou o ${resumoExterno(depois)}`, antes, depois, 'externos');
+    return semValorExterno(req, depois);
+  });
+  app.post<{ Params: { id: string } }>('/api/externos/:id/etapa', { preHandler: exigir(2, 'externos') }, async (req) => {
+    const b = (req.body ?? {}) as Record<string, unknown>;
+    const etapa = (Object.keys(ETAPAS).includes(b.etapa as string) ? b.etapa : invalido('Etapa inválida.')) as Etapa;
+    const s = ext.mudarEtapa(Number(req.params.id), etapa, texto(b.obs, 'observação', 1000), req.usuario.id);
+    repo.registrarLog(s.clienteId ?? '', req.usuario.id, `${resumoExterno(s)} → ${ETAPAS[etapa]}`, null, null, 'externos');
+    return semValorExterno(req, s);
+  });
 
   // ---------- modelos de OS (formulários) ----------
   const mods = tabelaModelos(db);

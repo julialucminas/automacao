@@ -2,7 +2,7 @@ import type { Api } from './index';
 import type { Cliente, Conferencia, Envio, FrotaOficina, Faturamento, Solicitacao, Usuario } from '../types';
 import { REMETENTE } from '../lib/email';
 import { PERFIS_PADRAO } from '../lib/acesso';
-import type { Equipamento, ModeloOS, Ordem, PecaHistorico, Pendencia, PerfilAcesso, UsuarioAdmin } from '../types';
+import type { Equipamento, ModeloOS, ServicoExterno, Ordem, PecaHistorico, Pendencia, PerfilAcesso, UsuarioAdmin } from '../types';
 
 /*
  * Implementação SIMULADA da API, só para desenvolvimento da interface.
@@ -129,6 +129,7 @@ const ENDERECO_QUE_DEVOLVE = /obra\.betim@|naoexiste@/i;
 const EQUIP_DEMO = new Map<string, Equipamento>();
 let HIST_DEMO: PecaHistorico[] = [];
 let PEND_DEMO: Pendencia[] = [];
+let EXTERNOS_DEMO: ServicoExterno[] = [];
 let MODELOS_DEMO: ModeloOS[] = [
   {
     id: 'padrao-corretiva',
@@ -444,6 +445,43 @@ export const mockApi: Api = {
         ? { ...o, execucao: { ...o.execucao, respostas: { ...(o.execucao.respostas ?? {}), [campoId]: [...((o.execucao.respostas?.[campoId] as string[] | undefined) ?? []), nome] } } }
         : { ...o, execucao: { ...o.execucao, fotos: [...(o.execucao.fotos ?? []), nome] } },
     );
+  },
+  async listarExternos() {
+    return EXTERNOS_DEMO;
+  },
+  async criarExterno(d) {
+    const agora = new Date().toISOString();
+    const s: ServicoExterno = {
+      id: EXTERNOS_DEMO.length + 1,
+      clienteId: null,
+      clienteNome: '',
+      contato: '',
+      equipamento: '',
+      descricao: '',
+      valor: null,
+      responsavelId: null,
+      osNumero: null,
+      previsao: null,
+      obs: '',
+      ...d,
+      etapa: 'pedido',
+      responsavelNome: '',
+      historico: [{ etapa: 'pedido', em: agora, por: 'Demonstração', obs: '' }],
+      criadoPor: 'Demonstração',
+      criadoEm: agora,
+      atualizadoEm: agora,
+    };
+    EXTERNOS_DEMO = [s, ...EXTERNOS_DEMO];
+    return s;
+  },
+  async alterarExterno(eid, d) {
+    EXTERNOS_DEMO = EXTERNOS_DEMO.map((s) => (s.id === eid ? { ...s, ...d, atualizadoEm: new Date().toISOString() } : s));
+    return EXTERNOS_DEMO.find((s) => s.id === eid)!;
+  },
+  async etapaExterno(eid, etapa, obs) {
+    const em = new Date().toISOString();
+    EXTERNOS_DEMO = EXTERNOS_DEMO.map((s) => (s.id === eid ? { ...s, etapa, atualizadoEm: em, historico: [...s.historico, { etapa, em, por: 'Demonstração', obs }] } : s));
+    return EXTERNOS_DEMO.find((s) => s.id === eid)!;
   },
   async listarModelosOS() {
     return MODELOS_DEMO;

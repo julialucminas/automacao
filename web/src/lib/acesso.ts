@@ -21,6 +21,7 @@ export type Aba =
   | 'solicitacoes'
   | 'manutencao'
   | 'ordens'
+  | 'externos'
   | 'movimentacoes'
   | 'conferencia'
   | 'calendario'
@@ -42,6 +43,7 @@ export const ABAS: DefAba[] = [
   { id: 'solicitacoes', rotulo: 'Solicitações', grupo: 'inicio', rota: '/solicitacoes', ve: 'lê as conversas', edita: 'abre e responde solicitações' },
   { id: 'manutencao', rotulo: 'Painel de manutenção', grupo: 'operacao', rota: '/manutencao', ve: 'vê o painel e as pendências', edita: 'registra visita e pendências' },
   { id: 'ordens', rotulo: 'Ordens de serviço', grupo: 'operacao', rota: '/ordens', ve: 'vê as OS e os relatórios', edita: 'abre e executa OS (técnico: só as dele)' },
+  { id: 'externos', rotulo: 'Serviços externos', grupo: 'operacao', rota: '/externos', ve: 'acompanha as etapas', edita: 'cadastra e muda a etapa' },
   { id: 'movimentacoes', rotulo: 'Movimentações', grupo: 'operacao', rota: '/movimentacoes', ve: 'vê o que foi registrado', edita: 'registra locação, troca e devolução' },
   { id: 'conferencia', rotulo: 'Conferência de frotas', grupo: 'operacao', rota: '/conferencia', ve: 'vê a conferência do mês', edita: 'marca ✓ e envia correções' },
   { id: 'calendario', rotulo: 'Calendário', grupo: 'operacao', rota: '/calendario', ve: 'vê o calendário', edita: 'vê o calendário' },
@@ -84,7 +86,7 @@ export const PERFIS_PADRAO: PerfilAcesso[] = [
     id: 'operacoes',
     nome: 'Operações',
     descricao: 'Movimentações, conferência e frotas. Alterações de cadastro vão para aprovação.',
-    permissoes: com(0, { inicio: 2, solicitacoes: 2, manutencao: 2, ordens: 2, movimentacoes: 2, conferencia: 2, calendario: 1, frotas: 2 }),
+    permissoes: com(0, { inicio: 2, solicitacoes: 2, manutencao: 2, ordens: 2, externos: 2, movimentacoes: 2, conferencia: 2, calendario: 1, frotas: 2 }),
     veValores: false,
     padrao: true,
   },

@@ -12,6 +12,7 @@ export const ABAS = [
   'solicitacoes',
   'manutencao',
   'ordens',
+  'externos',
   'movimentacoes',
   'conferencia',
   'calendario',
@@ -46,7 +47,7 @@ export const PERFIS_PADRAO: Omit<Perfil, 'padrao'>[] = [
     id: 'operacoes',
     nome: 'Operações',
     descricao: 'Movimentações, conferência e frotas. Alterações de cadastro vão para aprovação.',
-    permissoes: com(0, { inicio: 2, solicitacoes: 2, manutencao: 2, ordens: 2, movimentacoes: 2, conferencia: 2, calendario: 1, frotas: 2 }),
+    permissoes: com(0, { inicio: 2, solicitacoes: 2, manutencao: 2, ordens: 2, externos: 2, movimentacoes: 2, conferencia: 2, calendario: 1, frotas: 2 }),
     veValores: false,
   },
   {
