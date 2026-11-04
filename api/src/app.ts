@@ -11,6 +11,7 @@ import { join as juntarCaminho } from 'node:path';
 import { carteiroReal, lerConta, servicoEnvio, type Anexo, type Carteiro } from './envio.js';
 import { conferirSenha, gerarHash, hashToken, novoToken, problemaSenha } from './senha.js';
 import { CAMPOS_VALOR, DadoInvalido, equipamentos as tabelaEquipamentos, lerDados, normalizarFrota, type Equipamento, type NovaPeca, type PecaHistorico } from './equipamentos.js';
+import { CHECKLISTS, STATUS_OS, TIPOS_OS, ordens as tabelaOrdens, type ItemChecklist, type Local, type Ordem, type TipoOS } from './ordens.js';
 import { manutencao as tabelaManutencao, validarPerifericos, validarTipos } from './manutencao.js';
 import { PERIFERICOS, type Periferico } from './equipamentos.js';
 import { ABAS, normalizarPermissoes, perfis as tabelaPerfis, type Aba, type Acesso, type Nivel } from './permissoes.js';
@@ -580,6 +581,242 @@ export function criarApp(db: Banco, opcoes: { cookieSeguro: boolean; logger?: bo
     );
     repo.registrarLog('', req.usuario.id, `registrou visita ${r.tipo.sigla} na FT${frota} em ${data}${perifericos.length ? ` (trocou ${perifericos.length} periférico${perifericos.length > 1 ? 's' : ''})` : ''}`, null, null, 'manutencao');
     return semValoresEquip(req, r.equipamento);
+  });
+
+  // ---------- ordens de serviço ----------
+  const os = tabelaOrdens(db, opcoes.pastaDados ?? '/dados', () => manut.regras().perifericos);
+  /** escritório: abre, agenda, encerra */
+  const gerenciaOS = (req: FastifyRequest) => pode(req, 'ordens', 2) && pode(req, 'manutencao', 2);
+  /** técnico vê só as OS dele; escritório e quem só consulta veem todas */
+  const soAsMinhas = (req: FastifyRequest) => pode(req, 'ordens', 2) && !pode(req, 'manutencao', 2);
+  const verOS = (req: FastifyRequest, o: Ordem) => {
+    if (soAsMinhas(req) && o.tecnicoId !== req.usuario.id) throw new SemPermissao('Esta OS não é sua.');
+    return o;
+  };
+  const executaOS = (req: FastifyRequest, id: string) => {
+    const o = os.buscar(id);
+    if (gerenciaOS(req) || (pode(req, 'ordens', 2) && o.tecnicoId === req.usuario.id)) return o;
+    throw new SemPermissao('Só o técnico da OS ou o escritório podem mexer nela.');
+  };
+  const exigirGerencia = async (req: FastifyRequest, reply: FastifyReply) => {
+    await exigir(2, 'ordens')(req, reply);
+    if (reply.sent) return;
+    if (!gerenciaOS(req)) return reply.code(403).send({ erro: 'Só o escritório (quem edita o Painel de manutenção) abre, agenda e encerra OS.' });
+  };
+  const lerLocal = (v: unknown): Local => {
+    const o = (v ?? {}) as Record<string, unknown>;
+    const n = (x: unknown, min: number, max: number) => (typeof x === 'number' && Number.isFinite(x) && x >= min && x <= max ? x : null);
+    return { em: new Date().toISOString(), lat: n(o.lat, -90, 90), lng: n(o.lng, -180, 180), precisao: n(o.precisao, 0, 100000) };
+  };
+  const lerTecnico = (v: unknown) => {
+    if (v === null || v === undefined || v === '') return null;
+    const id = Number(v);
+    const u = Number.isInteger(id) ? repo.buscarUsuario(id) : undefined;
+    if (!u || !u.ativo) throw new Invalido('Técnico não encontrado.');
+    return id;
+  };
+  const logOS = (req: FastifyRequest, o: Ordem, acao: string) => repo.registrarLog(o.clienteId ?? '', req.usuario.id, `OS ${o.numero} (FT${o.frota}): ${acao}`, null, null, 'ordem');
+
+  app.get('/api/ordens/config', { preHandler: exigir(1, 'ordens') }, async () => ({ tipos: TIPOS_OS, status: STATUS_OS, checklists: CHECKLISTS }));
+
+  app.get('/api/ordens/tecnicos', { preHandler: exigir(1, 'ordens') }, async () =>
+    repo
+      .listarUsuarios()
+      .filter((u) => u.ativo && perfis.acessoDe(u.perfil).permissoes.ordens === 2)
+      .map((u) => ({ id: u.id, nome: u.nome, chamar: u.chamar, escritorio: perfis.acessoDe(u.perfil).permissoes.manutencao === 2 })),
+  );
+
+  app.get<{ Querystring: { abertas?: string } }>('/api/ordens', { preHandler: exigir(1, 'ordens') }, async (req) =>
+    os.listar({ tecnicoId: soAsMinhas(req) ? req.usuario.id : undefined, abertas: req.query.abertas === '1' }),
+  );
+  app.get<{ Params: { id: string } }>('/api/ordens/:id', { preHandler: exigir(1, 'ordens') }, async (req) => verOS(req, os.buscar(req.params.id)));
+
+  app.post('/api/ordens', { preHandler: exigirGerencia }, async (req, reply) => {
+    const b = (req.body ?? {}) as Record<string, unknown>;
+    const tipo = (Object.keys(TIPOS_OS).includes(b.tipo as string) ? b.tipo : invalido('Escolha o tipo de OS.')) as TipoOS;
+    const frota = lerFrotaParam(b.frota);
+    const clienteId = typeof b.clienteId === 'string' && b.clienteId ? b.clienteId : null;
+    const cliente = clienteId ? repo.buscarCliente(clienteId) : null;
+    const pendenciaId = b.pendenciaId ? Number(b.pendenciaId) : null;
+    if (pendenciaId !== null && !manut.buscarPendencia(pendenciaId)) throw new Invalido('Pendência não encontrada.');
+    const o = os.criar(
+      {
+        frota,
+        clienteId,
+        clienteNome: cliente?.nome ?? texto(b.clienteNome, 'cliente', 200),
+        tipo,
+        tipoVisita: texto(b.tipoVisita, 'tipo de visita', 10).toUpperCase(),
+        tecnicoId: lerTecnico(b.tecnicoId),
+        agendadaPara: lerDataIso(b.agendadaPara, 'Data') ?? null,
+        descricao: texto(b.descricao, 'descrição', 4000),
+        pendenciaId,
+      },
+      req.usuario.id,
+    );
+    logOS(req, o, `abriu (${TIPOS_OS[o.tipo]})${o.tecnicoNome ? ` para ${o.tecnicoNome}` : ''}`);
+    return reply.code(201).send(o);
+  });
+
+  app.patch<{ Params: { id: string } }>('/api/ordens/:id', { preHandler: exigirGerencia }, async (req) => {
+    const b = (req.body ?? {}) as Record<string, unknown>;
+    const o = os.alterar(req.params.id, {
+      tecnicoId: b.tecnicoId === undefined ? undefined : lerTecnico(b.tecnicoId),
+      agendadaPara: b.agendadaPara === undefined ? undefined : (lerDataIso(b.agendadaPara, 'Data') ?? null),
+      descricao: b.descricao === undefined ? undefined : texto(b.descricao, 'descrição', 4000),
+      tipoVisita: b.tipoVisita === undefined ? undefined : texto(b.tipoVisita, 'tipo de visita', 10).toUpperCase(),
+    });
+    logOS(req, o, `alterou${o.tecnicoNome ? ` (técnico ${o.tecnicoNome}${o.agendadaPara ? `, dia ${o.agendadaPara}` : ''})` : ''}`);
+    return o;
+  });
+
+  app.post<{ Params: { id: string } }>('/api/ordens/:id/checkin', { preHandler: exigir(2, 'ordens') }, async (req) => {
+    executaOS(req, req.params.id);
+    const o = os.checkin(req.params.id, lerLocal(req.body));
+    logOS(req, o, 'check-in no local');
+    return o;
+  });
+
+  const lerChecklist = (v: unknown): ItemChecklist[] | undefined => {
+    if (v === undefined) return undefined;
+    if (!Array.isArray(v) || v.length > 60) throw new Invalido('Checklist inválido.');
+    return v.map((x: Record<string, unknown>) => ({
+      item: texto(x?.item, 'item', 120),
+      resposta: (['ok', 'problema', 'na', ''].includes(x?.resposta as string) ? x.resposta : '') as ItemChecklist['resposta'],
+      obs: texto(x?.obs, 'observação', 500),
+    }));
+  };
+  app.put<{ Params: { id: string } }>('/api/ordens/:id/execucao', { preHandler: exigir(2, 'ordens') }, async (req) => {
+    executaOS(req, req.params.id);
+    const b = (req.body ?? {}) as Record<string, unknown>;
+    const h = b.horimetro;
+    const horimetro = h === undefined ? undefined : h === null || h === '' ? null : Number(h);
+    if (horimetro !== undefined && horimetro !== null && (!Number.isFinite(horimetro) || horimetro < 0 || horimetro > 1_000_000)) throw new Invalido('Horímetro inválido.');
+    const pecas =
+      b.pecas === undefined
+        ? undefined
+        : Array.isArray(b.pecas) && b.pecas.length <= 100
+          ? b.pecas.map((x: Record<string, unknown>) => {
+              const q = Number(x?.quantidade ?? 1);
+              return { codigo: texto(x?.codigo, 'código', 60), descricao: texto(x?.descricao, 'peça', 200), quantidade: Number.isFinite(q) && q > 0 && q < 10000 ? q : 1 };
+            })
+          : invalido('Lista de peças inválida.');
+    const perifericos = b.perifericos === undefined ? undefined : Array.isArray(b.perifericos) ? b.perifericos.filter((p): p is Periferico => PERIFERICOS.includes(p as Periferico)) : [];
+    return os.salvar(
+      req.params.id,
+      {
+        horimetro,
+        checklist: lerChecklist(b.checklist),
+        servico: b.servico === undefined ? undefined : texto(b.servico, 'o que foi feito', 4000),
+        pecas: pecas as { codigo: string; descricao: string; quantidade: number }[] | undefined,
+        perifericos,
+        assinadoPor: b.assinadoPor === undefined ? undefined : texto(b.assinadoPor, 'nome de quem assinou', 120),
+        semAssinatura: b.semAssinatura === undefined ? undefined : texto(b.semAssinatura, 'motivo', 300),
+      },
+      typeof b.aguardandoPeca === 'boolean' ? b.aguardandoPeca : undefined,
+    );
+  });
+
+  const lerImagem = (v: unknown, tipos: ('jpg' | 'png')[]) => {
+    const buf = Buffer.from(typeof v === 'string' ? v.replace(/^data:image\/\w+;base64,/, '') : '', 'base64');
+    const png = buf.subarray(0, 4).toString('hex') === '89504e47';
+    const jpg = buf.subarray(0, 3).toString('hex') === 'ffd8ff';
+    const ext = png ? 'png' : jpg ? 'jpg' : null;
+    if (!ext || !tipos.includes(ext)) throw new Invalido('A imagem precisa ser JPG ou PNG.');
+    if (buf.length > 6 * 1024 * 1024) throw new Invalido('Imagem grande demais (máximo 6 MB).');
+    return { buf, ext: ext as 'jpg' | 'png' };
+  };
+  app.post<{ Params: { id: string } }>('/api/ordens/:id/fotos', { preHandler: exigir(2, 'ordens'), bodyLimit: 9 * 1024 * 1024 }, async (req) => {
+    executaOS(req, req.params.id);
+    const { buf, ext } = lerImagem((req.body as Record<string, unknown> | undefined)?.imagem, ['jpg', 'png']);
+    return os.adicionarFoto(req.params.id, buf, ext);
+  });
+  app.delete<{ Params: { id: string; nome: string } }>('/api/ordens/:id/fotos/:nome', { preHandler: exigir(2, 'ordens') }, async (req) => {
+    executaOS(req, req.params.id);
+    return os.tirarFoto(req.params.id, req.params.nome);
+  });
+  app.post<{ Params: { id: string } }>('/api/ordens/:id/assinatura', { preHandler: exigir(2, 'ordens'), bodyLimit: 3 * 1024 * 1024 }, async (req) => {
+    executaOS(req, req.params.id);
+    const b = (req.body ?? {}) as Record<string, unknown>;
+    const nome = texto(b.nome, 'nome de quem assinou', 120);
+    if (!nome) throw new Invalido('Escreva o nome de quem assinou.');
+    const { buf } = lerImagem(b.imagem, ['png']);
+    return os.assinar(req.params.id, buf, nome);
+  });
+  app.get<{ Params: { id: string; nome: string } }>('/api/ordens/:id/arquivos/:nome', { preHandler: exigir(1, 'ordens') }, async (req, reply) => {
+    verOS(req, os.buscar(req.params.id));
+    const caminho = os.caminhoArquivo(req.params.id, req.params.nome);
+    reply.header('Content-Type', caminho.endsWith('.png') ? 'image/png' : 'image/jpeg').header('Cache-Control', 'private, max-age=86400');
+    return reply.send(createReadStream(caminho));
+  });
+
+  app.post<{ Params: { id: string } }>('/api/ordens/:id/concluir', { preHandler: exigir(2, 'ordens') }, async (req) => {
+    executaOS(req, req.params.id);
+    const o = os.concluir(req.params.id, lerLocal(req.body));
+    logOS(req, o, 'técnico concluiu');
+    return o;
+  });
+  app.post<{ Params: { id: string } }>('/api/ordens/:id/devolver', { preHandler: exigirGerencia }, async (req) => {
+    const o = os.devolver(req.params.id);
+    logOS(req, o, 'devolveu ao técnico para corrigir');
+    return o;
+  });
+  app.post<{ Params: { id: string } }>('/api/ordens/:id/cancelar', { preHandler: exigirGerencia }, async (req) => {
+    const motivo = texto((req.body as Record<string, unknown> | undefined)?.motivo, 'motivo', 500);
+    if (!motivo) throw new Invalido('Diga por que a OS foi cancelada.');
+    const o = os.cancelar(req.params.id, motivo);
+    logOS(req, o, `cancelou: ${motivo}`);
+    return o;
+  });
+
+  /** Manda o relatório (PDF feito na tela) para o cliente, pelo e-mail da empresa. */
+  const enviarRelatorio = async (req: FastifyRequest, o: Ordem, b: Record<string, unknown>) => {
+    if (!envio.configurado()) return { enviado: false, detalhe: SEM_CONTA };
+    const pdf = Buffer.from(typeof b.pdf === 'string' ? b.pdf : '', 'base64');
+    if (pdf.subarray(0, 4).toString('latin1') !== '%PDF') throw new Invalido('O relatório em PDF não veio.');
+    if (pdf.length > 20 * 1024 * 1024) throw new Invalido('O relatório passou de 20 MB.');
+    const cliente = o.clienteId ? repo.buscarCliente(o.clienteId) : null;
+    const para = b.para !== undefined ? listaEmails(b.para, 'para') : (cliente?.para ?? []);
+    const cc = b.para !== undefined ? [] : (cliente?.cc ?? []);
+    if (!para.length) throw new Invalido('O cliente não tem e-mail no cadastro. Informe para quem enviar.');
+    const r = await envio.enviarAvulso({
+      para,
+      cc,
+      assunto: `Relatório da ordem de serviço nº ${o.numero} · FT${o.frota} · Lucminas Empilhadeiras`,
+      corpo: `Prezados,\n\nSegue em anexo o relatório da ordem de serviço nº ${o.numero} (${TIPOS_OS[o.tipo].toLowerCase()}) da empilhadeira FT${o.frota}.\n\nEm caso de dúvida, é só responder este e-mail.\n\nAtenciosamente,\nLucminas Empilhadeiras`,
+      anexos: [{ nome: `OS ${o.numero} FT${o.frota}.pdf`, conteudo: pdf }],
+      remetente: remetente(),
+      referencia: `OS ${o.numero}`,
+    });
+    if (r.ok) {
+      os.registrarRelatorio(o.id, [...para, ...cc]);
+      logOS(req, o, `relatório enviado para ${[...para, ...cc].join(', ')}`);
+    }
+    return { enviado: r.ok, detalhe: r.detalhe };
+  };
+
+  app.post<{ Params: { id: string } }>('/api/ordens/:id/encerrar', { preHandler: exigirGerencia, bodyLimit: 30 * 1024 * 1024 }, async (req) => {
+    const b = (req.body ?? {}) as Record<string, unknown>;
+    const prox = b.proximaPreventiva === null || b.proximaPreventiva === undefined || b.proximaPreventiva === '' ? null : Number(b.proximaPreventiva);
+    if (prox !== null && (!Number.isFinite(prox) || prox < 0)) throw new Invalido('Próxima preventiva inválida.');
+    let o = os.encerrar(req.params.id, req.usuario.id, { proximaPreventiva: prox });
+    logOS(req, o, 'encerrou (ficha e histórico atualizados)');
+    let relatorio: { enviado: boolean; detalhe: string } | null = null;
+    if (b.enviar === true) {
+      try {
+        relatorio = await enviarRelatorio(req, o, b);
+      } catch (e) {
+        relatorio = { enviado: false, detalhe: e instanceof Error ? e.message : 'Não foi possível enviar.' };
+      }
+      o = os.buscar(o.id);
+    }
+    return { ordem: o, relatorio };
+  });
+
+  app.post<{ Params: { id: string } }>('/api/ordens/:id/relatorio', { preHandler: exigirGerencia, bodyLimit: 30 * 1024 * 1024 }, async (req) => {
+    const o = os.buscar(req.params.id);
+    if (o.status !== 'encerrada' && o.status !== 'concluida') throw new Invalido('O relatório só sai depois que o técnico conclui a OS.');
+    const r = await enviarRelatorio(req, o, (req.body ?? {}) as Record<string, unknown>);
+    return { ordem: os.buscar(o.id), relatorio: r };
   });
 
   // ---------- usuários e permissões (administração) ----------

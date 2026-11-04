@@ -119,6 +119,15 @@ export function servicoEnvio(db: Banco, repo: Repositorio, pastaDados: string, c
   }
 
   return {
+    /** E-mail avulso (ex.: relatório de OS): manda e guarda a cópia em Enviados, sem mexer no Histórico de faturas. */
+    async enviarAvulso(m: { para: string[]; cc: string[]; assunto: string; corpo: string; anexos: Anexo[]; remetente: string; referencia: string }) {
+      const conta = lerConta(pastaDados);
+      if (!conta) throw new Error('SEM_CONTA');
+      const r = await despachar(conta, m.remetente, m.para, m.cc, m.assunto, m.corpo, m.anexos, false, m.referencia);
+      if (!r.ok) return { ok: false, detalhe: r.detalhe, copia: false };
+      const cp = await Promise.race([copiar(r.conta, r.bruto), new Promise<null>((ok) => setTimeout(() => ok(null), esperaCopiaMs))]);
+      return { ok: true, detalhe: r.detalhe + (cp ? cp.texto : 'Enviado; a cópia em Enviados ainda está sendo gravada.'), copia: !!cp?.copia };
+    },
     configurado: () => lerConta(pastaDados) !== null,
     contaUsuario: () => lerConta(pastaDados)?.usuario ?? null,
 

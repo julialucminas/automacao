@@ -6,6 +6,12 @@
 import { mockApi } from './mock';
 import { httpApi } from './http';
 import type {
+  Ordem,
+  NovaOrdem,
+  TecnicoOS,
+  ExecucaoOS,
+  LocalOS,
+  ResultadoRelatorio,
   Cliente,
   ClienteInput,
   ConfigEmail,
@@ -102,6 +108,23 @@ export interface Api {
   resolverPendencia(id: number, resolver: boolean, resolucao?: string): Promise<Pendencia>;
   importarPendencias(lista: NovaPendencia[]): Promise<{ abertas: number; jaResolvidas: number }>;
   registrarVisita(frota: string, v: Visita): Promise<Equipamento>;
+
+  // ordens de serviço
+  listarOrdens(abertas?: boolean): Promise<Ordem[]>;
+  buscarOrdem(id: string): Promise<Ordem>;
+  tecnicosOS(): Promise<TecnicoOS[]>;
+  criarOrdem(o: NovaOrdem): Promise<Ordem>;
+  alterarOrdem(id: string, m: { tecnicoId?: number | null; agendadaPara?: string | null; descricao?: string; tipoVisita?: string }): Promise<Ordem>;
+  checkinOrdem(id: string, local: Partial<LocalOS>): Promise<Ordem>;
+  salvarExecucao(id: string, d: Partial<ExecucaoOS> & { aguardandoPeca?: boolean }): Promise<Ordem>;
+  fotoOrdem(id: string, imagemBase64: string): Promise<Ordem>;
+  tirarFotoOrdem(id: string, nome: string): Promise<Ordem>;
+  assinarOrdem(id: string, imagemBase64: string, nome: string): Promise<Ordem>;
+  concluirOrdem(id: string, local: Partial<LocalOS>): Promise<Ordem>;
+  devolverOrdem(id: string): Promise<Ordem>;
+  cancelarOrdem(id: string, motivo: string): Promise<Ordem>;
+  encerrarOrdem(id: string, d: { proximaPreventiva: number | null; enviar: boolean; pdf?: string; para?: string[] }): Promise<ResultadoRelatorio>;
+  enviarRelatorioOrdem(id: string, pdf: string, para?: string[]): Promise<ResultadoRelatorio>;
 
   // usuários e permissões (administração)
   listarPerfis(): Promise<PerfilAcesso[]>;

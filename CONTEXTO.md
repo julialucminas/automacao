@@ -85,11 +85,21 @@ Busca em linguagem falada: `web/src/lib/buscaDono.ts` ("motor de partida frota 4
 `GET /api/historico-pecas/por-frota?desde=`. Instalável no celular (manifest + ícones em `web/public`).
 Dono: Arnaldo, arnaldo@lucminas.com.br, perfil diretoria.
 
+## Ordens de serviço (fase 5, nov/2026)
+Tabela `ordens` (migração 16), módulo `api/src/ordens.ts`, aba de permissão `ordens`. Fluxo: aberta → agendada →
+execução (check-in com GPS) ⇄ aguardando peça → concluída (técnico) → encerrada (escritório: atualiza ficha,
+histórico origem 'os', fecha a pendência; manda o PDF ao cliente pelo e-mail da empresa via `envio.enviarAvulso`).
+Técnico (ordens 2 sem manutencao 2) só vê as dele e abre direto em `/campo` (celular). Escritório: `/ordens`.
+Fotos e assinatura em `/opt/faturas-dados/ordens/<id>/`. PDF gerado no navegador (`web/src/lib/ordens.ts`).
+Sem internet: fila no IndexedDB (`web/src/lib/filaOffline.ts`), service worker `web/public/sw.js`, e o último
+usuário fica guardado para abrir sem sinal. Checklists por tipo em `CHECKLISTS` (código).
+Cópias do banco: uma por dia em `/opt/faturas-dados/copias` (30 dias) + botão de baixar (Usuários e permissões).
+
 ## Navegação
 Menu lateral com 6 grupos (Início, Operação, Frota, Financeiro, Clientes, Administração), Painel do dia em
 `/inicio` (cartões conforme o perfil) e busca no topo (`components/BuscaGeral.tsx`; as telas leem `?busca=`).
 
 ## Próximo passo (nov/2026)
-Fases 1 (navegação e permissões), 2 (equipamentos + importação) e 3 (painel de manutenção) feitas. Próximas: 5 ordens de serviço no celular dos técnicos (offline), 6 serviços externos (só etapas, sem automação).
+Fases 1 (navegação e permissões), 2 (equipamentos + importação) e 3 (painel de manutenção) feitas. Fases 4 (app do dono) e 5 (ordens de serviço) feitas. Próxima: 6 serviços externos (só etapas, sem automação).
 Sem integração com o Auvo. A planilha real do Júnior NÃO vai para o repositório. Requisitos levantados com base em Auvo,
 Produttivo, Field Control e softwares de locação — ver documento de requisitos.

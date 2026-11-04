@@ -18,6 +18,8 @@ import { Usuarios } from './pages/Usuarios';
 import { Equipamentos } from './pages/Equipamentos';
 import { Manutencao } from './pages/Manutencao';
 import { AppDono } from './pages/AppDono';
+import { Ordens } from './pages/Ordens';
+import { Campo } from './pages/Campo';
 import { useMenu } from './components/Layout';
 import type { Aba } from './lib/acesso';
 import type { ReactNode } from 'react';
@@ -27,6 +29,7 @@ const TELAS: [Aba, string, ReactNode][] = [
   ['inicio', '/inicio', <Inicio />],
   ['solicitacoes', '/solicitacoes', <Solicitacoes />],
   ['manutencao', '/manutencao', <Manutencao />],
+  ['ordens', '/ordens', <Ordens />],
   ['movimentacoes', '/movimentacoes', <Movimentacoes />],
   ['conferencia', '/conferencia', <ConferenciaMes />],
   ['calendario', '/calendario', <Calendario />],
@@ -45,10 +48,13 @@ function RotasLogado() {
   const menu = useMenu();
   // quem só consulta (o dono) abre direto no app do celular
   const soConsulta = !(['envio', 'manutencao', 'movimentacoes', 'clientes', 'frotas', 'conferencia', 'usuarios'] as const).some((a) => pode(a, 2));
-  const primeira = pode('appDono') && soConsulta ? '/app' : pode('inicio') ? '/inicio' : (menu[0]?.rota ?? '/inicio');
+  // técnico de campo (faz OS, não cuida do painel) abre direto nas OS dele
+  const tecnico = pode('ordens', 2) && !pode('manutencao', 2);
+  const primeira = tecnico ? '/campo' : pode('appDono') && soConsulta ? '/app' : pode('inicio') ? '/inicio' : (menu[0]?.rota ?? '/inicio');
   return (
     <Routes>
       {pode('appDono') && <Route path="/app" element={<AppDono />} />}
+      {pode('ordens', 2) && <Route path="/campo" element={<Campo />} />}
       <Route element={<Layout />}>
         {TELAS.filter(([aba]) => pode(aba, aba === 'envio' ? 2 : 1)).map(([, rota, tela]) => (
           <Route key={rota} path={rota} element={tela} />

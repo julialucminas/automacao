@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
+import { Link } from 'react-router-dom';
 import { api } from '../api';
 import { useEstado } from '../state';
 import type { Equipamento, Pendencia, PerifericoId } from '../types';
@@ -287,9 +288,16 @@ export function Manutencao() {
         salvo={atualizarFicha}
         acoes={
           edita && aberto ? (
-            <button type="button" className="btn-primary btn-sm" onClick={() => setVisitando(aberto)}>
-              Registrar visita
-            </button>
+            <>
+              {pode('ordens', 2) && (
+                <Link to={`/ordens?nova=1&frota=${encodeURIComponent(aberto.frota)}`} className="btn-secondary btn-sm">
+                  Abrir OS
+                </Link>
+              )}
+              <button type="button" className="btn-primary btn-sm" onClick={() => setVisitando(aberto)}>
+                Registrar visita
+              </button>
+            </>
           ) : null
         }
         extra={
@@ -571,9 +579,14 @@ function ItemPendencia({
           </span>
         </div>
         {edita && !resolvendo && (
-          <button type="button" className="btn-secondary btn-sm" onClick={() => setResolvendo(true)}>
-            Resolver
-          </button>
+          <span className="flex gap-1.5">
+            <Link to={`/ordens?nova=1&pendencia=${p.id}`} className="btn-secondary btn-sm">
+              Abrir OS
+            </Link>
+            <button type="button" className="btn-secondary btn-sm" onClick={() => setResolvendo(true)}>
+              Resolver
+            </button>
+          </span>
         )}
       </div>
       {resolvendo && (

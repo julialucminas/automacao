@@ -20,6 +20,7 @@ export type Aba =
   | 'appDono'
   | 'solicitacoes'
   | 'manutencao'
+  | 'ordens'
   | 'movimentacoes'
   | 'conferencia'
   | 'calendario'
@@ -40,6 +41,7 @@ export const ABAS: DefAba[] = [
   { id: 'appDono', rotulo: 'App do dono', grupo: 'inicio', rota: '/app', ve: 'resumo e busca no celular', edita: 'resumo e busca no celular' },
   { id: 'solicitacoes', rotulo: 'Solicitações', grupo: 'inicio', rota: '/solicitacoes', ve: 'lê as conversas', edita: 'abre e responde solicitações' },
   { id: 'manutencao', rotulo: 'Painel de manutenção', grupo: 'operacao', rota: '/manutencao', ve: 'vê o painel e as pendências', edita: 'registra visita e pendências' },
+  { id: 'ordens', rotulo: 'Ordens de serviço', grupo: 'operacao', rota: '/ordens', ve: 'vê as OS e os relatórios', edita: 'abre e executa OS (técnico: só as dele)' },
   { id: 'movimentacoes', rotulo: 'Movimentações', grupo: 'operacao', rota: '/movimentacoes', ve: 'vê o que foi registrado', edita: 'registra locação, troca e devolução' },
   { id: 'conferencia', rotulo: 'Conferência de frotas', grupo: 'operacao', rota: '/conferencia', ve: 'vê a conferência do mês', edita: 'marca ✓ e envia correções' },
   { id: 'calendario', rotulo: 'Calendário', grupo: 'operacao', rota: '/calendario', ve: 'vê o calendário', edita: 'vê o calendário' },
@@ -74,7 +76,7 @@ export const PERFIS_PADRAO: PerfilAcesso[] = [
     id: 'financeiro',
     nome: 'Financeiro',
     descricao: 'Faturas, envio, clientes e aprovações.',
-    permissoes: com(2, { usuarios: 0, registro: 1, manutencao: 1, appDono: 0 }),
+    permissoes: com(2, { usuarios: 0, registro: 1, manutencao: 1, ordens: 1, appDono: 0 }),
     veValores: true,
     padrao: true,
   },
@@ -82,7 +84,7 @@ export const PERFIS_PADRAO: PerfilAcesso[] = [
     id: 'operacoes',
     nome: 'Operações',
     descricao: 'Movimentações, conferência e frotas. Alterações de cadastro vão para aprovação.',
-    permissoes: com(0, { inicio: 2, solicitacoes: 2, manutencao: 2, movimentacoes: 2, conferencia: 2, calendario: 1, frotas: 2 }),
+    permissoes: com(0, { inicio: 2, solicitacoes: 2, manutencao: 2, ordens: 2, movimentacoes: 2, conferencia: 2, calendario: 1, frotas: 2 }),
     veValores: false,
     padrao: true,
   },
@@ -90,7 +92,7 @@ export const PERFIS_PADRAO: PerfilAcesso[] = [
     id: 'tecnico',
     nome: 'Técnico',
     descricao: 'Técnico de campo: vê as frotas e os clientes, sem valores.',
-    permissoes: com(0, { inicio: 2, solicitacoes: 2, manutencao: 1, frotas: 1, clientes: 1 }),
+    permissoes: com(0, { inicio: 2, solicitacoes: 2, manutencao: 1, ordens: 2, frotas: 1, clientes: 1 }),
     veValores: false,
     padrao: true,
   },

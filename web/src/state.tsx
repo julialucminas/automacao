@@ -65,6 +65,23 @@ type Estado = {
 
 const Ctx = createContext<Estado | null>(null);
 
+const CHAVE_USUARIO = 'lucminas:ultimo-usuario';
+function lembrarUsuario(u: Usuario | null) {
+  try {
+    if (u) localStorage.setItem(CHAVE_USUARIO, JSON.stringify(u));
+    else localStorage.removeItem(CHAVE_USUARIO);
+  } catch {
+    /* navegador sem armazenamento */
+  }
+}
+function usuarioGuardado(): Usuario | null {
+  try {
+    return JSON.parse(localStorage.getItem(CHAVE_USUARIO) ?? 'null');
+  } catch {
+    return null;
+  }
+}
+
 /** Chave única de um item do lote (o número pode se repetir quando há duplicidade). */
 export const chaveItem = (i: ItemLote) => `${i.numero}|${i.fatura?.caminho ?? i.boleto?.caminho ?? ''}`;
 
@@ -138,9 +155,19 @@ export function EstadoProvider({ children }: { children: ReactNode }) {
       .then(async (u) => {
         usuarioRef.current = u;
         setUsuario(u);
+        lembrarUsuario(u);
         if (u) await Promise.all([recarregarClientes(), recarregarEnvios()]);
       })
-      .catch((e) => setErroInicial(e instanceof Error ? e.message : 'Erro ao conectar com o servidor.'))
+      .catch((e) => {
+        // sem sinal (técnico no campo): abre com o último usuário que entrou neste aparelho
+        const guardado = usuarioGuardado();
+        if (guardado && e instanceof Error && /Sem conexão|demorou demais/.test(e.message)) {
+          usuarioRef.current = guardado;
+          setUsuario(guardado);
+          return;
+        }
+        setErroInicial(e instanceof Error ? e.message : 'Erro ao conectar com o servidor.');
+      })
       .finally(() => setCarregando(false));
   }, [recarregarClientes, recarregarEnvios]);
 
@@ -182,10 +209,12 @@ export function EstadoProvider({ children }: { children: ReactNode }) {
         const u = await api.login(email, senha);
         usuarioRef.current = u;
         setUsuario(u);
+        lembrarUsuario(u);
         await Promise.all([recarregarClientes(), recarregarEnvios()]);
       },
       async sair() {
-        await api.logout();
+        await api.logout().catch(() => undefined);
+        lembrarUsuario(null);
         setUsuario(null);
         setLote(null);
       },

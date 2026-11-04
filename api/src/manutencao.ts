@@ -82,6 +82,19 @@ export type Pendencia = {
 };
 export type NovaPendencia = { frota: string; cliente: string; abertaEm: string; tecnico: string; descricao: string };
 
+/** Campos da ficha para os periféricos trocados numa data (e horímetro), com a próxima troca pela regra. */
+export function camposPerifericos(regras: RegraPeriferico[], trocados: Periferico[], data: string, horimetro: number | null): DadosEquipamento {
+  const d: Record<string, unknown> = {};
+  for (const p of trocados) {
+    const regra = regras.find((x) => x.id === p);
+    d[`${p}Data`] = data;
+    d[`${p}Horimetro`] = horimetro;
+    d[`${p}ProximaData`] = regra?.dias ? somarDias(data, regra.dias) : null;
+    d[`${p}ProximaHoras`] = regra?.horas && horimetro !== null ? horimetro + regra.horas : null;
+  }
+  return d as DadosEquipamento;
+}
+
 const somarDias = (iso: string, n: number) => new Date(Date.parse(iso + 'T00:00:00Z') + n * 86_400_000).toISOString().slice(0, 10);
 
 export function manutencao(db: Banco, lerConfig: () => Record<string, string>) {
@@ -168,13 +181,7 @@ export function manutencao(db: Banco, lerConfig: () => Record<string, string>) {
         d.horimetroEm = v.data;
       }
       if (v.proximaPreventiva !== null) d.proximaPreventiva = v.proximaPreventiva;
-      for (const p of v.perifericos) {
-        const regra = r.perifericos.find((x) => x.id === p);
-        (d as Record<string, unknown>)[`${p}Data`] = v.data;
-        (d as Record<string, unknown>)[`${p}Horimetro`] = v.horimetro;
-        (d as Record<string, unknown>)[`${p}ProximaData`] = regra?.dias ? somarDias(v.data, regra.dias) : null;
-        (d as Record<string, unknown>)[`${p}ProximaHoras`] = regra?.horas && v.horimetro !== null ? v.horimetro + regra.horas : null;
-      }
+      Object.assign(d, camposPerifericos(r.perifericos, v.perifericos, v.data, v.horimetro));
       const res = equip.salvar(frota, d, usuarioId);
       const linhas = [
         `VISITA ${tipo.sigla} · ${tipo.nome.toUpperCase()}`,

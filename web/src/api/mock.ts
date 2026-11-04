@@ -2,7 +2,7 @@ import type { Api } from './index';
 import type { Cliente, Conferencia, Envio, FrotaOficina, Faturamento, Solicitacao, Usuario } from '../types';
 import { REMETENTE } from '../lib/email';
 import { PERFIS_PADRAO } from '../lib/acesso';
-import type { Equipamento, PecaHistorico, Pendencia, PerfilAcesso, UsuarioAdmin } from '../types';
+import type { Equipamento, Ordem, PecaHistorico, Pendencia, PerfilAcesso, UsuarioAdmin } from '../types';
 
 /*
  * Implementação SIMULADA da API, só para desenvolvimento da interface.
@@ -129,6 +129,12 @@ const ENDERECO_QUE_DEVOLVE = /obra\.betim@|naoexiste@/i;
 const EQUIP_DEMO = new Map<string, Equipamento>();
 let HIST_DEMO: PecaHistorico[] = [];
 let PEND_DEMO: Pendencia[] = [];
+let OS_DEMO: Ordem[] = [];
+const CHECK_DEMO = ['Garfos e correntes', 'Freio de serviço', 'Freio de estacionamento', 'Buzina', 'Luzes e giroflex', 'Alarme de ré', 'Vazamentos (óleo, água, gás)', 'Pneus'];
+const mudarOS = (oid: string, m: (o: Ordem) => Ordem) => {
+  OS_DEMO = OS_DEMO.map((o) => (o.id === oid ? { ...m(o), atualizadaEm: new Date().toISOString() } : o));
+  return OS_DEMO.find((o) => o.id === oid)!;
+};
 
 // demonstração: perfis e usuários ficam só na memória desta aba
 let PERFIS_DEMO: PerfilAcesso[] = PERFIS_PADRAO.map((p) => ({ ...p, permissoes: { ...p.permissoes } }));
@@ -337,6 +343,96 @@ export const mockApi: Api = {
       ...(v.horimetro !== null ? { horimetro: v.horimetro, horimetroEm: v.data } : {}),
       ...(v.proximaPreventiva !== null ? { proximaPreventiva: v.proximaPreventiva } : {}),
     });
+  },
+  // demonstração: ordens de serviço só na memória desta aba
+  async listarOrdens(abertas) {
+    return OS_DEMO.filter((o) => !abertas || !['encerrada', 'cancelada'].includes(o.status));
+  },
+  async buscarOrdem(oid) {
+    const o = OS_DEMO.find((x) => x.id === oid);
+    if (!o) throw new Error('Ordem de serviço não encontrada.');
+    return o;
+  },
+  async tecnicosOS() {
+    return [{ id: 1, nome: carregar().usuario?.nome ?? 'Você', chamar: '', escritorio: true }];
+  },
+  async criarOrdem(n) {
+    const agora = new Date().toISOString();
+    const o: Ordem = {
+      id: id(),
+      numero: OS_DEMO.length + 1,
+      frota: n.frota.replace(/^FT\s*/i, ''),
+      clienteId: n.clienteId ?? null,
+      clienteNome: n.clienteNome ?? '',
+      tipo: n.tipo,
+      tipoVisita: n.tipoVisita ?? '',
+      status: n.tecnicoId && n.agendadaPara ? 'agendada' : 'aberta',
+      tecnicoId: n.tecnicoId ?? null,
+      tecnicoNome: n.tecnicoId ? (carregar().usuario?.nome ?? '') : '',
+      agendadaPara: n.agendadaPara ?? null,
+      descricao: n.descricao ?? '',
+      pendenciaId: n.pendenciaId ?? null,
+      execucao: { checklist: CHECK_DEMO.map((item) => ({ item, resposta: '', obs: '' })) },
+      criadaPor: 'Demonstração',
+      criadaEm: agora,
+      atualizadaEm: agora,
+      concluidaEm: null,
+      encerradaEm: null,
+      encerradaPor: '',
+      relatorioPara: '',
+      relatorioEm: null,
+      cancelamento: '',
+    };
+    OS_DEMO = [o, ...OS_DEMO];
+    return o;
+  },
+  async alterarOrdem(oid, m) {
+    return mudarOS(oid, (o) => {
+      const n = { ...o, ...Object.fromEntries(Object.entries(m).filter(([, v]) => v !== undefined)) } as Ordem;
+      if (n.tecnicoId) n.tecnicoNome = carregar().usuario?.nome ?? '';
+      if (n.status === 'aberta' && n.tecnicoId && n.agendadaPara) n.status = 'agendada';
+      return n;
+    });
+  },
+  async checkinOrdem(oid, l) {
+    return mudarOS(oid, (o) => ({
+      ...o,
+      status: 'execucao',
+      execucao: { ...o.execucao, checkin: o.execucao.checkin ?? { em: new Date().toISOString(), lat: l.lat ?? null, lng: l.lng ?? null, precisao: l.precisao ?? null } },
+    }));
+  },
+  async salvarExecucao(oid, d) {
+    const { aguardandoPeca, ...resto } = d;
+    return mudarOS(oid, (o) => ({
+      ...o,
+      status: aguardandoPeca === true ? 'aguardando_peca' : aguardandoPeca === false && o.status === 'aguardando_peca' ? 'execucao' : o.status,
+      execucao: { ...o.execucao, ...Object.fromEntries(Object.entries(resto).filter(([, v]) => v !== undefined)) },
+    }));
+  },
+  async fotoOrdem(oid) {
+    return mudarOS(oid, (o) => ({ ...o, execucao: { ...o.execucao, fotos: [...(o.execucao.fotos ?? []), `foto-${Date.now()}.jpg`] } }));
+  },
+  async tirarFotoOrdem(oid, nome) {
+    return mudarOS(oid, (o) => ({ ...o, execucao: { ...o.execucao, fotos: (o.execucao.fotos ?? []).filter((f) => f !== nome) } }));
+  },
+  async assinarOrdem(oid, _img, nome) {
+    return mudarOS(oid, (o) => ({ ...o, execucao: { ...o.execucao, assinatura: `assinatura-${Date.now()}.png`, assinadoPor: nome } }));
+  },
+  async concluirOrdem(oid) {
+    return mudarOS(oid, (o) => ({ ...o, status: 'concluida', concluidaEm: new Date().toISOString() }));
+  },
+  async devolverOrdem(oid) {
+    return mudarOS(oid, (o) => ({ ...o, status: 'execucao', concluidaEm: null }));
+  },
+  async cancelarOrdem(oid, motivo) {
+    return mudarOS(oid, (o) => ({ ...o, status: 'cancelada', cancelamento: motivo }));
+  },
+  async encerrarOrdem(oid, d) {
+    const o = mudarOS(oid, (x) => ({ ...x, status: 'encerrada', encerradaEm: new Date().toISOString(), encerradaPor: 'Demonstração' }));
+    return { ordem: o, relatorio: d.enviar ? { enviado: false, detalhe: 'Demonstração: nenhum e-mail sai daqui.' } : null };
+  },
+  async enviarRelatorioOrdem(oid) {
+    return { ordem: OS_DEMO.find((o) => o.id === oid)!, relatorio: { enviado: false, detalhe: 'Demonstração: nenhum e-mail sai daqui.' } };
   },
   async listarPerfis() {
     return PERFIS_DEMO;

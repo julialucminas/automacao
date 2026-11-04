@@ -60,7 +60,7 @@ const CINZA: [number, number, number] = [110, 110, 110];
 const ROXO: [number, number, number] = [91, 33, 182];
 const LARANJA: [number, number, number] = [180, 83, 9];
 
-async function carregarImagem(url: string): Promise<{ dado: string; w: number; h: number } | null> {
+export async function carregarImagem(url: string): Promise<{ dado: string; w: number; h: number } | null> {
   try {
     const blob = await (await fetch(url)).blob();
     const dado = await new Promise<string>((ok, erro) => {

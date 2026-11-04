@@ -328,3 +328,61 @@ export type PecaHistorico = {
   origem: string;
 };
 export type NovaPeca = Omit<PecaHistorico, 'id'>;
+
+// ---------- ordens de serviço ----------
+export type TipoOS = 'preventiva' | 'corretiva' | 'entrega' | 'devolucao' | 'vistoria' | 'externo';
+export type StatusOS = 'aberta' | 'agendada' | 'execucao' | 'aguardando_peca' | 'concluida' | 'encerrada' | 'cancelada';
+export type ItemChecklist = { item: string; resposta: 'ok' | 'problema' | 'na' | ''; obs: string };
+export type LocalOS = { em: string; lat: number | null; lng: number | null; precisao: number | null };
+export type PecaOS = { codigo: string; descricao: string; quantidade: number };
+export type ExecucaoOS = {
+  checkin?: LocalOS;
+  checkout?: LocalOS;
+  horimetro?: number | null;
+  checklist?: ItemChecklist[];
+  servico?: string;
+  pecas?: PecaOS[];
+  perifericos?: PerifericoId[];
+  fotos?: string[];
+  assinatura?: string;
+  assinadoPor?: string;
+  semAssinatura?: string;
+};
+export type Ordem = {
+  id: string;
+  numero: number;
+  frota: string;
+  clienteId: string | null;
+  clienteNome: string;
+  tipo: TipoOS;
+  tipoVisita: string;
+  status: StatusOS;
+  tecnicoId: number | null;
+  tecnicoNome: string;
+  agendadaPara: string | null;
+  descricao: string;
+  pendenciaId: number | null;
+  execucao: ExecucaoOS;
+  criadaPor: string;
+  criadaEm: string;
+  atualizadaEm: string;
+  concluidaEm: string | null;
+  encerradaEm: string | null;
+  encerradaPor: string;
+  relatorioPara: string;
+  relatorioEm: string | null;
+  cancelamento: string;
+};
+export type NovaOrdem = {
+  frota: string;
+  clienteId?: string | null;
+  clienteNome?: string;
+  tipo: TipoOS;
+  tipoVisita?: string;
+  tecnicoId?: number | null;
+  agendadaPara?: string | null;
+  descricao?: string;
+  pendenciaId?: number | null;
+};
+export type TecnicoOS = { id: number; nome: string; chamar: string; escritorio: boolean };
+export type ResultadoRelatorio = { ordem: Ordem; relatorio: { enviado: boolean; detalhe: string } | null };

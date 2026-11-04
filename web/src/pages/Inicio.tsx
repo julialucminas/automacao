@@ -7,7 +7,7 @@ import { referenciaAtual, referenciaPorExtenso } from '../lib/email';
 import { formatarReais } from '../lib/dinheiro';
 import { montarEquipamentos } from '../lib/equipamentos';
 import { montarPainel, regrasDe, type LinhaPainel } from '../lib/manutencao';
-import type { Pendencia } from '../types';
+import type { Ordem, Pendencia } from '../types';
 
 const somarDias = (iso: string, n: number) => paraIso(new Date(paraData(iso).getTime() + n * 86_400_000));
 
@@ -84,6 +84,16 @@ export function Inicio() {
   }, [veManutencao, clientes, oficina, config]);
   const atrasadas = painel?.linhas.filter((l) => l.status === 'atrasado') ?? [];
   const semana = painel?.linhas.filter((l) => l.status === 'atencao') ?? [];
+
+  // ordens de serviço em aberto
+  const veOrdens = pode('ordens');
+  const [ordens, setOrdens] = useState<Ordem[] | null>(null);
+  useEffect(() => {
+    if (veOrdens) api.listarOrdens(true).then(setOrdens, () => setOrdens(null));
+  }, [veOrdens]);
+  const osRevisar = ordens?.filter((o) => o.status === 'concluida').length ?? 0;
+  const osAndamento = ordens?.filter((o) => o.status === 'execucao' || o.status === 'aguardando_peca').length ?? 0;
+  const osAtrasadas = ordens?.filter((o) => ['aberta', 'agendada'].includes(o.status) && o.agendadaPara && o.agendadaPara < hoje).length ?? 0;
 
   const [conferidas, setConferidas] = useState<number | null>(null);
   const confere = pode('conferencia', 2);
@@ -209,6 +219,16 @@ export function Inicio() {
                 {atrasadas.length > 5 && <li className="text-xs text-ink-3">e mais {atrasadas.length - 5}</li>}
               </ul>
             )}
+          </Cartao>
+        )}
+
+        {veOrdens && ordens && ordens.length > 0 && (
+          <Cartao titulo="Ordens de serviço" link="/ordens" destaque={osRevisar > 0}>
+            <div className="flex flex-wrap gap-6">
+              <Numero n={osRevisar} rotulo="para revisar e encerrar" tom={osRevisar ? 'warn' : 'ink'} />
+              <Numero n={osAndamento} rotulo="em execução" />
+              <Numero n={osAtrasadas} rotulo="agendadas atrasadas" tom={osAtrasadas ? 'bad' : 'ink'} />
+            </div>
           </Cartao>
         )}
 

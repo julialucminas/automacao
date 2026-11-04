@@ -329,6 +329,33 @@ const MIGRACOES = [
      criada_por INTEGER REFERENCES usuarios(id)
    );
    CREATE INDEX pendencias_frota ON pendencias(frota, status);`,
+  // 16: ordens de serviço (escritório abre, técnico executa no celular, escritório encerra)
+  `CREATE TABLE ordens (
+     id TEXT PRIMARY KEY,
+     numero INTEGER NOT NULL UNIQUE,
+     frota TEXT NOT NULL,
+     cliente_id TEXT,
+     cliente_nome TEXT NOT NULL DEFAULT '',
+     tipo TEXT NOT NULL,
+     tipo_visita TEXT NOT NULL DEFAULT '',
+     status TEXT NOT NULL DEFAULT 'aberta',
+     tecnico_id INTEGER REFERENCES usuarios(id),
+     agendada_para TEXT,
+     descricao TEXT NOT NULL DEFAULT '',
+     pendencia_id INTEGER REFERENCES pendencias(id),
+     execucao TEXT NOT NULL DEFAULT '{}',
+     criada_por INTEGER REFERENCES usuarios(id),
+     criada_em TEXT NOT NULL,
+     atualizada_em TEXT NOT NULL,
+     concluida_em TEXT,
+     encerrada_em TEXT,
+     encerrada_por INTEGER REFERENCES usuarios(id),
+     relatorio_para TEXT NOT NULL DEFAULT '',
+     relatorio_em TEXT,
+     cancelamento TEXT NOT NULL DEFAULT ''
+   );
+   CREATE INDEX ordens_status ON ordens(status, agendada_para);
+   CREATE INDEX ordens_tecnico ON ordens(tecnico_id, status);`,
 ];
 
 export function abrirBanco(caminho: string) {
