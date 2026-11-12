@@ -1,3 +1,4 @@
+import { useNavigate } from 'react-router-dom';
 import { useState } from 'react';
 import type { Cliente, ClienteInput, Frota } from '../types';
 import { formatarReais, lerReais, reaisParaCampo } from '../lib/dinheiro';
@@ -366,14 +367,182 @@ function Faturamento({ d, setD }: { d: Rascunho; setD: (r: Rascunho) => void }) 
 
       <div className="flex flex-col gap-2">
         <div className="text-[13px] font-medium">Máquinas locadas</div>
-        {d.frotas.map((f, i) => {
-          const ex = f.extra ?? {};
-          const mudarExtra = (x: Partial<NonNullable<Rascunho['frotas'][number]['extra']>>) =>
-            setD({ ...d, frotas: d.frotas.map((y, k) => (k === i ? { ...y, extra: { ...y.extra, ...x } } : y)) });
-          const nome = f.numero || String(i + 1);
-          const rot = 'flex flex-col gap-1 text-xs font-semibold text-ink-2';
-          return (
-            <div key={i} className="flex flex-col gap-3 rounded-xl border border-line bg-white p-3">
+        {d.frotas.map((_, i) => (
+          <FrotaCartao key={i} i={i} d={d} setD={setD} mudarFrota={mudarFrota} />
+        ))}
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <button type="button" className="btn-secondary btn-sm" onClick={() => setD({ ...d, frotas: [...d.frotas, { numero: '', valor: '', descricao: '' }] })}>
+            <IcMais tamanho={14} /> Adicionar frota
+          </button>
+          {d.frotas.length > 0 && (
+            <span className="text-[13px]">
+              {d.frotas.length} frota{d.frotas.length > 1 ? 's' : ''} · total <b>{formatarReais(total)}</b>
+            </span>
+          )}
+        </div>
+      </div>
+    </fieldset>
+  );
+}
+
+/** "desde 20/10/2026 · contrato 12 meses · 1 vasilhame de gás · frete Lucminas" */
+export function resumoLocacao(x?: Pick<Frota, 'inicio' | 'fim' | 'contrato' | 'gas' | 'frete' | 'freteValor'>): string {
+  if (!x) return '';
+  return [
+    x.inicio ? `desde ${dataBr(x.inicio)}` : '',
+    x.fim ? `até ${dataBr(x.fim)}` : '',
+    x.contrato ? `contrato ${x.contrato}` : '',
+    x.gas ? `${x.gas} vasilhame${x.gas > 1 ? 's' : ''} de gás` : '',
+    x.frete === 'lucminas' ? 'frete Lucminas' : x.frete === 'cliente' ? `frete do cliente${x.freteValor ? ` (${formatarReais(x.freteValor)})` : ''}` : '',
+  ]
+    .filter(Boolean)
+    .join(' · ');
+}
+
+function RegraCampos({ d, setD }: { d: Rascunho; setD: (r: Rascunho) => void }) {
+  const regra = regraDoCliente({
+    regra: d.regra,
+    diaEmissao: Number(d.dia) || null,
+    inicioLocacao: dataValida(d.inicio) ? d.inicio : null,
+    periodoDias: Number(d.periodo) || null,
+  });
+  const proximas = regra ? proximasDatas(regra, 3) : [];
+  const opcao = (valor: 'dia' | 'periodo', rotulo: string) => (
+    <label className={`flex min-h-[44px] flex-1 cursor-pointer items-center gap-2 rounded-[10px] border px-3 text-[13px] ${d.regra === valor ? 'border-ink bg-white font-semibold' : 'border-line-strong bg-white/60'}`}>
+      <input type="radio" name="regra" checked={d.regra === valor} onChange={() => setD({ ...d, regra: valor })} className="h-[18px] w-[18px] accent-ink" />
+      {rotulo}
+    </label>
+  );
+  return (
+    <div className="flex flex-col gap-2.5">
+      <div className="text-[13px] font-medium">Quando a fatura é emitida</div>
+      <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Regra de faturamento">
+        {opcao('dia', 'Dia fixo do mês')}
+        {opcao('periodo', 'Por período da locação')}
+      </div>
+
+      {d.regra === 'dia' ? (
+        <div className="flex items-center gap-2">
+          <label htmlFor="cad-dia" className="text-ink-3">
+            Todo dia
+          </label>
+          <input id="cad-dia" type="number" inputMode="numeric" min={1} max={31} value={d.dia} onChange={(e) => setD({ ...d, dia: e.target.value })} placeholder="—" className="input w-[84px] bg-white text-center" />
+          <span className="text-ink-3">do mês</span>
+        </div>
+      ) : (
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="cad-inicio" className="text-xs text-ink-3">
+              Início da locação
+            </label>
+            <input id="cad-inicio" type="date" value={d.inicio} onChange={(e) => setD({ ...d, inicio: e.target.value })} className="input w-auto bg-white" />
+          </div>
+          <div className="flex items-center gap-2">
+            <label htmlFor="cad-periodo" className="text-ink-3">
+              Fatura a cada
+            </label>
+            <input id="cad-periodo" type="number" inputMode="numeric" min={1} max={366} value={d.periodo} onChange={(e) => setD({ ...d, periodo: e.target.value })} placeholder="30" className="input w-[84px] bg-white text-center" />
+            <span className="text-ink-3">dias</span>
+          </div>
+        </div>
+      )}
+      <p className="text-xs text-ink-3">
+        {regra ? (
+          <>
+            {descreverRegra(regra)} · próximas: <b className="text-ink-2">{proximas.map(dataCurta).join(', ')}</b>
+          </>
+        ) : (
+          'Preencha para o cliente aparecer no Calendário.'
+        )}
+      </p>
+    </div>
+  );
+}
+
+/** Uma máquina do cliente: mostra os dados da locação; "Editar" abre os campos; "Realizar movimentação" leva para Movimentações. */
+function FrotaCartao({
+  i,
+  d,
+  setD,
+  mudarFrota,
+}: {
+  i: number;
+  d: Rascunho;
+  setD: (r: Rascunho) => void;
+  mudarFrota: (i: number, campo: 'numero' | 'valor' | 'descricao', v: string) => void;
+}) {
+  const { pode } = useEstado();
+  const navegar = useNavigate();
+  const f = d.frotas[i];
+  const ex = f.extra ?? {};
+  // máquina nova (sem número ainda) já abre editando
+  const [editando, setEditando] = useState(!f.numero);
+  const mudarExtra = (x: Partial<NonNullable<Rascunho['frotas'][number]['extra']>>) =>
+    setD({ ...d, frotas: d.frotas.map((y, k) => (k === i ? { ...y, extra: { ...y.extra, ...x } } : y)) });
+  const nome = f.numero || String(i + 1);
+  const rot = 'flex flex-col gap-1 text-xs font-semibold text-ink-2';
+  const valor = lerReais(f.valor);
+  const frete = ex.frete === 'lucminas' ? 'Lucminas' : ex.frete === 'cliente' ? `Cliente${f.freteTxt?.trim() ? ` · R$ ${f.freteTxt}` : ''}` : '';
+  const item = (rotulo: string, v: string) => (
+    <div className="min-w-0">
+      <dt className="text-[11.5px] text-ink-3">{rotulo}</dt>
+      <dd className="truncate text-[13.5px]">{v || <span className="text-ink-3">—</span>}</dd>
+    </div>
+  );
+
+  if (!editando)
+    return (
+      <div className="flex flex-col gap-2.5 rounded-xl border border-line bg-white px-3.5 py-3">
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <b className="font-mono text-[15px]">FT{f.numero}</b>
+              {ex.modalidade && (
+                <span className={`rounded-full px-1.5 py-px text-[10.5px] font-bold uppercase tracking-wide ${ex.modalidade === 'contrato' ? 'bg-info-soft text-info' : 'bg-[#EDE9FE] text-[#6D28D9]'}`}>
+                  {ex.modalidade === 'contrato' ? 'Contrato' : 'Esporádico'}
+                </span>
+              )}
+            </div>
+            <div className="truncate text-[13px] text-ink-2">{f.descricao || 'Máquina sem descrição'}</div>
+          </div>
+          <div className="shrink-0 text-right">
+            <b className="text-[15px]">{valor ? formatarReais(valor) : <span className="text-warn">sem valor</span>}</b>
+            <div className="text-[11.5px] text-ink-3">por mês</div>
+          </div>
+        </div>
+        <dl className="grid grid-cols-2 gap-x-4 gap-y-2 border-t border-line-soft pt-2.5">
+          {item('Período', ex.inicio || ex.fim ? `${ex.inicio ? dataBr(ex.inicio) : '—'} → ${ex.fim ? dataBr(ex.fim) : 'sem término'}` : '')}
+          {item('Tempo de contrato', ex.contrato ?? '')}
+          {item('Frete', frete)}
+          {item('Gás', ex.gas ? `${ex.gas} vasilhame${ex.gas > 1 ? 's' : ''}` : '')}
+        </dl>
+        <div className="flex flex-wrap items-center gap-2">
+          {d.id && pode('movimentacoes', 2) && (
+            <button
+              type="button"
+              className="btn-primary btn-sm"
+              onClick={() => navegar(`/movimentacoes?nova=troca&frota=${encodeURIComponent(f.numero)}&cliente=${d.id}`)}
+            >
+              Realizar movimentação
+            </button>
+          )}
+          <button type="button" className="btn-secondary btn-sm" onClick={() => setEditando(true)}>
+            Editar dados
+          </button>
+          <button
+            type="button"
+            aria-label={`Remover frota ${nome}`}
+            onClick={() => setD({ ...d, frotas: d.frotas.filter((_, k) => k !== i) })}
+            className="btn btn-sm ml-auto text-ink-3 hover:text-bad"
+          >
+            Tirar do cliente
+          </button>
+        </div>
+      </div>
+    );
+
+  return (
+    <div className="flex flex-col gap-3 rounded-xl border border-ink/30 bg-white p-3">
               {/* identificação */}
               <div className="flex items-end gap-2">
                 <label className={`${rot} w-[100px]`}>
@@ -480,94 +649,9 @@ function Faturamento({ d, setD }: { d: Rascunho; setD: (r: Rascunho) => void }) 
                   </span>
                 </label>
               </div>
-            </div>
-          );
-        })}
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <button type="button" className="btn-secondary btn-sm" onClick={() => setD({ ...d, frotas: [...d.frotas, { numero: '', valor: '', descricao: '' }] })}>
-            <IcMais tamanho={14} /> Adicionar frota
-          </button>
-          {d.frotas.length > 0 && (
-            <span className="text-[13px]">
-              {d.frotas.length} frota{d.frotas.length > 1 ? 's' : ''} · total <b>{formatarReais(total)}</b>
-            </span>
-          )}
-        </div>
-      </div>
-    </fieldset>
-  );
-}
-
-/** "desde 20/10/2026 · contrato 12 meses · 1 vasilhame de gás · frete Lucminas" */
-export function resumoLocacao(x?: Pick<Frota, 'inicio' | 'fim' | 'contrato' | 'gas' | 'frete' | 'freteValor'>): string {
-  if (!x) return '';
-  return [
-    x.inicio ? `desde ${dataBr(x.inicio)}` : '',
-    x.fim ? `até ${dataBr(x.fim)}` : '',
-    x.contrato ? `contrato ${x.contrato}` : '',
-    x.gas ? `${x.gas} vasilhame${x.gas > 1 ? 's' : ''} de gás` : '',
-    x.frete === 'lucminas' ? 'frete Lucminas' : x.frete === 'cliente' ? `frete do cliente${x.freteValor ? ` (${formatarReais(x.freteValor)})` : ''}` : '',
-  ]
-    .filter(Boolean)
-    .join(' · ');
-}
-
-function RegraCampos({ d, setD }: { d: Rascunho; setD: (r: Rascunho) => void }) {
-  const regra = regraDoCliente({
-    regra: d.regra,
-    diaEmissao: Number(d.dia) || null,
-    inicioLocacao: dataValida(d.inicio) ? d.inicio : null,
-    periodoDias: Number(d.periodo) || null,
-  });
-  const proximas = regra ? proximasDatas(regra, 3) : [];
-  const opcao = (valor: 'dia' | 'periodo', rotulo: string) => (
-    <label className={`flex min-h-[44px] flex-1 cursor-pointer items-center gap-2 rounded-[10px] border px-3 text-[13px] ${d.regra === valor ? 'border-ink bg-white font-semibold' : 'border-line-strong bg-white/60'}`}>
-      <input type="radio" name="regra" checked={d.regra === valor} onChange={() => setD({ ...d, regra: valor })} className="h-[18px] w-[18px] accent-ink" />
-      {rotulo}
-    </label>
-  );
-  return (
-    <div className="flex flex-col gap-2.5">
-      <div className="text-[13px] font-medium">Quando a fatura é emitida</div>
-      <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Regra de faturamento">
-        {opcao('dia', 'Dia fixo do mês')}
-        {opcao('periodo', 'Por período da locação')}
-      </div>
-
-      {d.regra === 'dia' ? (
-        <div className="flex items-center gap-2">
-          <label htmlFor="cad-dia" className="text-ink-3">
-            Todo dia
-          </label>
-          <input id="cad-dia" type="number" inputMode="numeric" min={1} max={31} value={d.dia} onChange={(e) => setD({ ...d, dia: e.target.value })} placeholder="—" className="input w-[84px] bg-white text-center" />
-          <span className="text-ink-3">do mês</span>
-        </div>
-      ) : (
-        <div className="flex flex-wrap items-end gap-3">
-          <div className="flex flex-col gap-1.5">
-            <label htmlFor="cad-inicio" className="text-xs text-ink-3">
-              Início da locação
-            </label>
-            <input id="cad-inicio" type="date" value={d.inicio} onChange={(e) => setD({ ...d, inicio: e.target.value })} className="input w-auto bg-white" />
-          </div>
-          <div className="flex items-center gap-2">
-            <label htmlFor="cad-periodo" className="text-ink-3">
-              Fatura a cada
-            </label>
-            <input id="cad-periodo" type="number" inputMode="numeric" min={1} max={366} value={d.periodo} onChange={(e) => setD({ ...d, periodo: e.target.value })} placeholder="30" className="input w-[84px] bg-white text-center" />
-            <span className="text-ink-3">dias</span>
-          </div>
-        </div>
-      )}
-      <p className="text-xs text-ink-3">
-        {regra ? (
-          <>
-            {descreverRegra(regra)} · próximas: <b className="text-ink-2">{proximas.map(dataCurta).join(', ')}</b>
-          </>
-        ) : (
-          'Preencha para o cliente aparecer no Calendário.'
-        )}
-      </p>
+      <button type="button" className="btn-secondary btn-sm self-end" onClick={() => setEditando(false)} disabled={!f.numero}>
+        Pronto
+      </button>
     </div>
   );
 }

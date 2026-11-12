@@ -542,36 +542,15 @@ function DetalheLocacao({
         {(registra || edita) && (
           <section className="flex flex-col gap-2">
             <h3 className="text-[12px] font-bold uppercase tracking-wide text-ink-3">O que fazer com esta máquina</h3>
-            <div className="flex flex-wrap gap-2">
-              {registra && c && (
-                <>
-                  <Link className="btn-secondary btn-sm" to={mov('troca')}>
-                    Troca
-                  </Link>
-                  <Link className="btn-secondary btn-sm" to={mov('devolucao')}>
-                    Devolução
-                  </Link>
-                  <Link className="btn-secondary btn-sm" to={mov('reajuste')}>
-                    Reajuste
-                  </Link>
-                </>
-              )}
-              {registra && !c && (
-                <Link className="btn-secondary btn-sm" to={mov('locacao')}>
-                  Nova locação
-                </Link>
-              )}
+            <div className="flex flex-wrap items-center gap-2">
               {registra && (
-                <Link className="btn-secondary btn-sm" to={mov('venda')}>
-                  Venda
+                <Link className="btn-primary btn-sm" to={mov(c ? 'troca' : 'locacao')}>
+                  Realizar movimentação
                 </Link>
               )}
-              <Link className="btn-secondary btn-sm" to={`/equipamentos?busca=${encodeURIComponent(frota)}`}>
-                Ficha da máquina
-              </Link>
               {edita && c && (
-                <button type="button" className="btn-secondary btn-sm" onClick={() => editarCliente(c)}>
-                  Editar cliente
+                <button type="button" className="btn btn-sm text-ink-2 underline" onClick={() => editarCliente(c)}>
+                  Editar cadastro do cliente
                 </button>
               )}
             </div>

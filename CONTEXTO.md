@@ -160,7 +160,7 @@ que leva para `/movimentacoes?nova=<tipo>&frota=<n>&cliente=<id>` com a frota pr
 ## Observação urgente e cartões de frota no cadastro (nov/2026)
 Movimentação tem `dados.obsUrgente` (só vale com observação): balãozinho vermelho (`components/Balao.tsx`) na lista de
 movimentações, na Relação das locações (por frota) e pendência "Urgente" na Central do financeiro até alguém dar ok
-(chave `obs:<id>` em `avisos_ok`); mensagem do grupo sai com "⚠️ URGENTE". No cadastro do cliente, cada frota é um
+(chave `obs:<id>` em `avisos_ok`); mensagem do grupo sai com "⚠️ URGENTE". No cadastro do cliente, cada frota é um cartão de leitura (`FrotaCartao`) com "Realizar movimentação" e "Editar dados"; editando, um
 cartão com os mesmos campos da locação: máquina, valor, gás, contrato/esporádica, início, término, tempo de contrato,
 frete (e valor do frete).
 
