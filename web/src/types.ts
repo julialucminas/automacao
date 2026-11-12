@@ -209,6 +209,8 @@ export type DadosMov = {
   modalidade?: '' | 'contrato' | 'esporadico';
   /** frete por conta do cliente: quanto (centavos) */
   freteValor?: number | null;
+  /** observação marcada como urgente */
+  obsUrgente?: boolean;
   /** venda e compra: nota fiscal */
   nf?: string;
   /** compra: identificação da máquina que entra */

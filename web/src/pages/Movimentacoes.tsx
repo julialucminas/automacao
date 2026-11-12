@@ -10,7 +10,8 @@ import { copiarTexto, efeitoNaReceita, fimSugerido, movVazia, NOMES_TIPO, proxim
 import { dataHora } from '../lib/email';
 import { Chip, Gaveta, type Tom } from '../components/ui';
 import { BotaoOk } from '../components/BotaoOk';
-import { chaveContrato } from '../lib/avisos';
+import { chaveContrato, chaveObs } from '../lib/avisos';
+import { BalaoUrgente } from '../components/Balao';
 import { IcBusca, IcMais } from '../components/Icones';
 
 export const STATUS_MOV: Record<Movimentacao['status'], { rotulo: string; tom: Tom }> = {
@@ -330,6 +331,11 @@ export function Movimentacoes() {
                       <td className="whitespace-nowrap px-2 py-2.5 font-bold">
                         {m.tipo === 'reajuste' ? `FT${m.frota.split(', ').join(', FT')}` : `FT${m.frota}`}
                         {m.tipo === 'troca' && m.frotaNova && <span className="font-normal text-ink-2"> → FT{m.frotaNova}</span>}
+                        {m.dados.obsUrgente && m.dados.observacoes && (
+                          <span className="ml-1.5 align-middle">
+                            <BalaoUrgente texto={m.dados.observacoes} apagado={avisosOk.has(chaveObs(m))} />
+                          </span>
+                        )}
                       </td>
                       <td className="px-2 py-2.5">{m.clienteNome || '—'}</td>
                       {veValores && (
@@ -689,6 +695,7 @@ function FormMov({ tipo, frota, fechar }: { tipo: TipoMov; frota?: string; fecha
           Observações
         </label>
         <textarea id="mov-obs" rows={2} className="input resize-y py-2 text-[13px]" value={m.observacoes} onChange={(e) => mudar({ observacoes: e.target.value })} />
+        <CaixaUrgente marcado={!!m.obsUrgente} mudar={(v) => mudar({ obsUrgente: v })} />
       </div>      <p className="text-xs text-ink-3">A data de faturamento do cliente não é alterada: ela continua sendo definida no cadastro.</p>
       {erro && (
         <div role="alert" className="rounded-[10px] bg-bad-soft px-3 py-2.5 text-[13px] text-bad-strong">
@@ -712,6 +719,7 @@ function FormMov({ tipo, frota, fechar }: { tipo: TipoMov; frota?: string; fecha
 function FormVendaCompra({ tipo, frota, fechar }: { tipo: 'venda' | 'compra'; frota?: string; fechar: () => void }) {
   const { clientes, recarregarOperacoes, aprova: ehFinanceiro } = useEstado();
   const venda = tipo === 'venda';
+  const [urgente, setUrgente] = useState(false);
   const [d, setD] = useState({ frota: venda ? (frota ?? '') : '', data: hojeIso(), parte: '', valor: '', nf: '', descricao: '', marca: '', modelo: '', serie: '', ano: '', capacidade: '', combustivel: '', obs: '' });
   const [erro, setErro] = useState('');
   const [salvando, setSalvando] = useState(false);
@@ -735,6 +743,7 @@ function FormVendaCompra({ tipo, frota, fechar }: { tipo: 'venda' | 'compra'; fr
       nf: d.nf.trim(),
       descricao: d.descricao.trim(),
       observacoes: d.obs.trim(),
+      obsUrgente: urgente && !!d.obs.trim(),
       ...(venda
         ? {}
         : {
@@ -860,6 +869,7 @@ function FormVendaCompra({ tipo, frota, fechar }: { tipo: 'venda' | 'compra'; fr
       <label className={rot}>
         <span className="label">Observações</span>
         <textarea rows={2} className="input resize-y py-2 text-[13px]" {...campo('obs')} />
+        <CaixaUrgente marcado={urgente} mudar={setUrgente} />
       </label>
       <p className="text-xs text-ink-3">
         {venda
@@ -1102,6 +1112,17 @@ function FormReajuste({ clienteInicial, frotaInicial, fechar }: { clienteInicial
   );
 }
 
+/** "Marcar como urgente" na observação: aparece um balãozinho até alguém dar ok. */
+function CaixaUrgente({ marcado, mudar }: { marcado: boolean; mudar: (v: boolean) => void }) {
+  return (
+    <label className={`flex w-fit cursor-pointer items-center gap-2 rounded-lg px-2 py-1 text-[13px] font-semibold ${marcado ? 'bg-bad-soft text-bad' : 'text-ink-2'}`}>
+      <input type="checkbox" className="h-[18px] w-[18px] accent-[#C0352B]" checked={marcado} onChange={(e) => mudar(e.target.checked)} />
+      Marcar como urgente
+      <span className="font-normal text-ink-3">(aparece um balãozinho até alguém dar ok)</span>
+    </label>
+  );
+}
+
 /** Copia a movimentação no formato de mensagem para o grupo. */
 export function BotaoCopiar({ texto, rotulo = 'Copiar mensagem', className = 'btn-secondary' }: { texto: () => string; rotulo?: string; className?: string }) {
   const { avisar } = useEstado();
@@ -1144,6 +1165,7 @@ function Registrada({ m, fechar }: { m: Movimentacao; fechar: () => void }) {
 }
 
 export function CartaoMov({ m, children, semBorda }: { m: Movimentacao; children?: React.ReactNode; semBorda?: boolean }) {
+  const { avisosOk } = useEstado();
   const st = STATUS_MOV[m.status];
   return (
     <article className={semBorda ? '' : 'rounded-xl border border-line bg-white p-4'}>
@@ -1166,6 +1188,15 @@ export function CartaoMov({ m, children, semBorda }: { m: Movimentacao; children
             </div>
           ))}
         </dl>
+      )}
+      {m.dados.obsUrgente && m.dados.observacoes && (
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-bad/30 bg-bad-soft px-3 py-2.5 text-[13.5px]">
+          <span className="flex items-start gap-2">
+            <BalaoUrgente texto={m.dados.observacoes} apagado={avisosOk.has(chaveObs(m))} />
+            <span>{m.dados.observacoes}</span>
+          </span>
+          <BotaoOk chave={chaveObs(m)} rotulo="Ok, resolvido" />
+        </div>
       )}
       <p className="mt-2.5 text-xs text-ink-3">
         Registrada por {m.criadaPorNome || '—'} em {dataHora(m.criadaEm)}

@@ -157,6 +157,13 @@ os dados da locação e as ações (troca, devolução, reajuste, venda, nova lo
 da oficina). Tirar da oficina abre `DepoisDaOficina` ("volta para o cliente", troca, devolução, nova locação, venda),
 que leva para `/movimentacoes?nova=<tipo>&frota=<n>&cliente=<id>` com a frota preenchida. Exportar PDF/Excel num menu.
 
+## Observação urgente e cartões de frota no cadastro (nov/2026)
+Movimentação tem `dados.obsUrgente` (só vale com observação): balãozinho vermelho (`components/Balao.tsx`) na lista de
+movimentações, na Relação das locações (por frota) e pendência "Urgente" na Central do financeiro até alguém dar ok
+(chave `obs:<id>` em `avisos_ok`); mensagem do grupo sai com "⚠️ URGENTE". No cadastro do cliente, cada frota é um
+cartão com os mesmos campos da locação: máquina, valor, gás, contrato/esporádica, início, término, tempo de contrato,
+frete (e valor do frete).
+
 ## Navegação
 Menu lateral com 6 grupos (Início, Operação, Frota, Financeiro, Clientes, Administração), Painel do dia em
 `/inicio` (cartões conforme o perfil) e busca no topo (`components/BuscaGeral.tsx`; as telas leem `?busca=`).

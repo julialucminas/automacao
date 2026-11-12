@@ -10,7 +10,7 @@ import { efeitoNaReceita, NOMES_TIPO } from '../lib/movimentacao';
 import { contratosVencendo, STATUS_MOV, TOM_TIPO } from './Movimentacoes';
 import { Chip, type Tom } from '../components/ui';
 import { BotaoOk } from '../components/BotaoOk';
-import { chaveContrato, chaveEnvio, emailsComProblema } from '../lib/avisos';
+import { chaveContrato, chaveEnvio, chaveObs, emailsComProblema, urgentesEmAberto } from '../lib/avisos';
 import { IcAlerta, IcCheck, IcDinheiro, IcEmail, IcEmpilhadeira, IcEnviar, IcNota, IcPredio, IcPrancheta } from '../components/Icones';
 
 const somarDias = (iso: string, n: number) => paraIso(new Date(paraData(iso).getTime() + n * 86_400_000));
@@ -110,6 +110,23 @@ export function CentralFinanceiro() {
       ),
       link: '/envio',
       acao: 'Enviar',
+    });
+  // observações urgentes das movimentações (somem com o ok)
+  for (const m of urgentesEmAberto(movimentacoes, avisosOk).slice(0, 5))
+    pend.push({
+      chave: `obs-${m.id}`,
+      tom: 'bad',
+      rotulo: 'Urgente',
+      texto: (
+        <>
+          <b>FT{m.tipo === 'reajuste' ? m.frota.split(', ').join(', FT') : m.frota}</b> {m.clienteNome && <span className="text-ink-3">· {m.clienteNome} · </span>}
+          {m.dados.observacoes}
+          <span className="text-ink-3"> · {m.criadaPorNome}</span>
+        </>
+      ),
+      link: `/movimentacoes?id=${m.id}`,
+      acao: 'Ver',
+      ok: chaveObs(m),
     });
   for (const e of comProblema.slice(0, 5))
     pend.push({

@@ -26,7 +26,7 @@ export type Rascunho = {
   prazoPagamento: string;
   semBoleto: boolean;
   /** frotas com o valor como texto do campo, para permitir digitar à vontade; extra = dados da locação (vêm das movimentações) */
-  frotas: { numero: string; valor: string; descricao: string; extra?: Pick<Frota, 'inicio' | 'fim' | 'contrato' | 'gas' | 'frete' | 'freteValor' | 'modalidade'> }[];
+  frotas: { numero: string; valor: string; descricao: string; extra?: Pick<Frota, 'inicio' | 'fim' | 'contrato' | 'gas' | 'frete' | 'freteValor' | 'modalidade'>; freteTxt?: string }[];
 };
 
 export const rascunhoVazio = (nome = ''): Rascunho => ({ nome, apelidos: '', cnpj: '', para: [], cc: [], observacoes: '', regra: 'dia', dia: '', inicio: '', periodo: '', contato: '', telefone: '', prazoPagamento: '', semBoleto: false, frotas: [] });
@@ -53,6 +53,7 @@ export const rascunhoDe = (c: Cliente): Rascunho => ({
     valor: f.valor ? reaisParaCampo(f.valor) : '',
     descricao: f.descricao,
     extra: { inicio: f.inicio ?? null, fim: f.fim ?? null, contrato: f.contrato ?? '', gas: f.gas ?? 0, frete: f.frete ?? '', freteValor: f.freteValor ?? null, modalidade: f.modalidade ?? '' },
+    freteTxt: f.freteValor ? reaisParaCampo(f.freteValor) : '',
   })),
 });
 
@@ -203,7 +204,9 @@ function Formulario({ inicial, fechar, aoSalvar }: { inicial: Rascunho; fechar: 
       if (frotas.some((x) => x.numero === numero)) return setErro(`A frota ${numero} está repetida.`);
       const valor = f.valor.trim() ? lerReais(f.valor) : 0;
       if (valor === null) return setErro(`Não entendi o valor "${f.valor}" da frota ${numero}. Use, por exemplo, 1.500,00`);
-      frotas.push({ numero, valor, descricao: f.descricao.trim(), ...(f.extra ?? {}) });
+      const freteValor = f.extra?.frete === 'cliente' && f.freteTxt?.trim() ? lerReais(f.freteTxt) : null;
+      if (f.extra?.frete === 'cliente' && f.freteTxt?.trim() && freteValor === null) return setErro(`Não entendi o valor do frete "${f.freteTxt}" da frota ${numero}.`);
+      frotas.push({ numero, valor, descricao: f.descricao.trim(), ...(f.extra ?? {}), freteValor });
     }
 
     const input: ClienteInput = {
@@ -362,85 +365,124 @@ function Faturamento({ d, setD }: { d: Rascunho; setD: (r: Rascunho) => void }) 
       <RegraCampos d={d} setD={setD} />
 
       <div className="flex flex-col gap-2">
-        <div className="text-[13px] font-medium">Frotas de referência</div>
-        {d.frotas.length > 0 && (
-          <div className="hidden grid-cols-[110px_120px_1fr_44px] gap-2 text-xs text-ink-3 sm:grid">
-            <span>Nº da frota</span>
-            <span>Valor (R$)</span>
-            <span>Descrição (opcional)</span>
-            <span />
-          </div>
-        )}
-        {d.frotas.map((f, i) => (
-          <div key={i} className="grid grid-cols-[1fr_1fr_44px] gap-2 sm:grid-cols-[110px_120px_1fr_44px]">
-            <input aria-label={`Número da frota ${i + 1}`} value={f.numero} onChange={(e) => mudarFrota(i, 'numero', e.target.value)} placeholder="F-101" className="input bg-white uppercase" />
-            <input
-              aria-label={`Valor da frota ${i + 1}`}
-              inputMode="decimal"
-              value={f.valor}
-              onChange={(e) => mudarFrota(i, 'valor', e.target.value)}
-              onBlur={() => {
-                const v = lerReais(f.valor);
-                if (v !== null) mudarFrota(i, 'valor', reaisParaCampo(v));
-              }}
-              placeholder="1.500,00"
-              className={`input bg-white text-right ${f.valor.trim() && lerReais(f.valor) === null ? 'border-bad' : ''}`}
-            />
-            <input
-              aria-label={`Descrição da frota ${i + 1}`}
-              value={f.descricao}
-              onChange={(e) => mudarFrota(i, 'descricao', e.target.value)}
-              placeholder="Ex.: Empilhadeira 2,5t"
-              className="input col-span-2 bg-white sm:col-span-1"
-            />
-            <button
-              type="button"
-              aria-label={`Remover frota ${f.numero || i + 1}`}
-              onClick={() => setD({ ...d, frotas: d.frotas.filter((_, k) => k !== i) })}
-              className="col-start-3 row-start-1 flex h-11 w-11 items-center justify-center rounded-lg text-ink-3 hover:bg-white hover:text-bad sm:col-start-4"
-            >
-              <IcFechar tamanho={14} />
-            </button>
-            <div className="col-span-3 -mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-3 sm:col-span-4">
-              <label className="flex items-center gap-1.5">
-                Início
-                <input
-                  type="date"
-                  aria-label={`Início da locação da frota ${f.numero || i + 1}`}
-                  value={f.extra?.inicio ?? ''}
-                  onChange={(e) => setD({ ...d, frotas: d.frotas.map((x, k) => (k === i ? { ...x, extra: { ...x.extra, inicio: e.target.value || null } } : x)) })}
-                  className="input h-8 min-h-0 w-auto bg-white px-2 py-0 text-xs"
-                />
-              </label>
-              <label className="flex items-center gap-1.5">
-                Término
-                <input
-                  type="date"
-                  aria-label={`Término da locação da frota ${f.numero || i + 1}`}
-                  value={f.extra?.fim ?? ''}
-                  onChange={(e) => setD({ ...d, frotas: d.frotas.map((x, k) => (k === i ? { ...x, extra: { ...x.extra, fim: e.target.value || null } } : x)) })}
-                  className="input h-8 min-h-0 w-auto bg-white px-2 py-0 text-xs"
-                />
-              </label>
-              <select
-                aria-label={`Contrato ou esporádico, frota ${f.numero || i + 1}`}
-                value={f.extra?.modalidade ?? ''}
-                onChange={(e) =>
-                  setD({ ...d, frotas: d.frotas.map((x, k) => (k === i ? { ...x, extra: { ...x.extra, modalidade: e.target.value as Frota['modalidade'] } } : x)) })
-                }
-                className="input h-8 min-h-0 w-auto bg-white px-2 py-0 text-xs"
-              >
-                <option value="">Contrato ou esporádico?</option>
-                <option value="contrato">Contrato</option>
-                <option value="esporadico">Esporádico</option>
-              </select>
-              {(() => {
-                const r = resumoLocacao({ ...f.extra, inicio: null, fim: null });
-                return r ? <span>{r}</span> : null;
-              })()}
+        <div className="text-[13px] font-medium">Máquinas locadas</div>
+        {d.frotas.map((f, i) => {
+          const ex = f.extra ?? {};
+          const mudarExtra = (x: Partial<NonNullable<Rascunho['frotas'][number]['extra']>>) =>
+            setD({ ...d, frotas: d.frotas.map((y, k) => (k === i ? { ...y, extra: { ...y.extra, ...x } } : y)) });
+          const nome = f.numero || String(i + 1);
+          const rot = 'flex flex-col gap-1 text-xs font-semibold text-ink-2';
+          return (
+            <div key={i} className="flex flex-col gap-3 rounded-xl border border-line bg-white p-3">
+              {/* identificação */}
+              <div className="flex items-end gap-2">
+                <label className={`${rot} w-[100px]`}>
+                  Frota
+                  <input aria-label={`Número da frota ${i + 1}`} value={f.numero} onChange={(e) => mudarFrota(i, 'numero', e.target.value)} placeholder="FT35" className="input font-mono text-[14px] font-semibold uppercase" />
+                </label>
+                <label className={`${rot} min-w-0 flex-1`}>
+                  Máquina
+                  <input aria-label={`Descrição da frota ${i + 1}`} value={f.descricao} onChange={(e) => mudarFrota(i, 'descricao', e.target.value)} placeholder="Ex.: YALE GLP050VX 2,5 t" className="input text-[14px] font-normal" />
+                </label>
+                <button
+                  type="button"
+                  aria-label={`Remover frota ${nome}`}
+                  onClick={() => setD({ ...d, frotas: d.frotas.filter((_, k) => k !== i) })}
+                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-ink-3 hover:bg-bad-soft hover:text-bad"
+                >
+                  <IcFechar tamanho={14} />
+                </button>
+              </div>
+              {/* locação */}
+              <div className="grid grid-cols-2 gap-x-2 gap-y-3">
+                <label className={rot}>
+                  Valor por mês (R$)
+                  <input
+                    aria-label={`Valor da frota ${i + 1}`}
+                    inputMode="decimal"
+                    value={f.valor}
+                    onChange={(e) => mudarFrota(i, 'valor', e.target.value)}
+                    onBlur={() => {
+                      const v = lerReais(f.valor);
+                      if (v !== null) mudarFrota(i, 'valor', reaisParaCampo(v));
+                    }}
+                    placeholder="3.350,00"
+                    className={`input text-right text-[14px] font-normal ${f.valor.trim() && lerReais(f.valor) === null ? 'border-bad' : ''}`}
+                  />
+                </label>
+                <label className={rot}>
+                  Gás (vasilhames)
+                  <input
+                    aria-label={`Vasilhames de gás da frota ${nome}`}
+                    inputMode="numeric"
+                    value={ex.gas ? String(ex.gas) : ''}
+                    onChange={(e) => mudarExtra({ gas: Number(e.target.value.replace(/\D/g, '').slice(0, 2)) || 0 })}
+                    placeholder="0"
+                    className="input text-[14px] font-normal"
+                  />
+                </label>
+                <fieldset className={`${rot} col-span-2 row-start-2`}>
+                  <legend className="mb-1">Locação por</legend>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {(
+                      [
+                        ['contrato', 'Contrato'],
+                        ['esporadico', 'Esporádica'],
+                      ] as const
+                    ).map(([v, t]) => (
+                      <button
+                        key={v}
+                        type="button"
+                        aria-pressed={ex.modalidade === v}
+                        aria-label={`${t}, frota ${nome}`}
+                        onClick={() => mudarExtra({ modalidade: ex.modalidade === v ? '' : v })}
+                        className={`h-11 rounded-[10px] border text-[13.5px] ${ex.modalidade === v ? 'border-ink bg-ink font-semibold text-white' : 'border-line-strong bg-white text-[14px] font-normal text-ink-2'}`}
+                      >
+                        {t}
+                      </button>
+                    ))}
+                  </div>
+                </fieldset>
+                <label className={rot}>
+                  Início
+                  <input type="date" aria-label={`Início da locação da frota ${nome}`} value={ex.inicio ?? ''} onChange={(e) => mudarExtra({ inicio: e.target.value || null })} className="input text-[14px] font-normal" />
+                </label>
+                <label className={rot}>
+                  Término
+                  <input type="date" aria-label={`Término da locação da frota ${nome}`} value={ex.fim ?? ''} onChange={(e) => mudarExtra({ fim: e.target.value || null })} className="input text-[14px] font-normal" />
+                </label>
+                <label className={`${rot} col-span-2`}>
+                  Tempo de contrato
+                  <input aria-label={`Tempo de contrato da frota ${nome}`} value={ex.contrato ?? ''} onChange={(e) => mudarExtra({ contrato: e.target.value })} placeholder="12 meses" className="input text-[14px] font-normal" />
+                </label>
+                <label className={`${rot} col-span-2`}>
+                  Frete
+                  <span className="flex gap-1.5">
+                    <select aria-label={`Frete da frota ${nome}`} value={ex.frete ?? ''} onChange={(e) => mudarExtra({ frete: e.target.value as Frota['frete'] })} className="input min-w-0 flex-1 text-[14px] font-normal">
+                      <option value="">—</option>
+                      <option value="lucminas">Por conta da Lucminas</option>
+                      <option value="cliente">Por conta do cliente</option>
+                    </select>
+                    {ex.frete === 'cliente' && (
+                      <input
+                        aria-label={`Valor do frete da frota ${nome}`}
+                        inputMode="decimal"
+                        value={f.freteTxt ?? ''}
+                        onChange={(e) => setD({ ...d, frotas: d.frotas.map((y, k) => (k === i ? { ...y, freteTxt: e.target.value } : y)) })}
+                        onBlur={() => {
+                          const v = lerReais(f.freteTxt ?? '');
+                          if (v !== null) setD({ ...d, frotas: d.frotas.map((y, k) => (k === i ? { ...y, freteTxt: reaisParaCampo(v) } : y)) });
+                        }}
+                        placeholder="R$"
+                        className="input w-[110px] text-right text-[14px] font-normal"
+                      />
+                    )}
+                  </span>
+                </label>
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
         <div className="flex flex-wrap items-center justify-between gap-2">
           <button type="button" className="btn-secondary btn-sm" onClick={() => setD({ ...d, frotas: [...d.frotas, { numero: '', valor: '', descricao: '' }] })}>
             <IcMais tamanho={14} /> Adicionar frota

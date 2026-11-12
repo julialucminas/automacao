@@ -38,6 +38,8 @@ export type DadosMov = {
   valorAnterior?: number | null;
   /** frete por conta do cliente: quanto (centavos) */
   freteValor?: number | null;
+  /** observação marcada como urgente (balãozinho vermelho até alguém dar ok) */
+  obsUrgente?: boolean;
   /** locação: por contrato ou esporádica */
   modalidade?: '' | 'contrato' | 'esporadico';
   /** venda e compra: nota fiscal */
@@ -409,6 +411,7 @@ export function operacoes(db: Banco, repo: Repositorio, fichas?: Fichas) {
           ...(n.tipo === 'venda' || n.tipo === 'compra' ? { nf: n.nf ?? '' } : {}),
           ...(n.tipo === 'locacao' && n.modalidade ? { modalidade: n.modalidade } : {}),
           ...(n.frete === 'cliente' && n.freteValor ? { freteValor: n.freteValor } : {}),
+          ...(n.obsUrgente && n.observacoes ? { obsUrgente: true } : {}),
           ...(n.tipo === 'compra' && n.maquina ? { maquina: n.maquina } : {}),
         };
         let clienteId = n.clienteId ?? null;

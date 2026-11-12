@@ -370,6 +370,7 @@ export function criarApp(db: Banco, opcoes: { cookieSeguro: boolean; logger?: bo
       contatoTelefone: texto(b.contatoTelefone, 'telefone', 40),
       descricao: texto(b.descricao, 'descrição', 200),
       observacoes: texto(b.observacoes, 'observações', 2000),
+      obsUrgente: b.obsUrgente === true,
       ...(tipo === 'locacao' ? { modalidade: lerModalidade(b.modalidade) } : {}),
     };
   };
@@ -403,6 +404,7 @@ export function criarApp(db: Banco, opcoes: { cookieSeguro: boolean; logger?: bo
       contatoTelefone: '',
       descricao,
       observacoes: texto(b.observacoes, 'observações', 2000),
+      obsUrgente: b.obsUrgente === true,
       nf: texto(b.nf, 'nota fiscal', 60),
       ...(tipo === 'compra'
         ? {
@@ -452,6 +454,7 @@ export function criarApp(db: Banco, opcoes: { cookieSeguro: boolean; logger?: bo
       contatoTelefone: '',
       descricao: '',
       observacoes: texto(b.observacoes, 'motivo', 2000),
+      obsUrgente: b.obsUrgente === true,
       itens,
       percentual,
       renovaAte: lerDataIso(b.renovaAte, 'Renovação do contrato') ?? null,
@@ -478,7 +481,7 @@ export function criarApp(db: Banco, opcoes: { cookieSeguro: boolean; logger?: bo
   // chave: "envio:<id>" (e-mail devolvido/falhou), "contrato:<frota>:<vencimento>" (contrato vencendo)
   const lerChaveOk = (v: unknown) => {
     const c = texto(v, 'aviso', 120);
-    if (!/^(envio|contrato|externo):[\w:.\-]+$/.test(c)) throw new Invalido('Aviso inválido.');
+    if (!/^(envio|contrato|externo|obs):[\w:.\-]+$/.test(c)) throw new Invalido('Aviso inválido.');
     return c;
   };
   app.get('/api/avisos-ok', { preHandler: exigirLogin }, async () =>

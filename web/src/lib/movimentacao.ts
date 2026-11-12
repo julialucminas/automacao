@@ -193,7 +193,7 @@ export function textoMensagem(m: Pick<Movimentacao, 'tipo' | 'frota' | 'clienteN
     if (maq) l.push(`- Equipamento: ${maq}`);
     if (d.valor != null) l.push(`- Valor da ${m.tipo}: ${formatarReais(d.valor)}`);
     if (d.nf) l.push(`- NF: ${d.nf}`);
-    if (d.observacoes) l.push(`- Obs.: ${d.observacoes}`);
+    if (d.observacoes) l.push(d.obsUrgente ? `- ⚠️ URGENTE: ${d.observacoes}` : `- Obs.: ${d.observacoes}`);
     return l.join('\n').replace(/\u00a0/g, ' ');
   }
   const titulo = ({ locacao: 'NOVA LOCAÇÃO', devolucao: 'DEVOLUÇÃO', troca: 'TROCA DE FROTA' } as Record<string, string>)[m.tipo];
@@ -210,7 +210,7 @@ export function textoMensagem(m: Pick<Movimentacao, 'tipo' | 'frota' | 'clienteN
   if (d.emails?.length) l.push(`- E-mails para a fatura: ${d.emails.join(', ')}`);
   if (d.contatoNome || d.contatoTelefone) l.push(`- Contato: ${[d.contatoNome, d.contatoTelefone].filter(Boolean).join(' - ')}`);
   if (d.descricao) l.push(`- Equipamento: ${d.descricao}`);
-  if (d.observacoes) l.push(`- Obs.: ${d.observacoes}`);
+  if (d.observacoes) l.push(d.obsUrgente ? `- ⚠️ URGENTE: ${d.observacoes}` : `- Obs.: ${d.observacoes}`);
   return l.join('\n').replace(/\u00a0/g, ' ');
 }
 

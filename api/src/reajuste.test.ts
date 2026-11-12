@@ -212,3 +212,14 @@ describe('ok nas pendências', () => {
     expect(l).toEqual([]);
   });
 });
+
+describe('observação urgente', () => {
+  it('guarda a marca de urgente só quando há observação; ok com chave obs:<id>', async () => {
+    const base = { frete: '', gas: 0, contrato: '', prazoPagamento: '', emails: [], contatoNome: '', contatoTelefone: '', descricao: '', modalidade: 'contrato' };
+    const m = (await como('junior')('POST', '/api/movimentacoes', { ...base, tipo: 'locacao', frota: '97', data: '2026-11-12', clienteId, valor: 1000, observacoes: 'Cliente pediu entrega antes das 7h', obsUrgente: true })).json();
+    expect(m.dados).toMatchObject({ obsUrgente: true, observacoes: 'Cliente pediu entrega antes das 7h' });
+    const sem = (await como('junior')('POST', '/api/movimentacoes', { ...base, tipo: 'locacao', frota: '98', data: '2026-11-12', clienteId, valor: 1000, observacoes: '', obsUrgente: true })).json();
+    expect(sem.dados.obsUrgente).toBeUndefined();
+    expect((await como('angelise')('POST', '/api/avisos-ok', { chave: `obs:${m.id}` })).statusCode).toBe(200);
+  });
+});

@@ -2,7 +2,10 @@ import { useMemo, useState } from 'react';
 import { useBuscaDaUrl } from '../lib/buscaDaUrl';
 import { Link, useNavigate } from 'react-router-dom';
 import { useEstado } from '../state';
-import type { Cliente, Frota } from '../types';
+import type { Cliente, Frota, Movimentacao } from '../types';
+import { BalaoUrgente } from '../components/Balao';
+import { BotaoOk } from '../components/BotaoOk';
+import { chaveObs, urgentesEmAberto } from '../lib/avisos';
 import { formatarReais } from '../lib/dinheiro';
 import { dataBr, dataCurta, descreverRegra, hojeIso, proximasDatas, regraDoCliente } from '../lib/calendario';
 import { chaveEmpresa } from '../lib/normalizar';
@@ -29,7 +32,14 @@ const somarDias = (iso: string, n: number) => {
 const freteTexto = (f: Frota) => (f.frete === 'lucminas' ? 'Lucminas' : f.frete === 'cliente' ? `Cliente${f.freteValor ? ` · ${formatarReais(f.freteValor)}` : ''}` : '');
 
 export function Frotas() {
-  const { clientes, avisar, oficina, definirOficina, veValores: ehFinanceiro, pode } = useEstado();
+  const { clientes, avisar, oficina, definirOficina, veValores: ehFinanceiro, pode, movimentacoes, avisosOk } = useEstado();
+  // observação urgente em aberto por frota (balãozinho)
+  const urgentes = useMemo(() => {
+    const m = new Map<string, Movimentacao[]>();
+    for (const x of urgentesEmAberto(movimentacoes, avisosOk))
+      for (const f of [...x.frota.split(', '), x.frotaNova ?? ''].filter(Boolean)) m.set(f, [...(m.get(f) ?? []), x]);
+    return m;
+  }, [movimentacoes, avisosOk]);
   const editaFrotas = pode('frotas', 2);
   /** valor de cada frota: quem vê valores ou quem confere frotas e valores no fim do mês (o servidor manda 0 para os outros) */
   const veValorFrota = ehFinanceiro || pode('conferencia');
@@ -321,6 +331,7 @@ export function Frotas() {
                         {f.numero}
                         <SeloModalidade m={f.modalidade} />
                         {ofi && <SeloOficina />}
+                        {urgentes.get(f.numero)?.map((m) => <BalaoUrgente key={m.id} texto={m.dados.observacoes} />)}
                         {l.duplicada && <Chip tom="bad">2 clientes</Chip>}
                       </span>
                     </td>
@@ -384,6 +395,7 @@ export function Frotas() {
                     >
                       <b className="font-mono">{l.frota.numero}</b>
                       <SeloModalidade m={l.frota.modalidade} />
+                      {urgentes.get(l.frota.numero)?.map((m) => <BalaoUrgente key={m.id} texto={m.dados.observacoes} />)}
                       {naOficina.has(l.frota.numero) && <SeloOficina />}
                       {veValorFrota && <span className="text-ink-2">{l.frota.valor ? formatarReais(l.frota.valor) : 'sem valor'}</span>}
                       {l.frota.fim && <span className={`text-xs ${terminando(l.frota) ? 'font-semibold text-warn-strong' : 'text-ink-3'}`}>até {dataCurta(l.frota.fim)}</span>}
@@ -401,6 +413,7 @@ export function Frotas() {
           frota={aberta}
           linha={linhaAberta}
           oficina={naOficina.get(aberta) ?? null}
+          urgentes={urgentes.get(aberta) ?? []}
           veValor={veValorFrota}
           edita={editaFrotas}
           fechar={() => setAberta(null)}
@@ -451,7 +464,9 @@ function DetalheLocacao({
   editarCliente,
   tirarDaOficina,
   colocarNaOficina,
+  urgentes,
 }: {
+  urgentes: Movimentacao[];
   frota: string;
   linha: Linha | null;
   oficina: FrotaOficina | null;
@@ -483,6 +498,20 @@ function DetalheLocacao({
           <SeloModalidade m={f?.modalidade} />
           {oficina && <SeloOficina />}
         </div>
+        {urgentes.map((m) => (
+          <div key={m.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-bad/30 bg-bad-soft px-3 py-2.5 text-[13.5px]">
+            <span className="flex items-start gap-2">
+              <BalaoUrgente texto={m.dados.observacoes} />
+              <span>
+                {m.dados.observacoes}
+                <span className="block text-xs text-ink-3">
+                  {m.criadaPorNome} · {dataBr(m.dados.data)}
+                </span>
+              </span>
+            </span>
+            <BotaoOk chave={chaveObs(m)} rotulo="Ok, resolvido" />
+          </div>
+        ))}
         {oficina && (
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[#F59E0B]/40 bg-[#FFF4E5] px-3 py-2.5 text-[13.5px]">
             <span>
