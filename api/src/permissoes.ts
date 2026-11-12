@@ -17,6 +17,7 @@ export const ABAS = [
   'conferencia',
   'calendario',
   'frotas',
+  'contratos',
   'envio',
   'historico',
   'configuracoes',
@@ -47,7 +48,7 @@ export const PERFIS_PADRAO: Omit<Perfil, 'padrao'>[] = [
     id: 'operacoes',
     nome: 'Operações',
     descricao: 'Movimentações, conferência e frotas. O que registra entra direto no cadastro.',
-    permissoes: com(0, { inicio: 2, solicitacoes: 2, manutencao: 2, ordens: 2, externos: 2, movimentacoes: 2, conferencia: 2, calendario: 1, frotas: 2, aprovacoes: 2 }),
+    permissoes: com(0, { inicio: 2, solicitacoes: 2, manutencao: 2, ordens: 2, externos: 2, movimentacoes: 2, conferencia: 2, calendario: 1, frotas: 2, aprovacoes: 2, contratos: 2 }),
     veValores: false,
   },
   {

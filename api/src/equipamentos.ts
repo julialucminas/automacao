@@ -53,6 +53,8 @@ export const CAMPOS_EQUIPAMENTO = {
   vendaNf: 'texto',
   // contrato da locação atual
   contratoNumero: 'texto',
+  /** início do contrato (base do reajuste anual) */
+  contratoInicio: 'data',
   contratoVencimento: 'data',
   contratoValor: 'centavos',
   contratoReajuste: 'centavos',

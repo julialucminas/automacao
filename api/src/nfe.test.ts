@@ -106,3 +106,23 @@ describe('fatura lançada manualmente', () => {
     expect((await como('tecnico')('POST', '/api/envios/manual', { clienteId: c.id, referencia: '2026-11', data: '2026-11-11' })).statusCode).toBe(403);
   });
 });
+
+describe('contratos', () => {
+  it('salva o contrato do cliente em várias máquinas, renova, tira máquina; técnico não pode', async () => {
+    const a = como('angelise');
+    const c = (await a('POST', '/api/clientes', { nome: 'Metal', para: ['a@m.com.br'], cc: [], apelidos: [], cnpj: '', observacoes: '' })).json();
+    for (const f of ['10', '11']) await a('POST', '/api/movimentacoes', { tipo: 'locacao', frota: f, clienteId: c.id, data: '2026-01-10', valor: 300000 });
+    expect((await a('POST', '/api/contratos', { clienteId: c.id, frotas: ['10', '99'], vencimento: '2027-01-09' })).statusCode).toBe(400);
+    expect((await a('POST', '/api/contratos', { clienteId: c.id, frotas: ['10'], inicio: '2027-02-01', vencimento: '2027-01-09' })).statusCode).toBe(400);
+    expect((await a('POST', '/api/contratos', { clienteId: c.id, frotas: ['FT10', '11'], numero: 'C-12', inicio: '2026-01-10', vencimento: '2027-01-09', obs: 'IPCA' })).statusCode).toBe(200);
+    const ficha = async (f: string) => (await a('GET', '/api/equipamentos')).json().find((e: { frota: string }) => e.frota === f);
+    expect(await ficha('11')).toMatchObject({ contratoNumero: 'C-12', contratoInicio: '2026-01-10', contratoVencimento: '2027-01-09', contratoObs: 'IPCA' });
+    // renova só com a 10; a 11 sai do contrato
+    await a('POST', '/api/contratos', { clienteId: c.id, frotas: ['10'], tirar: ['11'], numero: 'C-12', inicio: '2026-01-10', vencimento: '2028-01-09', renovacao: true });
+    expect((await ficha('10')).contratoVencimento).toBe('2028-01-09');
+    expect((await ficha('11')).contratoNumero ?? null).toBeNull();
+    const log = (await a('GET', '/api/registro')).json().map((l: { acao: string }) => l.acao);
+    expect(log).toContain('renovou o contrato C-12 de METAL até 09/01/2028: FT10 (saíram FT11)');
+    expect((await como('tecnico')('POST', '/api/contratos', { clienteId: c.id, frotas: ['10'], vencimento: '2028-01-09' })).statusCode).toBe(403);
+  });
+});

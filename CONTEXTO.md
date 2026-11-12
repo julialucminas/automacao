@@ -225,3 +225,11 @@ financeiro: cartão "Faturamento de <mês>" com valores e quem falta faturar. S�
   na Relação das locações e no Histórico (`components/LancarFatura.tsx`).
 - Faturado no mês (Relação e Central) só para os perfis admin e financeiro (`cuidaDoFaturamento`).
 - Central do financeiro: Acesso rápido no topo.
+
+## Contratos (nov/2026)
+Aba `contratos` (grupo Frota, rota /contratos): admin e financeiro 2, operações 2 (o Júnior renova), diretoria 1.
+Contrato = máquinas do mesmo cliente com o mesmo `contratoNumero` (sem número: mesmo `contratoVencimento`), montado em
+`web/src/lib/contratos.ts` a partir das fichas; campo novo `contratoInicio` (base do reajuste anual, junto com o último
+reajuste aprovado). `POST /api/contratos` grava número/início/vencimento/obs nas fichas marcadas e limpa as de `tirar`.
+Situação: vencido, vence em até 60 dias, vigente; reajuste atrasado = mais de 12 meses desde a base. Valores = valor da
+locação de cada frota no cliente (Júnior vê porque confere frotas).

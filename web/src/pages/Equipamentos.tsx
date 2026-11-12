@@ -308,6 +308,7 @@ export function Ficha({
             <Item rotulo="Término">{linha.locacao?.fim ? dataBr(linha.locacao.fim) : null}</Item>
             {linha.locacao && linha.locacao.valor > 0 && <Item rotulo="Valor mensal">{formatarReais(linha.locacao.valor)}</Item>}
             <Item rotulo="Nº do contrato">{f.contratoNumero}</Item>
+            <Item rotulo="Início do contrato">{f.contratoInicio ? dataBr(f.contratoInicio) : null}</Item>
             <Item rotulo="Vencimento do contrato">
               {f.contratoVencimento ? <span className={linha.contratoVencido ? 'font-bold text-bad' : ''}>{dataBr(f.contratoVencimento)}</span> : null}
             </Item>
@@ -516,6 +517,7 @@ const GRUPOS_FORM: { titulo: string; campos: Campo[] }[] = [
     titulo: 'Contrato da locação',
     campos: [
       { k: 'contratoNumero', rotulo: 'Nº do contrato' },
+      { k: 'contratoInicio', rotulo: 'Início do contrato', tipo: 'data' },
       { k: 'contratoVencimento', rotulo: 'Vencimento', tipo: 'data' },
       { k: 'contratoValor', rotulo: 'Valor no contrato', tipo: 'dinheiro', valor: true },
       { k: 'contratoReajuste', rotulo: 'Reajuste pedido', tipo: 'dinheiro', valor: true },

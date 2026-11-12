@@ -473,6 +473,38 @@ export function criarApp(db: Banco, opcoes: { cookieSeguro: boolean; logger?: bo
   app.post('/api/movimentacoes', { preHandler: exigir(2, 'movimentacoes') }, async (req, reply) =>
     reply.code(201).send(ops.registrarMovimentacao(lerMov(req.body), req.usuario.id, aprova(req))),
   );
+  // ---------- contratos (por cliente, com várias máquinas; os dados ficam na ficha de cada máquina) ----------
+  app.post('/api/contratos', { preHandler: exigir(2, 'contratos') }, async (req) => {
+    const b = (req.body ?? {}) as Record<string, unknown>;
+    const cliente = repo.buscarCliente(typeof b.clienteId === 'string' ? b.clienteId : '');
+    const lista = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string').map((x) => x.trim().toUpperCase().replace(/^FT[\s-]*/, '')) : []);
+    const frotas = [...new Set(lista(b.frotas))];
+    const tirar = lista(b.tirar).filter((f) => !frotas.includes(f));
+    if (!frotas.length) throw new Invalido('Marque pelo menos uma máquina do contrato.');
+    const fora = frotas.filter((f) => !cliente.frotas.some((x) => x.numero === f));
+    if (fora.length) throw new Invalido(`FT${fora.join(', FT')} não ${fora.length > 1 ? 'estão' : 'está'} com ${cliente.nome}.`);
+    const numero = texto(b.numero, 'número do contrato', 40);
+    const inicio = lerDataIso(b.inicio, 'Início do contrato') ?? null;
+    const vencimento = lerDataIso(b.vencimento, 'Vencimento do contrato') ?? null;
+    if (!vencimento) throw new Invalido('Informe o vencimento do contrato.');
+    if (inicio && inicio > vencimento) throw new Invalido('O início do contrato está depois do vencimento.');
+    const obs = texto(b.obs, 'observação', 300);
+    const renovacao = b.renovacao === true;
+    db.transaction(() => {
+      for (const f of frotas) equip.salvar(f, { contratoNumero: numero || null, contratoInicio: inicio, contratoVencimento: vencimento, contratoObs: obs || null }, req.usuario.id);
+      for (const f of tirar) if (equip.buscar(f)) equip.salvar(f, { contratoNumero: null, contratoInicio: null, contratoVencimento: null, contratoObs: null }, req.usuario.id);
+      repo.registrarLog(
+        cliente.id,
+        req.usuario.id,
+        `${renovacao ? 'renovou' : 'salvou'} o contrato ${numero || '(sem número)'} de ${cliente.nome} até ${vencimento.split('-').reverse().join('/')}: FT${frotas.join(', FT')}${tirar.length ? ` (saíram FT${tirar.join(', FT')})` : ''}`,
+        null,
+        null,
+        'cliente',
+      );
+    })();
+    return { ok: true };
+  });
+
   // ---------- observações acrescentadas depois de lançada ----------
   app.post<{ Params: { id: string } }>('/api/movimentacoes/:id/notas', { preHandler: exigir(2, 'movimentacoes', 'aprovacoes') }, async (req) => {
     const b = (req.body ?? {}) as Record<string, unknown>;

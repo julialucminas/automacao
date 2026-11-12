@@ -24,6 +24,7 @@ import { Ordens } from './pages/Ordens';
 import { Campo } from './pages/Campo';
 import { useMenu, usaCentralFinanceiro } from './components/Layout';
 import { CentralFinanceiro } from './pages/CentralFinanceiro';
+import { Contratos } from './pages/Contratos';
 import type { Aba } from './lib/acesso';
 import type { ReactNode } from 'react';
 
@@ -40,6 +41,7 @@ const TELAS: [Aba, string, ReactNode][] = [
   ['calendario', '/calendario', <Calendario />],
   ['frotas', '/equipamentos', <Equipamentos />],
   ['frotas', '/frotas', <Frotas />],
+  ['contratos', '/contratos', <Contratos />],
   ['envio', '/envio', <Envio />],
   ['historico', '/historico', <Historico />],
   ['configuracoes', '/configuracoes', <Configuracoes />],

@@ -337,6 +337,8 @@ export type DadosEquipamento = {
   compraData?: string | null;
   fornecedor?: string | null;
   contratoNumero?: string | null;
+  /** início do contrato (base do reajuste anual) */
+  contratoInicio?: string | null;
   contratoVencimento?: string | null;
   contratoValor?: number | null;
   contratoReajuste?: number | null;
