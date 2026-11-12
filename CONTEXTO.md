@@ -133,6 +133,9 @@ da oficina, ficha `situacao: baixada` + vendaData/vendaValor/vendaComprador/vend
 locada nem vendida de novo) e `compra` (cria a ficha com descrição, marca, modelo, série, ano, capacidade, combustível
 e compraData/compraValor/compraNf/fornecedor; recusa número de frota que já existe). Venda de máquina locada conta
 como −valor da locação na receita mensal; o valor da venda e o da compra aparecem à parte no resumo do mês.
+NF-e da compra/venda: PDF (DANFE) ou XML, até 6 MB, em `<pastaDados>/nfe/<id da movimentação>.<pdf|xml>`
+(`/opt/faturas-dados/nfe`); a referência fica em `dados.nfArquivo`. Rotas `POST/GET/DELETE /api/movimentacoes/:id/nfe`.
+Anexa no formulário (o XML preenche nº e valor da nota) ou depois, no cartão da movimentação; a ficha mostra o link.
 
 ## Contrato/esporádico, janela da conferência, Relação das locações (nov/2026)
 Frota no cliente tem `modalidade` ('contrato' | 'esporadico'): escolhida na locação (obrigatória) ou no cadastro do

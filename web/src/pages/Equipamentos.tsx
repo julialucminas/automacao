@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react
 import { api } from '../api';
 import { useEstado } from '../state';
 import { SeloHelbert } from '../components/Balao';
-import type { DadosEquipamento, Equipamento, PecaHistorico, RegraPeriferico } from '../types';
+import type { DadosEquipamento, Equipamento, Movimentacao, PecaHistorico, RegraPeriferico } from '../types';
+import { urlNfe } from '../components/NfeAnexo';
 import { regrasDe, situacaoPerifericos } from '../lib/manutencao';
 import { COMBUSTIVEIS, SITUACOES, TIPOS_VISITA, horasParaPreventiva, montarEquipamentos, nomeEquipamento, type LinhaEquipamento, type Situacao } from '../lib/equipamentos';
 import { chaveEmpresa, semAcento } from '../lib/normalizar';
@@ -187,6 +188,14 @@ function Bloco({ titulo, children }: { titulo: string; children: ReactNode }) {
     </section>
   );
 }
+function LinkNfe({ m }: { m: Movimentacao }) {
+  return (
+    <a href={urlNfe(m)} target="_blank" rel="noopener" className="font-semibold text-info underline">
+      Abrir {m.dados.nfArquivo?.ext.toUpperCase()}
+    </a>
+  );
+}
+
 function Item({ rotulo, children, largo }: { rotulo: string; children: ReactNode; largo?: boolean }) {
   return (
     <div className={largo ? 'col-span-2 sm:col-span-3' : ''}>
@@ -216,8 +225,10 @@ export function Ficha({
   salvo: (e: Equipamento) => void;
 }) {
   const [editando, setEditando] = useState(false);
-  const { config } = useEstado();
+  const { config, movimentacoes } = useEstado();
   useEffect(() => setEditando(false), [linha?.frota]);
+  // NF-e anexada na movimentação de compra/venda desta frota (a mais recente aprovada)
+  const nfeDe = (tipo: 'compra' | 'venda') => movimentacoes.find((m) => m.tipo === tipo && m.status === 'aprovada' && m.frota === linha?.frota && m.dados.nfArquivo);
   if (!linha) return <Gaveta aberto={false} fechar={fechar} titulo="" largo children={null} />;
   const f = linha.ficha ?? ({} as Partial<Equipamento>);
   const faltam = horasParaPreventiva(linha.ficha);
@@ -311,6 +322,7 @@ export function Ficha({
               <Item rotulo="Valor de compra">{f.compraValor ? formatarReais(f.compraValor) : null}</Item>
               <Item rotulo="Data">{f.compraData ? dataBr(f.compraData) : null}</Item>
               <Item rotulo="Nota fiscal">{f.compraNf}</Item>
+              {nfeDe('compra') && <Item rotulo="NF-e"><LinkNfe m={nfeDe('compra')!} /></Item>}
               <Item rotulo="Fornecedor" largo>
                 {f.fornecedor}
               </Item>
@@ -322,6 +334,7 @@ export function Ficha({
               <Item rotulo="Comprador">{f.vendaComprador}</Item>
               {veValores && <Item rotulo="Valor da venda">{f.vendaValor ? formatarReais(f.vendaValor) : null}</Item>}
               {veValores && <Item rotulo="Nota fiscal">{f.vendaNf}</Item>}
+              {veValores && nfeDe('venda') && <Item rotulo="NF-e"><LinkNfe m={nfeDe('venda')!} /></Item>}
             </Bloco>
           )}
           {(f.observacoes || f.situacaoMotivo) && (

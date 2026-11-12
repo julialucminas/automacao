@@ -652,6 +652,12 @@ export const mockApi: Api = {
   async decidirMovimentacao() {
     throw new Error('Indisponível na demonstração.');
   },
+  async anexarNfe() {
+    throw new Error('Indisponível na demonstração.');
+  },
+  async tirarNfe() {
+    throw new Error('Indisponível na demonstração.');
+  },
   async listarPropostas() {
     return [];
   },

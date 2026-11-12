@@ -44,9 +44,12 @@ export type DadosMov = {
   modalidade?: '' | 'contrato' | 'esporadico';
   /** venda e compra: nota fiscal */
   nf?: string;
+  /** venda e compra: arquivo da NF-e (PDF/DANFE ou XML), guardado em <pastaDados>/nfe/<id da movimentação>.<ext> */
+  nfArquivo?: NfArquivo | null;
   /** compra: identificação da máquina que entra na frota */
   maquina?: { marca: string; modelo: string; serie: string; ano: number | null; capacidade: number | null; combustivel: string };
 };
+export type NfArquivo = { ext: 'pdf' | 'xml'; nome: string; tamanho: number; em: string; porNome: string };
 export type NovaMov = { tipo: TipoMov; frota: string; frotaNova?: string; clienteId?: string | null; clienteNome?: string } & DadosMov;
 
 export type Movimentacao = {
@@ -429,6 +432,17 @@ export function operacoes(db: Banco, repo: Repositorio, fichas?: Fichas) {
         repo.registrarLog(clienteId ?? '', usuarioId, aprovarJa ? `registrou ${resumo}` : `registrou ${resumo} (aguardando aprovação)`, null, dados, 'movimentacao');
         return buscarMov(id);
       })();
+    },
+
+    /** venda/compra: guarda (ou tira, com null) a referência ao arquivo da NF-e */
+    anexarNf(id: string, arquivo: NfArquivo | null, usuarioId: number): Movimentacao {
+      const m = buscarMov(id);
+      if (m.tipo !== 'venda' && m.tipo !== 'compra') throw new Conflito2('A NF-e só pode ser anexada em compra ou venda.');
+      if (m.status === 'rejeitada') throw new Conflito2('Essa movimentação foi recusada.');
+      const dados: DadosMov = { ...m.dados, nfArquivo: arquivo };
+      db.prepare('UPDATE movimentacoes SET dados = ? WHERE id = ?').run(JSON.stringify(dados), id);
+      repo.registrarLog(m.clienteId ?? '', usuarioId, `${arquivo ? 'anexou' : 'tirou'} a NF-e da ${NOMES_TIPO[m.tipo]} ${m.frota}${arquivo ? ` (${arquivo.nome})` : ''}`, null, null, 'movimentacao');
+      return buscarMov(id);
     },
 
     decidirMovimentacao(id: string, usuarioId: number, aprovar: boolean, motivo = ''): Movimentacao {

@@ -1,10 +1,10 @@
 import Fastify, { type FastifyReply, type FastifyRequest } from 'fastify';
 import cookie from '@fastify/cookie';
 import { Conflito, NaoEncontrado, repositorio, type Banco, type ClienteInput, type Frota, type Usuario } from './db.js';
-import { CONFIG_PADRAO, Conflito2, operacoes, type NovaMov, type TipoMov } from './operacoes.js';
+import { CONFIG_PADRAO, Conflito2, operacoes, type NfArquivo, type NovaMov, type TipoMov } from './operacoes.js';
 import { monitorCaixa } from './monitor.js';
 import { agendarCopias, listarCopias } from './backup.js';
-import { createReadStream } from 'node:fs';
+import { createReadStream, existsSync, mkdirSync, unlinkSync, writeFileSync } from 'node:fs';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join as juntarCaminho } from 'node:path';
@@ -472,6 +472,53 @@ export function criarApp(db: Banco, opcoes: { cookieSeguro: boolean; logger?: bo
   app.post('/api/movimentacoes', { preHandler: exigir(2, 'movimentacoes') }, async (req, reply) =>
     reply.code(201).send(ops.registrarMovimentacao(lerMov(req.body), req.usuario.id, aprova(req))),
   );
+  // ---------- NF-e anexada na compra/venda (PDF do DANFE ou XML) ----------
+  const pastaNfe = juntarCaminho(opcoes.pastaDados ?? '/dados', 'nfe');
+  const arquivoNfe = (id: string, ext: string) => {
+    if (!/^[0-9a-f-]{36}$/.test(id)) throw new Invalido('Movimentação inválida.');
+    return juntarCaminho(pastaNfe, `${id}.${ext}`);
+  };
+  app.post<{ Params: { id: string } }>('/api/movimentacoes/:id/nfe', { preHandler: exigir(2, 'movimentacoes'), bodyLimit: 9 * 1024 * 1024 }, async (req) => {
+    const b = (req.body ?? {}) as Record<string, unknown>;
+    const buf = Buffer.from(typeof b.arquivo === 'string' ? b.arquivo.replace(/^data:[^;]*;base64,/, '') : '', 'base64');
+    if (!buf.length) throw new Invalido('Escolha o arquivo da NF-e.');
+    if (buf.length > 6 * 1024 * 1024) throw new Invalido('Arquivo grande demais (máximo 6 MB).');
+    const inicio = buf.subarray(0, 512).toString('utf8').replace(/^\uFEFF/, '').trimStart();
+    const ext = buf.subarray(0, 5).toString('latin1') === '%PDF-' ? 'pdf' : inicio.startsWith('<') && /<(nfeProc|NFe)\b/.test(buf.toString('utf8')) ? 'xml' : null;
+    if (!ext) throw new Invalido('A NF-e precisa ser o PDF (DANFE) ou o XML da nota.');
+    const nome = (typeof b.nome === 'string' ? b.nome : '').replace(/[\\/\r\n]/g, '').slice(0, 120) || `nfe.${ext}`;
+    const id = req.params.id;
+    const caminho = arquivoNfe(id, ext);
+    mkdirSync(pastaNfe, { recursive: true });
+    writeFileSync(caminho, buf);
+    const outro = arquivoNfe(id, ext === 'pdf' ? 'xml' : 'pdf');
+    try {
+      const info: NfArquivo = { ext, nome, tamanho: buf.length, em: new Date().toISOString(), porNome: req.usuario.nome };
+      const m = ops.anexarNf(id, info, req.usuario.id);
+      if (existsSync(outro)) unlinkSync(outro);
+      return m;
+    } catch (e) {
+      unlinkSync(caminho);
+      throw e;
+    }
+  });
+  app.delete<{ Params: { id: string } }>('/api/movimentacoes/:id/nfe', { preHandler: exigir(2, 'movimentacoes') }, async (req) => {
+    const m = ops.anexarNf(req.params.id, null, req.usuario.id);
+    for (const ext of ['pdf', 'xml']) if (existsSync(arquivoNfe(req.params.id, ext))) unlinkSync(arquivoNfe(req.params.id, ext));
+    return m;
+  });
+  app.get<{ Params: { id: string } }>('/api/movimentacoes/:id/nfe', { preHandler: exigir(1, 'movimentacoes') }, async (req, reply) => {
+    const m = ops.listarMovimentacoes().find((x) => x.id === req.params.id);
+    const info = m?.dados.nfArquivo;
+    if (!m || !info) throw new NaoEncontrado('Essa movimentação não tem NF-e anexada.');
+    const caminho = arquivoNfe(m.id, info.ext);
+    if (!existsSync(caminho)) throw new NaoEncontrado('O arquivo da NF-e não foi encontrado.');
+    reply
+      .header('Content-Type', info.ext === 'pdf' ? 'application/pdf' : 'application/xml; charset=utf-8')
+      .header('Content-Disposition', `inline; filename*=UTF-8''${encodeURIComponent(info.nome)}`)
+      .header('Cache-Control', 'private, no-store');
+    return reply.send(createReadStream(caminho));
+  });
   app.post<{ Params: { id: string } }>('/api/movimentacoes/:id/aprovar', { preHandler: exigir(2, 'aprovacoes') }, async (req) => ops.decidirMovimentacao(req.params.id, req.usuario.id, true));
   app.post<{ Params: { id: string } }>('/api/movimentacoes/:id/recusar', { preHandler: exigir(2, 'aprovacoes') }, async (req) =>
     ops.decidirMovimentacao(req.params.id, req.usuario.id, false, texto((req.body as Record<string, unknown> | undefined)?.motivo, 'motivo', 500)),

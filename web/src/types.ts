@@ -213,9 +213,12 @@ export type DadosMov = {
   obsUrgente?: boolean;
   /** venda e compra: nota fiscal */
   nf?: string;
+  /** venda e compra: arquivo da NF-e anexado (PDF/DANFE ou XML) */
+  nfArquivo?: NfArquivo | null;
   /** compra: identificação da máquina que entra */
   maquina?: { marca: string; modelo: string; serie: string; ano: number | null; capacidade: number | null; combustivel: string };
 };
+export type NfArquivo = { ext: 'pdf' | 'xml'; nome: string; tamanho: number; em: string; porNome: string };
 export type NovaMovimentacao = { tipo: TipoMov; frota: string; frotaNova?: string; clienteId?: string | null; clienteNome?: string } & DadosMov;
 export type Movimentacao = {
   id: string;

@@ -13,6 +13,7 @@ import { BotaoOk } from '../components/BotaoOk';
 import { chaveContrato, chaveObs } from '../lib/avisos';
 import { BalaoUrgente } from '../components/Balao';
 import { IcBusca, IcMais } from '../components/Icones';
+import { EscolherNfe, lerBase64, lerXmlNfe, NfeAnexo, problemaNfe } from '../components/NfeAnexo';
 
 export const STATUS_MOV: Record<Movimentacao['status'], { rotulo: string; tom: Tom }> = {
   pendente: { rotulo: 'Aguardando aprovação', tom: 'warn' },
@@ -724,8 +725,25 @@ function FormVendaCompra({ tipo, frota, fechar }: { tipo: 'venda' | 'compra'; fr
   const [erro, setErro] = useState('');
   const [salvando, setSalvando] = useState(false);
   const [feita, setFeita] = useState<Movimentacao | null>(null);
+  const [nfe, setNfe] = useState<File | null>(null);
+  const [avisoNfe, setAvisoNfe] = useState('');
   const campo = (k: keyof typeof d) => ({ value: d[k], onChange: (e: { target: { value: string } }) => setD({ ...d, [k]: e.target.value }) });
   const num = d.frota.trim().toUpperCase().replace(/^FT[\s-]*/, '');
+
+  const escolherNfe = async (a: File) => {
+    const p = problemaNfe(a);
+    if (p) return setErro(p);
+    setErro('');
+    setNfe(a);
+    // XML: já preenche o número da nota e o valor, se estiverem em branco
+    const x = await lerXmlNfe(a);
+    if (x)
+      setD((v) => ({
+        ...v,
+        nf: v.nf.trim() ? v.nf : x.numero,
+        valor: v.valor.trim() || !x.valor || Number.isNaN(Number(x.valor)) ? v.valor : reaisParaCampo(Math.round(Number(x.valor) * 100)),
+      }));
+  };
   const ondeEsta = num ? clientes.find((c) => c.ativo && c.frotas.some((f) => f.numero === num)) : undefined;
   const ativos = useMemo(() => clientes.filter((c) => c.ativo).sort((a, b) => a.nome.localeCompare(b.nome)), [clientes]);
 
@@ -767,7 +785,14 @@ function FormVendaCompra({ tipo, frota, fechar }: { tipo: 'venda' | 'compra'; fr
     if (!venda && !d.descricao.trim()) return setErro('Descreva a máquina (ex.: YALE GLP050VX).');
     setSalvando(true);
     try {
-      const salva = await api.registrarMovimentacao(montar());
+      let salva = await api.registrarMovimentacao(montar());
+      if (nfe) {
+        try {
+          salva = await api.anexarNfe(salva.id, await lerBase64(nfe), nfe.name);
+        } catch (e) {
+          setAvisoNfe(`A ${tipo} foi registrada, mas a NF-e não subiu (${e instanceof Error ? e.message : 'erro'}). Anexe de novo pelo cartão da movimentação.`);
+        }
+      }
       await recarregarOperacoes();
       setFeita(salva);
     } catch (e) {
@@ -777,7 +802,7 @@ function FormVendaCompra({ tipo, frota, fechar }: { tipo: 'venda' | 'compra'; fr
     }
   };
 
-  if (feita) return <Registrada m={feita} fechar={fechar} />;
+  if (feita) return <Registrada m={feita} fechar={fechar} aviso={avisoNfe} />;
   const rot = 'flex flex-col gap-1.5';
   return (
     <div className="flex flex-col gap-4">
@@ -822,9 +847,28 @@ function FormVendaCompra({ tipo, frota, fechar }: { tipo: 'venda' | 'compra'; fr
           />
         </label>
         <label className={rot}>
-          <span className="label">Nota fiscal</span>
+          <span className="label">Nº da nota fiscal</span>
           <input className="input" {...campo('nf')} />
         </label>
+      </div>
+      <div className="flex flex-col gap-1.5">
+        <span className="label">
+          Arquivo da NF-e <span className="font-normal text-ink-3">(PDF do DANFE ou XML — opcional)</span>
+        </span>
+        {nfe ? (
+          <div className="flex items-center gap-2 rounded-[10px] border border-line bg-[#F8F7F3] px-3 py-2 text-[13px]">
+            <span className="min-w-0 flex-1 truncate font-semibold">{nfe.name}</span>
+            <span className="text-ink-3">{Math.max(1, Math.round(nfe.size / 1024))} KB</span>
+            <button type="button" className="btn-secondary h-9 px-3 text-[13px]" onClick={() => setNfe(null)}>
+              Tirar
+            </button>
+          </div>
+        ) : (
+          <div className="flex flex-wrap items-center gap-2">
+            <EscolherNfe rotulo="Anexar NF-e" escolher={(a) => void escolherNfe(a)} />
+            <span className="text-xs text-ink-3">Com o XML, o número e o valor da nota já vêm preenchidos.</span>
+          </div>
+        )}
       </div>
       <label className={rot}>
         <span className="label">Equipamento {venda && <span className="font-normal text-ink-3">(opcional)</span>}</span>
@@ -1145,13 +1189,19 @@ export function BotaoCopiar({ texto, rotulo = 'Copiar mensagem', className = 'bt
 }
 
 /** Depois de registrar: mostra a mensagem pronta para o grupo. */
-function Registrada({ m, fechar }: { m: Movimentacao; fechar: () => void }) {
+function Registrada({ m, fechar, aviso }: { m: Movimentacao; fechar: () => void; aviso?: string }) {
   const texto = textoMensagem(m);
   return (
     <div className="flex flex-col gap-3">
       <p className="rounded-[10px] bg-ok-soft px-3 py-2.5 text-[14px] text-ok">
         {m.status === 'aprovada' ? 'Registrada e aplicada no cadastro.' : 'Registrada. Entra no cadastro quando o financeiro aprovar.'}
+        {m.dados.nfArquivo && ` NF-e anexada (${m.dados.nfArquivo.nome}).`}
       </p>
+      {aviso && (
+        <p role="alert" className="rounded-[10px] bg-warn-soft px-3 py-2.5 text-[13px] text-warn-strong">
+          {aviso}
+        </p>
+      )}
       <span className="label">Mensagem para o grupo</span>
       <pre className="whitespace-pre-wrap rounded-xl border border-line bg-[#F8F7F3] p-3 font-sans text-[13.5px]">{texto}</pre>
       <div className="flex justify-end gap-2">
@@ -1198,6 +1248,7 @@ export function CartaoMov({ m, children, semBorda }: { m: Movimentacao; children
           <BotaoOk chave={chaveObs(m)} rotulo="Ok, resolvido" />
         </div>
       )}
+      <NfeAnexo m={m} />
       <p className="mt-2.5 text-xs text-ink-3">
         Registrada por {m.criadaPorNome || '—'} em {dataHora(m.criadaEm)}
         {m.decididaEm && ` · ${m.status === 'aprovada' ? 'aprovada' : 'recusada'} por ${m.decididaPorNome ?? '—'} em ${dataHora(m.decididaEm)}`}
