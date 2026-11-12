@@ -164,6 +164,12 @@ movimentações, na Relação das locações (por frota) e pendência "Urgente" 
 cartão com os mesmos campos da locação: máquina, valor, gás, contrato/esporádica, início, término, tempo de contrato,
 frete (e valor do frete).
 
+## Ficha rolando no celular, frota 0 apagada, etiqueta Helbert (nov/2026)
+Gaveta e Modal usam altura `100dvh`, filhos `shrink-0` e folga da área segura: no celular rolam até o fim. Histórico
+de peças na ficha mostra 100 e tem "Mostrar mais". Migração 22 apaga a frota 0 (teste) de equipamentos, histórico,
+pendências, oficina, conferências, movimentações e das frotas dos clientes. Ficha tem `helbert` ('sim'): etiqueta
+"Helbert" (dono divide a máquina com o irmão), só registro; aparece em Equipamentos e na Relação das locações.
+
 ## Navegação
 Menu lateral com 6 grupos (Início, Operação, Frota, Financeiro, Clientes, Administração), Painel do dia em
 `/inicio` (cartões conforme o perfil) e busca no topo (`components/BuscaGeral.tsx`; as telas leem `?busca=`).

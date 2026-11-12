@@ -1,9 +1,9 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useBuscaDaUrl } from '../lib/buscaDaUrl';
 import { Link, useNavigate } from 'react-router-dom';
 import { useEstado } from '../state';
 import type { Cliente, Frota, Movimentacao } from '../types';
-import { BalaoUrgente } from '../components/Balao';
+import { BalaoUrgente, SeloHelbert } from '../components/Balao';
 import { BotaoOk } from '../components/BotaoOk';
 import { chaveObs, urgentesEmAberto } from '../lib/avisos';
 import { formatarReais } from '../lib/dinheiro';
@@ -33,6 +33,11 @@ const freteTexto = (f: Frota) => (f.frete === 'lucminas' ? 'Lucminas' : f.frete 
 
 export function Frotas() {
   const { clientes, avisar, oficina, definirOficina, veValores: ehFinanceiro, pode, movimentacoes, avisosOk } = useEstado();
+  // etiqueta Helbert vem da ficha da máquina
+  const [helbert, setHelbert] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    api.listarEquipamentos().then((l) => setHelbert(new Set(l.filter((e) => e.helbert === 'sim').map((e) => e.frota))), () => undefined);
+  }, []);
   // observação urgente em aberto por frota (balãozinho)
   const urgentes = useMemo(() => {
     const m = new Map<string, Movimentacao[]>();
@@ -330,6 +335,7 @@ export function Frotas() {
                       <span className="flex items-center gap-1.5 font-mono font-semibold">
                         {f.numero}
                         <SeloModalidade m={f.modalidade} />
+                        <SeloHelbert ativo={helbert.has(f.numero) ? 'sim' : ''} />
                         {ofi && <SeloOficina />}
                         {urgentes.get(f.numero)?.map((m) => <BalaoUrgente key={m.id} texto={m.dados.observacoes} />)}
                         {l.duplicada && <Chip tom="bad">2 clientes</Chip>}
@@ -395,6 +401,7 @@ export function Frotas() {
                     >
                       <b className="font-mono">{l.frota.numero}</b>
                       <SeloModalidade m={l.frota.modalidade} />
+                      <SeloHelbert ativo={helbert.has(l.frota.numero) ? 'sim' : ''} />
                       {urgentes.get(l.frota.numero)?.map((m) => <BalaoUrgente key={m.id} texto={m.dados.observacoes} />)}
                       {naOficina.has(l.frota.numero) && <SeloOficina />}
                       {veValorFrota && <span className="text-ink-2">{l.frota.valor ? formatarReais(l.frota.valor) : 'sem valor'}</span>}
@@ -414,6 +421,7 @@ export function Frotas() {
           linha={linhaAberta}
           oficina={naOficina.get(aberta) ?? null}
           urgentes={urgentes.get(aberta) ?? []}
+          ehHelbert={helbert.has(aberta)}
           veValor={veValorFrota}
           edita={editaFrotas}
           fechar={() => setAberta(null)}
@@ -465,8 +473,10 @@ function DetalheLocacao({
   tirarDaOficina,
   colocarNaOficina,
   urgentes,
+  ehHelbert,
 }: {
   urgentes: Movimentacao[];
+  ehHelbert: boolean;
   frota: string;
   linha: Linha | null;
   oficina: FrotaOficina | null;
@@ -496,6 +506,7 @@ function DetalheLocacao({
         <div className="flex flex-wrap items-center gap-2">
           {c ? <b className="text-[16px]">{c.nome}</b> : <span className="text-ink-3">Sem cliente</span>}
           <SeloModalidade m={f?.modalidade} />
+          <SeloHelbert ativo={ehHelbert ? 'sim' : ''} />
           {oficina && <SeloOficina />}
         </div>
         {urgentes.map((m) => (

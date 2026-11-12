@@ -28,6 +28,8 @@ export const CAMPOS_EQUIPAMENTO = {
   // situação guardada (locada e oficina são calculadas)
   situacao: 'texto', // '' (normal) | reservada | baixada
   situacaoMotivo: 'texto',
+  // etiqueta "Helbert": o dono divide a máquina com o irmão (só registro, não muda nada no resto)
+  helbert: 'texto', // '' | 'sim'
   // uso
   horimetro: 'numero',
   horimetroEm: 'data',

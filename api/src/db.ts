@@ -410,6 +410,18 @@ const MIGRACOES = [
      feito_por INTEGER REFERENCES usuarios(id),
      obs TEXT NOT NULL DEFAULT ''
    );`,
+  // 22: apaga a frota 0 (era só de teste) de todos os lugares
+  `DELETE FROM equipamentos WHERE frota IN ('0', '00', '000');
+   DELETE FROM historico_pecas WHERE frota IN ('0', '00', '000');
+   DELETE FROM pendencias WHERE frota IN ('0', '00', '000');
+   DELETE FROM oficina WHERE frota IN ('0', '00', '000');
+   DELETE FROM conferencias WHERE frota IN ('0', '00', '000');
+   DELETE FROM movimentacoes_vistas WHERE movimentacao_id IN (SELECT id FROM movimentacoes WHERE frota IN ('0', '00', '000') OR frota_nova IN ('0', '00', '000'));
+   DELETE FROM movimentacoes WHERE frota IN ('0', '00', '000') OR frota_nova IN ('0', '00', '000');
+   UPDATE clientes SET frotas = (
+       SELECT json_group_array(json(value)) FROM json_each(clientes.frotas) WHERE json_extract(value, '$.numero') NOT IN ('0', '00', '000')
+     )
+   WHERE EXISTS (SELECT 1 FROM json_each(clientes.frotas) WHERE json_extract(value, '$.numero') IN ('0', '00', '000'));`,
 ];
 
 export function abrirBanco(caminho: string) {

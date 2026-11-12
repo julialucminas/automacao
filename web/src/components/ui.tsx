@@ -53,7 +53,7 @@ export function Modal({ aberto, fechar, titulo, children }: { aberto: boolean; f
   if (!aberto) return null;
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-ink/45 p-4" onMouseDown={(e) => e.target === e.currentTarget && fechar()}>
-      <div ref={ref} role="dialog" aria-modal="true" aria-label={titulo} className="flex w-full max-w-[480px] flex-col gap-3.5 rounded-2xl bg-white p-6">
+      <div ref={ref} role="dialog" aria-modal="true" aria-label={titulo} className="flex max-h-[calc(100dvh-2rem)] w-full max-w-[480px] flex-col gap-3.5 overflow-y-auto rounded-2xl bg-white p-6 [&>*]:shrink-0">
         <h2 className="text-xl font-bold">{titulo}</h2>
         {children}
       </div>
@@ -78,13 +78,14 @@ export function Gaveta({
   const ref = useDialogo(aberto, fechar);
   if (!aberto) return null;
   return (
-    <div className="fixed inset-0 z-30 flex justify-end bg-ink/45" onMouseDown={(e) => e.target === e.currentTarget && fechar()}>
+    <div className="fixed inset-0 z-30 flex h-[100dvh] justify-end bg-ink/45" onMouseDown={(e) => e.target === e.currentTarget && fechar()}>
       <div
         ref={ref}
         role="dialog"
         aria-modal="true"
         aria-label={titulo}
-        className={`flex h-full w-full ${largo ? 'max-w-[760px]' : 'max-w-[500px]'} flex-col gap-4 overflow-y-auto bg-white p-6`}
+        // 100dvh: no celular a barra do navegador não esconde o fim; shrink-0: nenhum bloco é espremido, a gaveta rola até o final
+        className={`flex h-[100dvh] w-full ${largo ? 'max-w-[760px]' : 'max-w-[500px]'} flex-col gap-4 overflow-y-auto overscroll-contain bg-white p-6 pb-[max(2rem,env(safe-area-inset-bottom))] [&>*]:shrink-0`}
       >
         <div className="flex items-center justify-between gap-3">
           <h2 className="text-xl font-bold">{titulo}</h2>

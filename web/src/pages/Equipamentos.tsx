@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { api } from '../api';
 import { useEstado } from '../state';
+import { SeloHelbert } from '../components/Balao';
 import type { DadosEquipamento, Equipamento, PecaHistorico, RegraPeriferico } from '../types';
 import { regrasDe, situacaoPerifericos } from '../lib/manutencao';
 import { COMBUSTIVEIS, SITUACOES, TIPOS_VISITA, horasParaPreventiva, montarEquipamentos, nomeEquipamento, type LinhaEquipamento, type Situacao } from '../lib/equipamentos';
@@ -133,7 +134,8 @@ export function Equipamentos() {
                   <td className="px-4 py-2.5">
                     <button type="button" className="font-mono text-[15px] font-bold hover:underline" onClick={() => setAberta(l.frota)}>
                       FT{l.frota}
-                    </button>
+                    </button>{' '}
+                    <SeloHelbert ativo={l.ficha?.helbert} />
                   </td>
                   <td className="px-4 py-2.5">
                     <span className="font-semibold">{nomeEquipamento(l) || <span className="text-ink-3">sem ficha</span>}</span>
@@ -226,6 +228,7 @@ export function Ficha({
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span className="flex flex-wrap gap-1.5">
           <Chip tom={SITUACOES[linha.situacao].tom}>{SITUACOES[linha.situacao].rotulo}</Chip>
+          <SeloHelbert ativo={f.helbert} />
           {linha.cliente && <Chip tom="neutro">{linha.cliente.nome}</Chip>}
           {linha.oficina?.observacao && <Chip tom="warn">{linha.oficina.observacao}</Chip>}
           {linha.contratoVencido && <Chip tom="bad">contrato vencido</Chip>}
@@ -384,7 +387,9 @@ function Perifericos({ ficha, regras }: { ficha: Equipamento | null; regras: Reg
 function HistoricoPecas({ frota, veValores }: { frota: string; veValores: boolean }) {
   const [itens, setItens] = useState<PecaHistorico[] | null>(null);
   const [busca, setBusca] = useState('');
+  const [mostrar, setMostrar] = useState(100);
   useEffect(() => {
+    setMostrar(100);
     setItens(null);
     api.historicoDaFrota(frota).then(setItens, () => setItens([]));
   }, [frota]);
@@ -425,7 +430,7 @@ function HistoricoPecas({ frota, veValores }: { frota: string; veValores: boolea
             {busca && ` · com “${busca}”`}
           </p>
           <ul className="flex flex-col divide-y divide-line-soft rounded-xl border border-line">
-            {lista.slice(0, 300).map((p) => (
+            {lista.slice(0, mostrar).map((p) => (
               <li key={p.id} className="grid grid-cols-[84px_1fr_auto] gap-x-3 px-3.5 py-2 text-[13px]">
                 <span className="text-ink-3">{dataBr(p.data)}</span>
                 <span>
@@ -440,7 +445,11 @@ function HistoricoPecas({ frota, veValores }: { frota: string; veValores: boolea
               </li>
             ))}
           </ul>
-          {lista.length > 300 && <p className="text-xs text-ink-3">Mostrando os 300 mais recentes. Use a busca para achar os outros.</p>}
+          {lista.length > mostrar && (
+            <button type="button" className="btn-secondary btn-sm self-center" onClick={() => setMostrar(mostrar + 200)}>
+              Mostrar mais ({lista.length - mostrar} restantes)
+            </button>
+          )}
         </>
       )}
     </section>
@@ -473,6 +482,7 @@ const GRUPOS_FORM: { titulo: string; campos: Campo[] }[] = [
     campos: [
       { k: 'situacao', rotulo: 'Situação guardada', opcoes: { reservada: 'Reservada', baixada: 'Vendida / baixada' } },
       { k: 'situacaoMotivo', rotulo: 'Motivo' },
+      { k: 'helbert', rotulo: 'Etiqueta Helbert (dividida com o irmão)', opcoes: { sim: 'Sim, é Helbert' } },
     ],
   },
   {

@@ -334,6 +334,8 @@ export type DadosEquipamento = {
   contratoValor?: number | null;
   contratoReajuste?: number | null;
   contratoObs?: string | null;
+  /** etiqueta Helbert: o dono divide a máquina com o irmão (só registro) */
+  helbert?: string | null;
   observacoes?: string | null;
   perifericosNaoAplica?: string | null;
 } & Partial<Record<`${PerifericoId}Data` | `${PerifericoId}ProximaData`, string | null>> &

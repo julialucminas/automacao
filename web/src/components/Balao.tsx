@@ -15,3 +15,16 @@ export function BalaoUrgente({ texto, apagado }: { texto: string; apagado?: bool
     </span>
   );
 }
+
+/** Etiqueta "Helbert": o dono divide a máquina com o irmão (só registro). */
+export function SeloHelbert({ ativo }: { ativo?: string | null }) {
+  if (ativo !== 'sim') return null;
+  return (
+    <span
+      title="Helbert: máquina dividida entre o dono e o irmão (só registro)"
+      className="rounded-full bg-[#DCFCE7] px-1.5 py-px font-sans text-[10.5px] font-bold uppercase tracking-wide text-[#166534]"
+    >
+      Helbert
+    </span>
+  );
+}
