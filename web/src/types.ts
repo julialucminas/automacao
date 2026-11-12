@@ -178,7 +178,7 @@ export type NovaSolicitacao = {
   texto: string;
 };
 
-export type TipoMov = 'locacao' | 'devolucao' | 'troca' | 'reajuste';
+export type TipoMov = 'locacao' | 'devolucao' | 'troca' | 'reajuste' | 'venda' | 'compra';
 export type ItemReajuste = { frota: string; antes: number; novo: number };
 export type DadosMov = {
   data: string;
@@ -199,8 +199,12 @@ export type DadosMov = {
   percentual?: number | null;
   /** reajuste: contrato renovado até */
   renovaAte?: string | null;
-  /** devolução/troca: valor que a frota tinha antes */
+  /** devolução/troca/venda: valor de locação que a frota tinha antes */
   valorAnterior?: number | null;
+  /** venda e compra: nota fiscal */
+  nf?: string;
+  /** compra: identificação da máquina que entra */
+  maquina?: { marca: string; modelo: string; serie: string; ano: number | null; capacidade: number | null; combustivel: string };
 };
 export type NovaMovimentacao = { tipo: TipoMov; frota: string; frotaNova?: string; clienteId?: string | null; clienteNome?: string } & DadosMov;
 export type Movimentacao = {
@@ -304,6 +308,10 @@ export type DadosEquipamento = {
   proximaPreventiva?: number | null;
   intervaloVisitaDias?: number | null;
   compraValor?: number | null;
+  vendaData?: string | null;
+  vendaValor?: number | null;
+  vendaComprador?: string | null;
+  vendaNf?: string | null;
   compraNf?: string | null;
   compraData?: string | null;
   fornecedor?: string | null;

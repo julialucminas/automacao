@@ -44,6 +44,11 @@ export const CAMPOS_EQUIPAMENTO = {
   compraNf: 'texto',
   compraData: 'data',
   fornecedor: 'texto',
+  // venda (a máquina sai da frota; situação vira "baixada")
+  vendaData: 'data',
+  vendaValor: 'centavos',
+  vendaComprador: 'texto',
+  vendaNf: 'texto',
   // contrato da locação atual
   contratoNumero: 'texto',
   contratoVencimento: 'data',
@@ -65,7 +70,7 @@ export type DadosEquipamento = Partial<Record<CampoEquipamento, string | number 
 export type Equipamento = DadosEquipamento & { frota: string; atualizadoEm: string; atualizadoPor: string };
 
 /** Campos com dinheiro: só vão para quem vê valores. */
-export const CAMPOS_VALOR: CampoEquipamento[] = ['compraValor', 'compraNf', 'fornecedor', 'contratoValor', 'contratoReajuste'];
+export const CAMPOS_VALOR: CampoEquipamento[] = ['compraValor', 'compraNf', 'fornecedor', 'contratoValor', 'contratoReajuste', 'vendaValor', 'vendaNf'];
 
 export class DadoInvalido extends Error {}
 

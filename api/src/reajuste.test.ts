@@ -91,4 +91,62 @@ describe('reajuste de valor', () => {
     const d = (await como('angelise')('POST', '/api/movimentacoes', { tipo: 'devolucao', frota: '63', data: '2026-12-10' })).json();
     expect(d.dados.valorAnterior).toBe(410000);
   });
+
+  it('locação, troca e devolução mantêm o contrato da ficha; venda tira da frota; compra cria a ficha', async () => {
+    const base = { frete: '', gas: 0, contrato: '', prazoPagamento: '', emails: [], contatoNome: '', contatoTelefone: '', descricao: '', observacoes: '' };
+    const a = como('angelise');
+    const ficha = (f: string) => equipamentos(db).buscar(f);
+    const clienteDe = async (f: string) => {
+      const r = (await a('GET', '/api/clientes')).json();
+      return (r.clientes ?? r).find((c: { frotas: { numero: string }[] }) => c.frotas.some((x) => x.numero === f))?.nome ?? null;
+    };
+
+    // compra: FT121 entra na frota com a ficha montada
+    let r = await a('POST', '/api/movimentacoes', {
+      ...base,
+      tipo: 'compra',
+      frota: 'FT121',
+      data: '2026-11-10',
+      clienteNome: 'TRADIMAQ',
+      valor: 9500000,
+      nf: '4521',
+      descricao: 'YALE GLP050VX',
+      maquina: { marca: 'YALE', modelo: '50 VX', serie: 'A975Y99999', ano: 2024, capacidade: 2500, combustivel: 'glp' },
+    });
+    expect(r.statusCode).toBe(201);
+    expect(ficha('121')).toMatchObject({ descricao: 'YALE GLP050VX', marca: 'YALE', serie: 'A975Y99999', ano: 2024, combustivel: 'glp', compraValor: 9500000, compraNf: '4521', fornecedor: 'TRADIMAQ', compraData: '2026-11-10' });
+    // não compra de novo um número que já existe
+    expect((await a('POST', '/api/movimentacoes', { ...base, tipo: 'compra', frota: '121', data: '2026-11-11', descricao: 'X' })).statusCode).toBe(409);
+    expect((await a('POST', '/api/movimentacoes', { ...base, tipo: 'compra', frota: '122', data: '2026-11-11' })).statusCode).toBe(400);
+
+    // locação da 121: contrato vai para a ficha
+    r = await a('POST', '/api/movimentacoes', { ...base, tipo: 'locacao', frota: '121', data: '2026-11-12', clienteId, valor: 390000, fim: '2027-11-12' });
+    expect(r.statusCode).toBe(201);
+    expect(ficha('121')).toMatchObject({ contratoValor: 390000, contratoVencimento: '2027-11-12' });
+
+    // troca 53 → 121? (121 já está no cliente) — troca da 63 pela 130: contrato passa para a 130
+    equipamentos(db).salvar('63', { contratoNumero: '034/2024', contratoValor: 385000, contratoVencimento: '2027-01-01' }, 1);
+    r = await a('POST', '/api/movimentacoes', { ...base, tipo: 'troca', frota: '63', frotaNova: '130', data: '2026-11-12', valor: null });
+    expect(r.statusCode).toBe(201);
+    expect(ficha('130')).toMatchObject({ contratoNumero: '034/2024', contratoValor: 385000, contratoVencimento: '2027-01-01' });
+    expect(ficha('63')!.contratoNumero).toBeUndefined();
+    expect(await clienteDe('130')).toBe('METALFISA');
+
+    // devolução da 121: contrato sai da ficha
+    r = await a('POST', '/api/movimentacoes', { ...base, tipo: 'devolucao', frota: '121', data: '2026-11-13', valor: null });
+    expect(r.json().dados.valorAnterior).toBe(390000);
+    expect(ficha('121')!.contratoValor).toBeUndefined();
+    expect(await clienteDe('121')).toBeNull();
+
+    // venda da 53 (estava locada na METALFISA): sai do cliente, ficha baixada
+    r = await a('POST', '/api/movimentacoes', { ...base, tipo: 'venda', frota: '53', data: '2026-11-14', clienteNome: 'FENIX NOVUS', valor: 6500000, nf: '1200' });
+    expect(r.statusCode).toBe(201);
+    expect(r.json().dados.valorAnterior).toBe(385000);
+    expect(await clienteDe('53')).toBeNull();
+    expect(ficha('53')).toMatchObject({ situacao: 'baixada', vendaValor: 6500000, vendaComprador: 'FENIX NOVUS', vendaNf: '1200', vendaData: '2026-11-14' });
+    expect(ficha('53')!.contratoValor).toBeUndefined();
+    // máquina vendida não volta a ser locada
+    expect((await a('POST', '/api/movimentacoes', { ...base, tipo: 'locacao', frota: '53', data: '2026-11-15', clienteId, valor: 1 })).statusCode).toBe(409);
+    expect((await a('POST', '/api/movimentacoes', { ...base, tipo: 'venda', frota: '53', data: '2026-11-15' })).statusCode).toBe(409);
+  });
 });

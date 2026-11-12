@@ -16,9 +16,11 @@ export const STATUS_MOV: Record<Movimentacao['status'], { rotulo: string; tom: T
   aprovada: { rotulo: 'Aprovada', tom: 'ok' },
   rejeitada: { rotulo: 'Recusada', tom: 'bad' },
 };
-export const TOM_TIPO: Record<TipoMov, Tom> = { locacao: 'ok', troca: 'info', devolucao: 'neutro', reajuste: 'warn' };
-const PLURAL: Record<TipoMov, string> = { locacao: 'Locações', troca: 'Trocas', devolucao: 'Devoluções', reajuste: 'Reajustes' };
-const SINGULAR: Record<TipoMov, string> = { locacao: 'locação', troca: 'troca', devolucao: 'devolução', reajuste: 'reajuste' };
+export const TOM_TIPO: Record<TipoMov, Tom> = { locacao: 'ok', troca: 'info', devolucao: 'neutro', reajuste: 'warn', venda: 'bad', compra: 'info' };
+const PLURAL: Record<TipoMov, string> = { locacao: 'Locações', troca: 'Trocas', devolucao: 'Devoluções', reajuste: 'Reajustes', venda: 'Vendas', compra: 'Compras' };
+const SINGULAR: Record<TipoMov, string> = { locacao: 'locação', troca: 'troca', devolucao: 'devolução', reajuste: 'reajuste', venda: 'venda', compra: 'compra' };
+const TODOS_TIPOS: TipoMov[] = ['locacao', 'troca', 'devolucao', 'reajuste', 'venda', 'compra'];
+const COMB: Record<string, string> = { eletrica: 'Elétrica', glp: 'GLP (gás)', diesel: 'Diesel', gasolina: 'Gasolina' };
 
 const pct = (antes: number, novo: number) => (antes ? `${novo >= antes ? '+' : ''}${(((novo - antes) / antes) * 100).toFixed(1).replace('.', ',')}%` : '');
 const sinal = (c: number) => `${c > 0 ? '+' : c < 0 ? '−' : ''}${formatarReais(Math.abs(c))}`;
@@ -41,6 +43,19 @@ export function detalhesMov(m: { tipo: TipoMov; frota: string; frotaNova?: strin
     if (d.percentual != null) l.push(['Percentual', `${String(d.percentual).replace('.', ',')}%`]);
     if (d.renovaAte) l.push(['Contrato renovado até', dataBr(d.renovaAte)]);
     if (d.observacoes) l.push(['Motivo', d.observacoes]);
+    return l;
+  }
+  if (m.tipo === 'venda' || m.tipo === 'compra') {
+    const q = d.maquina;
+    if (d.descricao) l.push(['Equipamento', d.descricao]);
+    if (q) {
+      const ident = [q.marca, q.modelo, q.serie && `série ${q.serie}`, q.ano && `ano ${q.ano}`, q.capacidade && `${q.capacidade} kg`, q.combustivel && COMB[q.combustivel]].filter(Boolean).join(' · ');
+      if (ident) l.push(['Identificação', ident]);
+    }
+    if (d.valor != null) l.push([m.tipo === 'venda' ? 'Valor da venda' : 'Valor da compra', formatarReais(d.valor)]);
+    if (d.nf) l.push(['Nota fiscal', d.nf]);
+    if (m.tipo === 'venda' && d.valorAnterior) l.push(['Locação que deixa de entrar', `${formatarReais(d.valorAnterior)} por mês`]);
+    if (d.observacoes) l.push(['Observações', d.observacoes]);
     return l;
   }
   if (m.tipo === 'troca') l.push(['Troca', `FT${m.frota} → FT${m.frotaNova ?? ''}`]);
@@ -96,7 +111,7 @@ export function Movimentacoes() {
   // atalho da Central do financeiro: /movimentacoes?nova=reajuste abre o painel já no reajuste
   useEffect(() => {
     const t = params.get('nova');
-    if (registra && t && ['locacao', 'troca', 'devolucao', 'reajuste'].includes(t)) {
+    if (registra && t && (TODOS_TIPOS as string[]).includes(t)) {
       setNova({ tipo: t as TipoMov });
       setParams({}, { replace: true });
     }
@@ -113,6 +128,8 @@ export function Movimentacoes() {
   const efeitos = doMes.map(efeitoNaReceita);
   const saldo = efeitos.reduce<number>((t, e) => t + (e ?? 0), 0);
   const semValor = efeitos.filter((e) => e === null).length;
+  const vendido = doMes.filter((m) => m.tipo === 'venda').reduce((t, m) => t + (m.dados.valor ?? 0), 0);
+  const comprado = doMes.filter((m) => m.tipo === 'compra').reduce((t, m) => t + (m.dados.valor ?? 0), 0);
   const pendentes = movimentacoes.filter((m) => m.status === 'pendente');
   const vencendo = useMemo(() => contratosVencendo(eqs, clientes, hoje), [eqs, clientes, hoje]);
 
@@ -137,7 +154,7 @@ export function Movimentacoes() {
           <div className="eyebrow">Locação</div>
           <h1 className="mt-1 text-[26px] font-bold">Movimentações</h1>
           <p className="max-w-[640px] text-[13px] text-ink-3">
-            Locações, trocas, devoluções e reajustes de valor de cada máquina. {aprova ? 'O que você registra entra no cadastro na hora.' : 'O que você registra vai para o financeiro aprovar.'}
+            Locações, trocas, devoluções, reajustes, vendas e compras de máquinas. {aprova ? 'O que você registra entra no cadastro na hora.' : 'O que você registra vai para o financeiro aprovar.'}
           </p>
         </div>
         {registra && (
@@ -167,7 +184,7 @@ export function Movimentacoes() {
           </button>
         </div>
         <div className="flex flex-wrap gap-x-8 gap-y-3">
-          {(['locacao', 'troca', 'devolucao', 'reajuste'] as TipoMov[]).map((t) => (
+          {TODOS_TIPOS.map((t) => (
             <button key={t} type="button" onClick={() => setTipo(tipo === t ? 'todos' : t)} className={`flex items-baseline gap-1.5 rounded-lg px-1 text-left ${tipo === t ? 'bg-brand-tint' : ''}`}>
               <b className="text-[24px] leading-none">{conta(t)}</b>
               <span className="text-[13px] text-ink-3">{conta(t) === 1 ? SINGULAR[t] : PLURAL[t].toLowerCase()}</span>
@@ -179,6 +196,13 @@ export function Movimentacoes() {
               <span className="text-xs text-ink-3">
                 na receita mensal{semValor ? ` (${semValor} sem valor informado)` : ''}
               </span>
+              {(vendido > 0 || comprado > 0) && (
+                <span className="mt-1 text-xs text-ink-2">
+                  {vendido > 0 && <>vendas {formatarReais(vendido)}</>}
+                  {vendido > 0 && comprado > 0 && ' · '}
+                  {comprado > 0 && <>compras {formatarReais(comprado)}</>}
+                </span>
+              )}
             </span>
           )}
         </div>
@@ -214,7 +238,7 @@ export function Movimentacoes() {
 
       <div className="flex flex-wrap items-center gap-2">
         <div className="flex flex-wrap gap-1.5" role="group" aria-label="Tipo">
-          {(['todos', 'locacao', 'troca', 'devolucao', 'reajuste'] as const).map((t) => (
+          {(['todos', ...TODOS_TIPOS] as const).map((t) => (
             <button
               key={t}
               type="button"
@@ -275,7 +299,7 @@ export function Movimentacoes() {
                             <span className="text-ink-2">
                               {formatarReais(m.dados.itens![0].antes)} → <b className="text-ink">{formatarReais(m.dados.itens![0].novo)}</b>
                             </span>
-                          ) : m.tipo === 'locacao' && m.dados.valor != null ? (
+                          ) : (m.tipo === 'locacao' || m.tipo === 'venda' || m.tipo === 'compra') && m.dados.valor != null ? (
                             formatarReais(m.dados.valor)
                           ) : null}
                           {ef != null && ef !== 0 && m.tipo !== 'locacao' && (
@@ -318,8 +342,8 @@ function NovaMov({ inicial, fechar }: { inicial: { tipo: TipoMov; clienteId?: st
   const [tipo, setTipo] = useState<TipoMov>(inicial.tipo);
   return (
     <div className="flex flex-col gap-4">
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4" role="radiogroup" aria-label="Tipo de movimentação">
-        {(['locacao', 'troca', 'devolucao', 'reajuste'] as TipoMov[]).map((t) => (
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3" role="radiogroup" aria-label="Tipo de movimentação">
+        {TODOS_TIPOS.map((t) => (
           <label
             key={t}
             className={`flex min-h-[44px] cursor-pointer items-center gap-2 rounded-[10px] border px-3 text-[13px] ${tipo === t ? 'border-ink bg-white font-semibold' : 'border-line-strong bg-white/60'}`}
@@ -330,7 +354,13 @@ function NovaMov({ inicial, fechar }: { inicial: { tipo: TipoMov; clienteId?: st
         ))}
       </div>
       <p className="-mt-2 text-[13px] text-ink-3">{aprova ? 'Entra no cadastro na hora.' : 'Vai para o financeiro aprovar antes de entrar no cadastro.'}</p>
-      {tipo === 'reajuste' ? <FormReajuste clienteInicial={inicial.clienteId} frotaInicial={inicial.frota} fechar={fechar} /> : <FormMov tipo={tipo} fechar={fechar} />}
+      {tipo === 'reajuste' ? (
+        <FormReajuste clienteInicial={inicial.clienteId} frotaInicial={inicial.frota} fechar={fechar} />
+      ) : tipo === 'venda' || tipo === 'compra' ? (
+        <FormVendaCompra key={tipo} tipo={tipo} fechar={fechar} />
+      ) : (
+        <FormMov tipo={tipo} fechar={fechar} />
+      )}
     </div>
   );
 }
@@ -598,6 +628,182 @@ function FormMov({ tipo, fechar }: { tipo: TipoMov; fechar: () => void }) {
         {m.frota.trim() && <BotaoCopiar texto={mensagemAtual} />}
         <button type="button" className="btn-primary" onClick={registrar} disabled={salvando}>
           {salvando ? 'Registrando…' : ehFinanceiro ? 'Registrar movimentação' : 'Enviar para aprovação'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** Venda (máquina sai da frota) e compra (máquina nova entra, com a ficha montada). */
+function FormVendaCompra({ tipo, fechar }: { tipo: 'venda' | 'compra'; fechar: () => void }) {
+  const { clientes, recarregarOperacoes, aprova: ehFinanceiro } = useEstado();
+  const venda = tipo === 'venda';
+  const [d, setD] = useState({ frota: '', data: hojeIso(), parte: '', valor: '', nf: '', descricao: '', marca: '', modelo: '', serie: '', ano: '', capacidade: '', combustivel: '', obs: '' });
+  const [erro, setErro] = useState('');
+  const [salvando, setSalvando] = useState(false);
+  const [feita, setFeita] = useState<Movimentacao | null>(null);
+  const campo = (k: keyof typeof d) => ({ value: d[k], onChange: (e: { target: { value: string } }) => setD({ ...d, [k]: e.target.value }) });
+  const num = d.frota.trim().toUpperCase().replace(/^FT[\s-]*/, '');
+  const ondeEsta = num ? clientes.find((c) => c.ativo && c.frotas.some((f) => f.numero === num)) : undefined;
+  const ativos = useMemo(() => clientes.filter((c) => c.ativo).sort((a, b) => a.nome.localeCompare(b.nome)), [clientes]);
+
+  const montar = () => {
+    const valor = d.valor.trim() ? lerReais(d.valor) : null;
+    const cli = venda ? ativos.find((c) => c.nome === d.parte.trim().toUpperCase()) : undefined;
+    return {
+      ...movVazia(d.data),
+      tipo,
+      frota: num,
+      data: d.data,
+      valor,
+      clienteId: cli?.id ?? null,
+      clienteNome: cli ? cli.nome : d.parte.trim(),
+      nf: d.nf.trim(),
+      descricao: d.descricao.trim(),
+      observacoes: d.obs.trim(),
+      ...(venda
+        ? {}
+        : {
+            maquina: {
+              marca: d.marca.trim(),
+              modelo: d.modelo.trim(),
+              serie: d.serie.trim(),
+              ano: d.ano.trim() ? Number(d.ano) : null,
+              capacidade: d.capacidade.trim() ? Number(d.capacidade.replace(/\D/g, '')) : null,
+              combustivel: d.combustivel,
+            },
+          }),
+    } as NovaMovimentacao;
+  };
+
+  const registrar = async () => {
+    setErro('');
+    if (!num) return setErro('Informe o número da frota.');
+    if (!d.data) return setErro('Informe a data.');
+    if (d.valor.trim() && lerReais(d.valor) === null) return setErro(`Não entendi o valor "${d.valor}". Use, por exemplo, 65.000,00`);
+    if (!venda && !d.descricao.trim()) return setErro('Descreva a máquina (ex.: YALE GLP050VX).');
+    setSalvando(true);
+    try {
+      const salva = await api.registrarMovimentacao(montar());
+      await recarregarOperacoes();
+      setFeita(salva);
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : 'Não foi possível registrar.');
+    } finally {
+      setSalvando(false);
+    }
+  };
+
+  if (feita) return <Registrada m={feita} fechar={fechar} />;
+  const rot = 'flex flex-col gap-1.5';
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="grid grid-cols-2 gap-3">
+        <label className={rot}>
+          <span className="label">{venda ? 'Frota vendida' : 'Número de frota novo'}</span>
+          <input className="input uppercase" {...campo('frota')} placeholder={venda ? 'FT48' : 'FT121'} />
+        </label>
+        <label className={rot}>
+          <span className="label">Data</span>
+          <input type="date" className="input" {...campo('data')} />
+        </label>
+      </div>
+      {venda && ondeEsta && (
+        <p className="-mt-2 rounded-[10px] bg-warn-soft px-3 py-2 text-[13px] text-warn-strong">
+          A FT{num} está locada para <b>{ondeEsta.nome}</b>. Com a venda, ela sai desse cliente e deixa de ser faturada.
+        </p>
+      )}
+      <label className={rot}>
+        <span className="label">{venda ? 'Comprador' : 'Fornecedor'}</span>
+        <input className="input" list={venda ? 'venda-clientes' : undefined} {...campo('parte')} placeholder={venda ? 'Cliente ou empresa que comprou' : 'De quem a Lucminas comprou'} />
+        {venda && (
+          <datalist id="venda-clientes">
+            {ativos.map((c) => (
+              <option key={c.id} value={c.nome} />
+            ))}
+          </datalist>
+        )}
+      </label>
+      <div className="grid grid-cols-2 gap-3">
+        <label className={rot}>
+          <span className="label">{venda ? 'Valor da venda (R$)' : 'Valor da compra (R$)'}</span>
+          <input
+            className="input text-right"
+            inputMode="decimal"
+            {...campo('valor')}
+            onBlur={() => {
+              const v = lerReais(d.valor);
+              if (v !== null) setD((x) => ({ ...x, valor: reaisParaCampo(v) }));
+            }}
+            placeholder="65.000,00"
+          />
+        </label>
+        <label className={rot}>
+          <span className="label">Nota fiscal</span>
+          <input className="input" {...campo('nf')} />
+        </label>
+      </div>
+      <label className={rot}>
+        <span className="label">Equipamento {venda && <span className="font-normal text-ink-3">(opcional)</span>}</span>
+        <input className="input" {...campo('descricao')} placeholder="YALE GLP050VX" />
+      </label>
+      {!venda && (
+        <fieldset className="grid grid-cols-2 gap-3 rounded-[10px] bg-[#F8F7F3] p-3 sm:grid-cols-3">
+          <legend className="px-1 text-xs font-semibold text-ink-3">Vai para a ficha da máquina (dá para completar depois)</legend>
+          <label className={rot}>
+            <span className="label">Marca</span>
+            <input className="input" {...campo('marca')} />
+          </label>
+          <label className={rot}>
+            <span className="label">Modelo</span>
+            <input className="input" {...campo('modelo')} />
+          </label>
+          <label className={rot}>
+            <span className="label">Nº de série</span>
+            <input className="input" {...campo('serie')} />
+          </label>
+          <label className={rot}>
+            <span className="label">Ano</span>
+            <input className="input" inputMode="numeric" {...campo('ano')} />
+          </label>
+          <label className={rot}>
+            <span className="label">Capacidade (kg)</span>
+            <input className="input" inputMode="numeric" {...campo('capacidade')} />
+          </label>
+          <label className={rot}>
+            <span className="label">Combustível</span>
+            <select className="input" {...campo('combustivel')}>
+              <option value="">—</option>
+              {Object.entries(COMB).map(([k, v]) => (
+                <option key={k} value={k}>
+                  {v}
+                </option>
+              ))}
+            </select>
+          </label>
+        </fieldset>
+      )}
+      <label className={rot}>
+        <span className="label">Observações</span>
+        <textarea rows={2} className="input resize-y py-2 text-[13px]" {...campo('obs')} />
+      </label>
+      <p className="text-xs text-ink-3">
+        {venda
+          ? 'Depois de ' + (ehFinanceiro ? 'registrada' : 'aprovada') + ', a máquina sai do cliente (se estiver locada) e da oficina, e a ficha fica como "Vendida / baixada" com os dados da venda.'
+          : 'Depois de ' + (ehFinanceiro ? 'registrada' : 'aprovada') + ', a máquina entra na frota como disponível, com a ficha montada com estes dados.'}
+      </p>
+      {erro && (
+        <div role="alert" className="rounded-[10px] bg-bad-soft px-3 py-2.5 text-[13px] text-bad-strong">
+          {erro}
+        </div>
+      )}
+      <div className="sticky bottom-0 flex flex-wrap justify-end gap-2 border-t border-line bg-white pt-3">
+        <button type="button" className="btn-secondary mr-auto" onClick={fechar}>
+          Cancelar
+        </button>
+        {num && <BotaoCopiar texto={() => textoMensagem({ ...montar(), clienteNome: montar().clienteNome ?? '', dados: montar() })} />}
+        <button type="button" className="btn-primary" onClick={registrar} disabled={salvando}>
+          {salvando ? 'Registrando…' : ehFinanceiro ? `Registrar ${tipo}` : 'Enviar para aprovação'}
         </button>
       </div>
     </div>

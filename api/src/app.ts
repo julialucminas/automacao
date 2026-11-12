@@ -166,20 +166,10 @@ function limitador(max: number, janelaMs: number) {
 
 export function criarApp(db: Banco, opcoes: { cookieSeguro: boolean; logger?: boolean; pastaDados?: string; carteiro?: Carteiro; monitorar?: boolean; esperaCopiaMs?: number }) {
   const repo = repositorio(db);
-  const ops = operacoes(db, repo, (frota, d, usuarioId) => {
-    // reajuste aprovado: o valor (e a renovação) vai também para a ficha da máquina, se ela existir
-    const eqs = tabelaEquipamentos(db);
-    const atual = eqs.buscar(frota);
-    if (!atual) return;
-    eqs.salvar(
-      frota,
-      {
-        ...(d.contratoValor !== undefined ? { contratoValor: d.contratoValor } : {}),
-        ...(d.contratoVencimento ? { contratoVencimento: d.contratoVencimento } : {}),
-        ...(d.limparReajusteSe !== undefined && atual.contratoReajuste === d.limparReajusteSe ? { contratoReajuste: null } : {}),
-      },
-      usuarioId,
-    );
+  const ops = operacoes(db, repo, {
+    // movimentações mantêm a ficha da máquina em dia (contrato, venda, compra)
+    buscar: (frota) => tabelaEquipamentos(db).buscar(frota) ?? null,
+    salvar: (frota, d, usuarioId) => void tabelaEquipamentos(db).salvar(frota, d, usuarioId),
   });
   const app = Fastify({ logger: opcoes.logger ?? false, trustProxy: true, bodyLimit: 1_000_000 });
   const podeTentar = limitador(10, 15 * 60_000);
@@ -325,8 +315,9 @@ export function criarApp(db: Banco, opcoes: { cookieSeguro: boolean; logger?: bo
   // ---------- movimentações ----------
   const lerMov = (corpo: unknown): NovaMov => {
     const b = (corpo ?? {}) as Record<string, unknown>;
-    const tipo = (['locacao', 'devolucao', 'troca', 'reajuste'].includes(b.tipo as string) ? b.tipo : invalido('Tipo de movimentação inválido.')) as TipoMov;
+    const tipo = (['locacao', 'devolucao', 'troca', 'reajuste', 'venda', 'compra'].includes(b.tipo as string) ? b.tipo : invalido('Tipo de movimentação inválido.')) as TipoMov;
     if (tipo === 'reajuste') return lerReajuste(b);
+    if (tipo === 'venda' || tipo === 'compra') return lerVendaCompra(tipo, b);
     const frota = texto(b.frota, 'frota', 50).toUpperCase().replace(/^FT[\s-]*/, '');
     if (!frota) throw new Invalido('Informe a frota.');
     const frotaNova = texto(b.frotaNova, 'frota nova', 50).toUpperCase().replace(/^FT[\s-]*/, '');
@@ -356,6 +347,51 @@ export function criarApp(db: Banco, opcoes: { cookieSeguro: boolean; logger?: bo
       contatoTelefone: texto(b.contatoTelefone, 'telefone', 40),
       descricao: texto(b.descricao, 'descrição', 200),
       observacoes: texto(b.observacoes, 'observações', 2000),
+    };
+  };
+
+  /** Venda (a máquina sai da frota) e compra (uma máquina nova entra). */
+  const lerVendaCompra = (tipo: 'venda' | 'compra', b: Record<string, unknown>): NovaMov => {
+    const frota = texto(b.frota, 'frota', 50).toUpperCase().replace(/^FT[\s-]*/, '') || invalido('Informe a frota.');
+    const data = lerDataIso(b.data, 'Data') ?? invalido('Informe a data.');
+    const valor = b.valor === null || b.valor === undefined || b.valor === '' ? null : Number(b.valor);
+    if (valor !== null && (!Number.isInteger(valor) || valor < 0 || valor > 100_000_000_00)) throw new Invalido('Valor inválido.');
+    const clienteId = tipo === 'venda' && typeof b.clienteId === 'string' && b.clienteId ? b.clienteId : null;
+    const parte = texto(b.clienteNome, tipo === 'venda' ? 'comprador' : 'fornecedor', 200);
+    const descricao = texto(b.descricao, 'equipamento', 200);
+    if (tipo === 'compra' && !descricao) throw new Invalido('Descreva a máquina comprada (ex.: YALE GLP050VX).');
+    const q = (b.maquina ?? {}) as Record<string, unknown>;
+    const inteiro = (v: unknown, nome: string, max: number) => (v === null || v === undefined || v === '' ? null : Number.isInteger(Number(v)) && Number(v) >= 0 && Number(v) <= max ? Number(v) : invalido(`${nome} inválido.`));
+    return {
+      tipo,
+      frota,
+      clienteId,
+      clienteNome: clienteId ? '' : parte,
+      data,
+      valor,
+      frete: '',
+      gas: 0,
+      contrato: '',
+      fim: null,
+      prazoPagamento: '',
+      emails: [],
+      contatoNome: '',
+      contatoTelefone: '',
+      descricao,
+      observacoes: texto(b.observacoes, 'observações', 2000),
+      nf: texto(b.nf, 'nota fiscal', 60),
+      ...(tipo === 'compra'
+        ? {
+            maquina: {
+              marca: texto(q.marca, 'marca', 60),
+              modelo: texto(q.modelo, 'modelo', 60),
+              serie: texto(q.serie, 'nº de série', 60),
+              ano: inteiro(q.ano, 'Ano', 2100),
+              capacidade: inteiro(q.capacidade, 'Capacidade', 100000),
+              combustivel: (['', 'eletrica', 'glp', 'diesel', 'gasolina'].includes(String(q.combustivel ?? '')) ? String(q.combustivel ?? '') : invalido('Combustível inválido.')) as string,
+            },
+          }
+        : {}),
     };
   };
 

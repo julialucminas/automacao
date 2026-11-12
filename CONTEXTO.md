@@ -124,6 +124,16 @@ vencendo, serviços externos a cobrar/orçar, conferência a partir do dia 20), 
 Menu do financeiro: grupos Financeiro e Clientes primeiro; Aprovações, Calendário, Movimentações, Conferência e
 Externos ficam no grupo Financeiro; Operação e Frota começam fechados. `/movimentacoes?nova=reajuste` abre o reajuste.
 
+## Movimentações atualizam a ficha; venda e compra (nov/2026)
+Onde a máquina está vem do cadastro dos clientes (frotas de cada cliente) — calendário, envio, conferência, painéis e
+equipamentos leem dali. Além disso, a ficha da máquina (`fichas` em operacoes.ts) é mantida pelas movimentações:
+locação grava o contrato novo (valor e vencimento; limpa o contrato anterior), troca passa o contrato da frota que sai
+para a que entra, devolução limpa o contrato, reajuste muda valor/vencimento. Tipos novos: `venda` (sai do cliente e
+da oficina, ficha `situacao: baixada` + vendaData/vendaValor/vendaComprador/vendaNf; máquina baixada não pode ser
+locada nem vendida de novo) e `compra` (cria a ficha com descrição, marca, modelo, série, ano, capacidade, combustível
+e compraData/compraValor/compraNf/fornecedor; recusa número de frota que já existe). Venda de máquina locada conta
+como −valor da locação na receita mensal; o valor da venda e o da compra aparecem à parte no resumo do mês.
+
 ## Navegação
 Menu lateral com 6 grupos (Início, Operação, Frota, Financeiro, Clientes, Administração), Painel do dia em
 `/inicio` (cartões conforme o perfil) e busca no topo (`components/BuscaGeral.tsx`; as telas leem `?busca=`).

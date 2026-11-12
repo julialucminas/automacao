@@ -4,7 +4,7 @@ import { dataBr } from './calendario';
 import { encontrarCliente } from './pareamento';
 import { semAcento } from './normalizar';
 
-export const NOMES_TIPO: Record<TipoMov, string> = { locacao: 'Nova locação', devolucao: 'Devolução', troca: 'Troca de frota', reajuste: 'Reajuste' };
+export const NOMES_TIPO: Record<TipoMov, string> = { locacao: 'Nova locação', devolucao: 'Devolução', troca: 'Troca de frota', reajuste: 'Reajuste', venda: 'Venda', compra: 'Compra' };
 
 /** Quanto a movimentação muda na receita mensal (centavos; null = não dá para saber). */
 export function efeitoNaReceita(m: Pick<Movimentacao, 'tipo' | 'dados'>): number | null {
@@ -13,6 +13,9 @@ export function efeitoNaReceita(m: Pick<Movimentacao, 'tipo' | 'dados'>): number
   if (m.tipo === 'locacao') return d.valor ?? null;
   if (m.tipo === 'devolucao') return d.valorAnterior != null ? -d.valorAnterior : null;
   if (m.tipo === 'troca') return d.valor != null && d.valorAnterior != null ? d.valor - d.valorAnterior : 0;
+  // venda de máquina locada: a locação deixa de entrar (o valor da venda é à parte)
+  if (m.tipo === 'venda') return d.valorAnterior ? -d.valorAnterior : 0;
+  if (m.tipo === 'compra') return 0;
   return null;
 }
 
@@ -181,7 +184,19 @@ export function textoMensagem(m: Pick<Movimentacao, 'tipo' | 'frota' | 'clienteN
     if (d.observacoes) l.push(`- Motivo: ${d.observacoes}`);
     return l.join('\n').replace(/\u00a0/g, ' ');
   }
-  const titulo = { locacao: 'NOVA LOCAÇÃO', devolucao: 'DEVOLUÇÃO', troca: 'TROCA DE FROTA' }[m.tipo];
+  if (m.tipo === 'venda' || m.tipo === 'compra') {
+    l.push(`${m.tipo === 'venda' ? 'VENDA' : 'COMPRA'} ${ft(m.frota)}`);
+    if (d.data) l.push(dataBr(d.data));
+    if (m.clienteNome) l.push(`${m.tipo === 'venda' ? 'Comprador' : 'Fornecedor'}: ${m.clienteNome.toUpperCase()}`);
+    const q = d.maquina;
+    const maq = [d.descricao, q?.serie && `série ${q.serie}`, q?.ano && `ano ${q.ano}`, q?.capacidade && `${q.capacidade} kg`].filter(Boolean).join(' · ');
+    if (maq) l.push(`- Equipamento: ${maq}`);
+    if (d.valor != null) l.push(`- Valor da ${m.tipo}: ${formatarReais(d.valor)}`);
+    if (d.nf) l.push(`- NF: ${d.nf}`);
+    if (d.observacoes) l.push(`- Obs.: ${d.observacoes}`);
+    return l.join('\n').replace(/\u00a0/g, ' ');
+  }
+  const titulo = ({ locacao: 'NOVA LOCAÇÃO', devolucao: 'DEVOLUÇÃO', troca: 'TROCA DE FROTA' } as Record<string, string>)[m.tipo];
   l.push(`${titulo} ${ft(m.frota)}${m.tipo === 'troca' && m.frotaNova ? ` → ${ft(m.frotaNova)}` : ''}`);
   if (d.data) l.push(dataBr(d.data));
   if (m.clienteNome) l.push(m.clienteNome.toUpperCase());

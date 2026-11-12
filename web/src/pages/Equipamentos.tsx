@@ -313,6 +313,14 @@ export function Ficha({
               </Item>
             </Bloco>
           )}
+          {f.vendaData && (
+            <Bloco titulo="Venda">
+              <Item rotulo="Data">{dataBr(f.vendaData)}</Item>
+              <Item rotulo="Comprador">{f.vendaComprador}</Item>
+              {veValores && <Item rotulo="Valor da venda">{f.vendaValor ? formatarReais(f.vendaValor) : null}</Item>}
+              {veValores && <Item rotulo="Nota fiscal">{f.vendaNf}</Item>}
+            </Bloco>
+          )}
           {(f.observacoes || f.situacaoMotivo) && (
             <Bloco titulo="Observações">
               <Item rotulo={f.situacao ? `Motivo (${SITUACOES[f.situacao as Situacao]?.rotulo ?? f.situacao})` : 'Observações'} largo>
@@ -498,6 +506,15 @@ const GRUPOS_FORM: { titulo: string; campos: Campo[] }[] = [
       { k: 'compraData', rotulo: 'Data', tipo: 'data', valor: true },
       { k: 'compraNf', rotulo: 'Nota fiscal', valor: true },
       { k: 'fornecedor', rotulo: 'Fornecedor', valor: true },
+    ],
+  },
+  {
+    titulo: 'Venda',
+    campos: [
+      { k: 'vendaData', rotulo: 'Data', tipo: 'data' },
+      { k: 'vendaComprador', rotulo: 'Comprador' },
+      { k: 'vendaValor', rotulo: 'Valor da venda', tipo: 'dinheiro', valor: true },
+      { k: 'vendaNf', rotulo: 'Nota fiscal', valor: true },
     ],
   },
   { titulo: 'Observações', campos: [{ k: 'observacoes', rotulo: 'Observações', tipo: 'texto-longo' }] },

@@ -11,7 +11,7 @@ import { NaoEncontrado, type Banco, type Cliente, type ClienteInput, type Frota,
 
 export class Conflito2 extends Error {}
 
-export type TipoMov = 'locacao' | 'devolucao' | 'troca' | 'reajuste';
+export type TipoMov = 'locacao' | 'devolucao' | 'troca' | 'reajuste' | 'venda' | 'compra';
 /** reajuste: uma linha por frota do cliente */
 export type ItemReajuste = { frota: string; antes: number; novo: number };
 export type DadosMov = {
@@ -34,8 +34,12 @@ export type DadosMov = {
   percentual?: number | null;
   /** reajuste: novo vencimento do contrato (renovação), se houver */
   renovaAte?: string | null;
-  /** valor que a frota tinha no cliente antes de aplicar (devolução e troca) */
+  /** valor que a frota tinha no cliente antes de aplicar (devolução, troca e venda de máquina locada) */
   valorAnterior?: number | null;
+  /** venda e compra: nota fiscal */
+  nf?: string;
+  /** compra: identificação da máquina que entra na frota */
+  maquina?: { marca: string; modelo: string; serie: string; ano: number | null; capacidade: number | null; combustivel: string };
 };
 export type NovaMov = { tipo: TipoMov; frota: string; frotaNova?: string; clienteId?: string | null; clienteNome?: string } & DadosMov;
 
@@ -125,7 +129,7 @@ export const CONFIG_PADRAO: Record<string, string> = {
 };
 
 const agora = () => new Date().toISOString();
-const NOMES_TIPO: Record<TipoMov, string> = { locacao: 'Nova locação', devolucao: 'Devolução', troca: 'Troca de frota', reajuste: 'Reajuste' };
+const NOMES_TIPO: Record<TipoMov, string> = { locacao: 'Nova locação', devolucao: 'Devolução', troca: 'Troca de frota', reajuste: 'Reajuste', venda: 'Venda', compra: 'Compra' };
 const brl = (c: number) => (c / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
 const CAMPOS_CLIENTE = ['nome', 'apelidos', 'cnpj', 'para', 'cc', 'observacoes', 'diaEmissao', 'regra', 'inicioLocacao', 'periodoDias', 'contato', 'telefone', 'prazoPagamento', 'semBoleto'] as const;
@@ -150,10 +154,17 @@ export function mesclarProposta(atual: Cliente, base: Cliente | null, dados: Cli
   return r as ClienteInput;
 }
 
-/** O que muda na ficha da máquina quando uma movimentação é aplicada (valor e vencimento do contrato). */
-export type AtualizarFicha = (frota: string, d: { contratoValor?: number; contratoVencimento?: string; limparReajusteSe?: number }, usuarioId: number) => void;
+/** Acesso à ficha da máquina: as movimentações mantêm o contrato, a venda e a compra da ficha em dia. */
+export type ValorFicha = string | number | null;
+export type Fichas = {
+  buscar(frota: string): Record<string, ValorFicha> | null;
+  /** grava só os campos informados; null apaga o campo */
+  salvar(frota: string, d: Record<string, ValorFicha>, usuarioId: number): void;
+};
+const CONTRATO_VAZIO = { contratoNumero: null, contratoValor: null, contratoReajuste: null, contratoVencimento: null, contratoObs: null };
+const CAMPOS_CONTRATO = Object.keys(CONTRATO_VAZIO);
 
-export function operacoes(db: Banco, repo: Repositorio, atualizarFicha?: AtualizarFicha) {
+export function operacoes(db: Banco, repo: Repositorio, fichas?: Fichas) {
   const nomeUsuario = (id: number | null) => (id ? ((db.prepare('SELECT nome FROM usuarios WHERE id = ?').get(id) as { nome: string } | undefined)?.nome ?? '') : '');
 
   const deLinhaMov = (r: Record<string, unknown>): Movimentacao => ({
@@ -190,11 +201,60 @@ export function operacoes(db: Banco, repo: Repositorio, atualizarFicha?: Atualiz
     repo.salvarCliente({ ...c, frotas: c.frotas.filter((f) => f.numero !== numero) }, usuarioId, `frota ${numero} saiu (${motivo})`);
 
   /** Aplica a movimentação no cadastro. Devolve o id do cliente afetado. */
-  function aplicar(m: { tipo: TipoMov; frota: string; frotaNova: string | null; clienteId: string | null; clienteNome: string; dados: DadosMov }, usuarioId: number): string {
+  function aplicar(m: { tipo: TipoMov; frota: string; frotaNova: string | null; clienteId: string | null; clienteNome: string; dados: DadosMov }, usuarioId: number): string | null {
     const d = m.dados;
     const titulo = `${NOMES_TIPO[m.tipo]} ${m.frota}${m.frotaNova ? ` → ${m.frotaNova}` : ''}`;
 
+    const ficha = (frota: string) => fichas?.buscar(frota) ?? null;
+    const gravarFicha = (frota: string, dados: Record<string, ValorFicha>) => fichas?.salvar(frota, dados, usuarioId);
+    const quando = d.data.split('-').reverse().join('/');
+
+    if (m.tipo === 'venda') {
+      const f = ficha(m.frota);
+      if (f?.situacao === 'baixada') throw new Conflito2(`A FT${m.frota} já está como vendida/baixada.`);
+      // se estava locada, sai do cliente
+      const dono = donoDaFrota(m.frota);
+      d.valorAnterior = dono?.frotas.find((x) => x.numero === m.frota)?.valor ?? null;
+      if (dono) tirarFrota(dono, m.frota, usuarioId, `vendida em ${quando}`);
+      db.prepare('DELETE FROM oficina WHERE frota = ?').run(m.frota);
+      const comprador = m.clienteId ? repo.buscarCliente(m.clienteId).nome : m.clienteNome;
+      gravarFicha(m.frota, {
+        ...CONTRATO_VAZIO,
+        situacao: 'baixada',
+        situacaoMotivo: `Vendida${comprador ? ` para ${comprador}` : ''} em ${quando}`,
+        vendaData: d.data,
+        vendaValor: d.valor,
+        vendaComprador: comprador || null,
+        vendaNf: d.nf || null,
+      });
+      return m.clienteId ?? null;
+    }
+
+    if (m.tipo === 'compra') {
+      const f = ficha(m.frota);
+      if (f && f.situacao !== 'baixada' && Object.keys(f).some((k) => !['frota', 'atualizadoEm', 'atualizadoPor'].includes(k)))
+        throw new Conflito2(`A FT${m.frota} já está cadastrada. Use outro número de frota.`);
+      if (donoDaFrota(m.frota)) throw new Conflito2(`A FT${m.frota} está locada para um cliente. Use outro número de frota.`);
+      const q = d.maquina;
+      gravarFicha(m.frota, {
+        situacao: null,
+        situacaoMotivo: null,
+        vendaData: null,
+        vendaValor: null,
+        vendaComprador: null,
+        vendaNf: null,
+        descricao: d.descricao || null,
+        ...(q ? { marca: q.marca || null, modelo: q.modelo || null, serie: q.serie || null, ano: q.ano, capacidade: q.capacidade, combustivel: q.combustivel || null } : {}),
+        compraData: d.data,
+        compraValor: d.valor,
+        compraNf: d.nf || null,
+        fornecedor: m.clienteNome || null,
+      });
+      return null;
+    }
+
     if (m.tipo === 'locacao') {
+      if (ficha(m.frota)?.situacao === 'baixada') throw new Conflito2(`A FT${m.frota} está como vendida/baixada. Não dá para locar.`);
       let cliente: Cliente | undefined = m.clienteId ? repo.buscarCliente(m.clienteId) : undefined;
       if (!cliente) {
         const nome = m.clienteNome.trim().toUpperCase().replace(/\s+/g, ' ');
@@ -227,6 +287,9 @@ export function operacoes(db: Banco, repo: Repositorio, atualizarFicha?: Atualiz
         usuarioId,
         titulo,
       );
+      // ficha: contrato novo (o que não veio na mensagem fica em branco, para não sobrar dado do contrato anterior)
+      const f = ficha(m.frota);
+      if (f) gravarFicha(m.frota, { ...CONTRATO_VAZIO, contratoValor: d.valor, contratoVencimento: d.fim ?? null, ...(f.situacao === 'reservada' ? { situacao: null, situacaoMotivo: null } : {}) });
       return cliente.id;
     }
 
@@ -249,7 +312,15 @@ export function operacoes(db: Banco, repo: Repositorio, atualizarFicha?: Atualiz
         usuarioId,
         `reajuste a partir de ${d.data.split('-').reverse().join('/')}: ${itens.map((i) => `FT${i.frota} ${brl(i.novo)}`).join(', ')}`,
       );
-      for (const i of itens) atualizarFicha?.(i.frota, { contratoValor: i.novo, limparReajusteSe: i.novo, ...(d.renovaAte ? { contratoVencimento: d.renovaAte } : {}) }, usuarioId);
+      for (const i of itens) {
+        const f = fichas?.buscar(i.frota);
+        if (!f) continue;
+        fichas!.salvar(
+          i.frota,
+          { contratoValor: i.novo, ...(d.renovaAte ? { contratoVencimento: d.renovaAte } : {}), ...(f.contratoReajuste === i.novo ? { contratoReajuste: null } : {}) },
+          usuarioId,
+        );
+      }
       return atual.id;
     }
 
@@ -258,7 +329,8 @@ export function operacoes(db: Banco, repo: Repositorio, atualizarFicha?: Atualiz
     d.valorAnterior = cliente.frotas.find((f) => f.numero === m.frota)?.valor ?? null;
 
     if (m.tipo === 'devolucao') {
-      tirarFrota(cliente, m.frota, usuarioId, `devolução em ${d.data.split('-').reverse().join('/')}`);
+      tirarFrota(cliente, m.frota, usuarioId, `devolução em ${quando}`);
+      if (ficha(m.frota)) gravarFicha(m.frota, CONTRATO_VAZIO);
       return cliente.id;
     }
 
@@ -275,6 +347,12 @@ export function operacoes(db: Banco, repo: Repositorio, atualizarFicha?: Atualiz
       usuarioId,
       titulo,
     );
+    // ficha: o contrato passa da frota que saiu para a que entrou
+    const velha = ficha(m.frota);
+    const contrato: Record<string, ValorFicha> = Object.fromEntries(CAMPOS_CONTRATO.map((k) => [k, velha?.[k] ?? null]));
+    if (d.valor != null) contrato.contratoValor = d.valor;
+    if (velha || d.valor != null) gravarFicha(m.frotaNova, contrato);
+    if (velha) gravarFicha(m.frota, CONTRATO_VAZIO);
     return cliente.id;
   }
 
@@ -303,6 +381,8 @@ export function operacoes(db: Banco, repo: Repositorio, atualizarFicha?: Atualiz
           descricao: n.descricao,
           observacoes: n.observacoes,
           ...(n.tipo === 'reajuste' ? { itens: n.itens ?? [], percentual: n.percentual ?? null, renovaAte: n.renovaAte ?? null } : {}),
+          ...(n.tipo === 'venda' || n.tipo === 'compra' ? { nf: n.nf ?? '' } : {}),
+          ...(n.tipo === 'compra' && n.maquina ? { maquina: n.maquina } : {}),
         };
         let clienteId = n.clienteId ?? null;
         if (aprovarJa) clienteId = aplicar({ tipo: n.tipo, frota: n.frota, frotaNova: n.frotaNova ?? null, clienteId, clienteNome, dados }, usuarioId);
