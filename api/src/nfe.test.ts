@@ -91,3 +91,18 @@ describe('observações depois de lançada', () => {
     expect((await a('POST', '/api/movimentacoes/nao-existe/notas', { texto: 'x' })).statusCode).toBe(404);
   });
 });
+
+describe('fatura lançada manualmente', () => {
+  it('a Angelise lança a fatura enviada por fora: vai para o histórico e marca faturado; não repete o número', async () => {
+    const a = como('angelise');
+    const c = (await a('POST', '/api/clientes', { nome: 'Fenix', para: ['a@fenix.com.br'], cc: [], apelidos: [], cnpj: '', observacoes: '' })).json();
+    expect((await a('POST', '/api/envios/manual', { clienteId: c.id, referencia: '2026-11', data: '' })).statusCode).toBe(400);
+    const r = await a('POST', '/api/envios/manual', { clienteId: c.id, referencia: '2026-11', data: '2026-11-10', numero: '4510', observacao: 'mandei pelo meu e-mail' });
+    expect(r.statusCode).toBe(201);
+    expect(r.json()).toMatchObject({ status: 'enviado', numero: '4510', clienteNome: 'FENIX', referencia: '2026-11', observacao: 'mandei pelo meu e-mail' });
+    expect((await a('GET', '/api/envios')).json()[0]).toMatchObject({ numero: '4510', detalhe: expect.stringMatching(/manualmente/) });
+    expect((await a('GET', '/api/faturamentos?de=2026-11-01&ate=2026-11-30')).json()).toEqual([expect.objectContaining({ clienteId: c.id, data: '2026-11-10', origem: 'manual' })]);
+    expect((await a('POST', '/api/envios/manual', { clienteId: c.id, referencia: '2026-11', data: '2026-11-11', numero: '4510' })).statusCode).toBe(409);
+    expect((await como('tecnico')('POST', '/api/envios/manual', { clienteId: c.id, referencia: '2026-11', data: '2026-11-11' })).statusCode).toBe(403);
+  });
+});

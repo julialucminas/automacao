@@ -2,6 +2,7 @@ import { Fragment, useEffect, useMemo, useState } from 'react';
 import { useBuscaDaUrl } from '../lib/buscaDaUrl';
 import { api } from '../api';
 import { useEstado } from '../state';
+import { cuidaDoFaturamento, LancarFatura } from '../components/LancarFatura';
 import { chaveEnvio, textoOk } from '../lib/avisos';
 import { BotaoOk } from '../components/BotaoOk';
 import type { Envio, StatusEnvio } from '../types';
@@ -22,7 +23,8 @@ type Filtro = 'todos' | StatusEnvio;
 const COLUNAS = 'grid grid-cols-[136px_64px_minmax(200px,1.2fr)_minmax(200px,1.2fr)_minmax(220px,1.5fr)_164px] gap-3';
 
 export function Historico() {
-  const { envios, recarregarEnvios, avisar, pode, avisosOk } = useEstado();
+  const { envios, recarregarEnvios, avisar, pode, avisosOk, usuario } = useEstado();
+  const [lancando, setLancando] = useState(false);
   const age = pode('historico', 2) || pode('envio', 2);
   const [filtro, setFiltro] = useState<Filtro>('todos');
   const [busca, setBusca] = useState('');
@@ -124,6 +126,12 @@ export function Historico() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {cuidaDoFaturamento(usuario?.perfil) && (
+            <button type="button" className="btn-secondary" onClick={() => setLancando(true)}>
+              + Lançar fatura emitida
+            </button>
+          )}
+          {lancando && <LancarFatura fechar={() => setLancando(false)} />}
           <div className="flex flex-col items-end">
             {age && (
               <button type="button" className="btn-secondary" disabled={verificando} onClick={verificarAgora}>
@@ -179,6 +187,7 @@ export function Historico() {
               const total = e.para.length + e.cc.length;
               const st = STATUS[e.status];
               const estaAberto = aberto === e.id;
+              const manual = e.messageId.startsWith('manual:');
               return (
                 <Fragment key={e.id}>
                   <div className={`${COLUNAS} items-start border-b border-line-soft px-4 py-3 text-[13px]`}>
@@ -189,11 +198,17 @@ export function Historico() {
                       <div className="text-xs text-ink-3">{referenciaTitulo(e.referencia)}</div>
                     </div>
                     <span className="min-w-0 [overflow-wrap:anywhere] text-ink-2">
-                      {e.para[0]}
-                      {total > 1 ? `  +${total - 1}` : ''}
+                      {manual ? (
+                        <span className="text-ink-3">enviada por fora{e.observacao ? ` · ${e.observacao}` : ''}</span>
+                      ) : (
+                        <>
+                          {e.para[0]}
+                          {total > 1 ? `  +${total - 1}` : ''}
+                        </>
+                      )}
                     </span>
                     <div className="flex flex-col items-start gap-1">
-                      <Chip tom={st.tom}>{st.rotulo}</Chip>
+                      <Chip tom={st.tom}>{manual ? 'Lançada à mão' : st.rotulo}</Chip>
                       {e.lidoEm && (
                         <span className="text-xs font-medium text-info">
                           Lido em {dataHora(e.lidoEm)}
@@ -207,7 +222,7 @@ export function Historico() {
                       {!e.lidoEm && !e.devolucao && <span className="text-xs text-ink-3">{e.detalhe}</span>}
                     </div>
                     <div className="flex flex-wrap gap-1.5">
-                      {age && !e.copiaEmEnviados && e.status !== 'falhou' && (
+                      {age && !manual && !e.copiaEmEnviados && e.status !== 'falhou' && (
                         <button
                           type="button"
                           className="btn-secondary btn-sm"

@@ -435,6 +435,14 @@ const MIGRACOES = [
   // 24: máquina que vai para a oficina sai do cliente; guarda de quem era para oferecer a volta
   `ALTER TABLE oficina ADD COLUMN cliente_id TEXT;
    ALTER TABLE oficina ADD COLUMN cliente_nome TEXT NOT NULL DEFAULT '';`,
+  // 25: financeiro (Angelise) com todas as abas (usuários e senhas continuam só com o administrador);
+  //     operações (Júnior) registra movimentações e alterações de cadastro direto, sem esperar aprovação
+  `UPDATE perfis SET permissoes = '{"inicio":2,"appDono":2,"solicitacoes":2,"manutencao":2,"ordens":2,"externos":2,"movimentacoes":2,"conferencia":2,"calendario":2,"frotas":2,"envio":2,"historico":2,"configuracoes":2,"clientes":2,"aprovacoes":2,"registro":2,"usuarios":0}',
+     descricao = 'Todas as abas, menos usuários e senhas. Abre na Central do financeiro.'
+   WHERE id = 'financeiro';
+   UPDATE perfis SET permissoes = json_set(permissoes, '$.aprovacoes', 2),
+     descricao = 'Movimentações, conferência e frotas. O que registra entra direto no cadastro.'
+   WHERE id = 'operacoes';`,
 ];
 
 export function abrirBanco(caminho: string) {

@@ -216,3 +216,12 @@ calendário), "e-mail voltou" (todos os envios do mês devolvidos) ou a faturar.
 frotas do cliente herdam a situação. Relação das locações: painel do mês (com ‹ ›), coluna "Faturado em <mês>" com
 bolinha (verde/laranja/vazia) e filtros; `/frotas?fat=pendente|faturado|devolvido` abre já filtrado. Central do
 financeiro: cartão "Faturamento de <mês>" com valores e quem falta faturar. Só para quem vê envio ou histórico.
+
+## Ajustes de 12/nov (tarde)
+- Migração 25: perfil financeiro com todas as abas em 2 (menos usuarios); operações ganhou `aprovacoes: 2`, então o que
+  o Júnior registra (movimentações e cadastro) entra direto. Os testes de fluxo de aprovação tiram essa permissão no setup.
+- Fatura lançada à mão: `POST /api/envios/manual` grava um envio `messageId: manual:<uuid>` (status enviado, sem
+  destinatários) e marca faturado no calendário; número repetido no mesmo mês é recusado. Botões "Lançar" na Central,
+  na Relação das locações e no Histórico (`components/LancarFatura.tsx`).
+- Faturado no mês (Relação e Central) só para os perfis admin e financeiro (`cuidaDoFaturamento`).
+- Central do financeiro: Acesso rápido no topo.

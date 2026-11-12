@@ -45,9 +45,9 @@ describe('permissões por perfil', () => {
     expect((await como('dono')('POST', '/api/movimentacoes', { tipo: 'devolucao', frota: '35', data: '2026-11-04' })).statusCode).toBe(403);
     // operações: envio, histórico, registro e usuários fechados
     for (const url of ['/api/envios', '/api/registro', '/api/admin/usuarios', '/api/perfis']) expect((await como('junior')('GET', url)).statusCode, url).toBe(403);
-    // movimentação do Júnior vai para aprovação; a da Angelise entra direto
-    expect((await como('junior')('POST', '/api/movimentacoes', { tipo: 'devolucao', frota: '35', data: '2026-11-04' })).json().status).toBe('pendente');
-    expect((await como('angeli')('POST', '/api/movimentacoes', { tipo: 'devolucao', frota: '35', data: '2026-11-04' })).json().status).toBe('aprovada');
+    // movimentação do Júnior entra direto, como a da Angelise (a frota já saiu, então a dela é recusada)
+    expect((await como('junior')('POST', '/api/movimentacoes', { tipo: 'devolucao', frota: '35', data: '2026-11-04' })).json().status).toBe('aprovada');
+    expect((await como('angeli')('POST', '/api/movimentacoes', { tipo: 'devolucao', frota: '35', data: '2026-11-04' })).statusCode).toBe(409);
   });
 
   it('técnico não recebe o valor das frotas; operações recebe (confere no fim do mês)', async () => {

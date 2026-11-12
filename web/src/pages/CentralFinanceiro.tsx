@@ -4,6 +4,7 @@ import { useEstado } from '../state';
 import { api } from '../api';
 import type { Equipamento, Faturamento, ServicoExterno } from '../types';
 import { resumirFaturas, situacaoFaturas } from '../lib/faturado';
+import { cuidaDoFaturamento, LancarFatura } from '../components/LancarFatura';
 import { dataBr, hojeIso, janelaConferencia, paraData, paraIso, proximasDatas, regraDoCliente } from '../lib/calendario';
 import { referenciaAtual, referenciaPorExtenso } from '../lib/email';
 import { formatarReais } from '../lib/dinheiro';
@@ -263,6 +264,24 @@ export function CentralFinanceiro() {
         </p>
       </div>
 
+      {/* acesso rápido */}
+      <section aria-label="Acesso rápido" className="flex flex-col gap-2">
+        <h2 className="px-1 text-[12px] font-bold uppercase tracking-wide text-ink-3">Acesso rápido</h2>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
+          {atalhos
+            .filter((a) => a.ok)
+            .map((a) => (
+              <Link key={a.rota} to={a.rota} className="flex items-start gap-3 rounded-xl border border-line bg-white p-3.5 hover:border-brand hover:bg-brand-tint">
+                <span className="mt-0.5 text-ink-2">{a.icone}</span>
+                <span className="min-w-0">
+                  <span className="block text-[14px] font-bold leading-tight">{a.rotulo}</span>
+                  <span className="block text-xs text-ink-3">{a.dica}</span>
+                </span>
+              </Link>
+            ))}
+        </div>
+      </section>
+
       {/* indicadores */}
       <section className="grid grid-cols-2 gap-3 lg:grid-cols-4" aria-label="Indicadores">
         {veValores && <Indicador valor={formatarReais(receita)} rotulo="de locação por mês" sub={`${frotas.length} frotas locadas`} link="/frotas" />}
@@ -285,7 +304,7 @@ export function CentralFinanceiro() {
         />
       </section>
 
-      <FaturamentoDoMes clientes={ativos} envios={envios} marcados={marcados} mes={ref} veValores={veValores} hoje={hoje} />
+      {cuidaDoFaturamento(usuario?.perfil) && <FaturamentoDoMes clientes={ativos} envios={envios} marcados={marcados} mes={ref} veValores={veValores} hoje={hoje} />}
 
       {novasMov.length > 0 && (
         <section className="rounded-xl border-2 border-brand bg-white" aria-label="Novas movimentações">
@@ -394,23 +413,6 @@ export function CentralFinanceiro() {
         </section>
       </div>
 
-      {/* acesso rápido */}
-      <section aria-label="Acesso rápido" className="flex flex-col gap-2">
-        <h2 className="px-1 text-[12px] font-bold uppercase tracking-wide text-ink-3">Acesso rápido</h2>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
-          {atalhos
-            .filter((a) => a.ok)
-            .map((a) => (
-              <Link key={a.rota} to={a.rota} className="flex items-start gap-3 rounded-xl border border-line bg-white p-3.5 hover:border-brand hover:bg-brand-tint">
-                <span className="mt-0.5 text-ink-2">{a.icone}</span>
-                <span className="min-w-0">
-                  <span className="block text-[14px] font-bold leading-tight">{a.rotulo}</span>
-                  <span className="block text-xs text-ink-3">{a.dica}</span>
-                </span>
-              </Link>
-            ))}
-        </div>
-      </section>
 
       {faturas.length > faturasHoje.length && (
         <section className="rounded-xl border border-line bg-white" aria-label="Próximas faturas">
@@ -463,6 +465,7 @@ function FaturamentoDoMes({
   veValores: boolean;
   hoje: string;
 }) {
+  const [lancando, setLancando] = useState<{ clienteId?: string } | null>(null);
   const sit = situacaoFaturas(clientes, envios, marcados, mes);
   const linhas = clientes.flatMap((c) => c.frotas.map((f) => ({ clienteId: c.id, valor: f.valor })));
   const r = resumirFaturas(linhas, sit);
@@ -485,10 +488,16 @@ function FaturamentoDoMes({
             {r.faturadas + r.devolvidas} de {r.locacoes} locações
           </span>
         </h2>
-        <Link to="/frotas?fat=pendente" className="text-[13px] font-semibold underline underline-offset-2">
-          Ver na Relação das locações
-        </Link>
+        <span className="flex flex-wrap items-center gap-3">
+          <button type="button" className="btn-secondary btn-sm" onClick={() => setLancando({})}>
+            + Lançar fatura emitida
+          </button>
+          <Link to="/frotas?fat=pendente" className="text-[13px] font-semibold underline underline-offset-2">
+            Ver na Relação das locações
+          </Link>
+        </span>
       </div>
+      {lancando && <LancarFatura clienteId={lancando.clienteId} mes={mes} fechar={() => setLancando(null)} />}
       <div className="flex h-3 overflow-hidden rounded-full bg-line-soft" aria-hidden>
         <div className="h-full bg-[#16A34A]" style={{ width: `${pct(r.faturadas)}%` }} />
         <div className="h-full bg-[#F59E0B]" style={{ width: `${pct(r.devolvidas)}%` }} />
@@ -532,7 +541,12 @@ function FaturamentoDoMes({
                     {data && ` · ${data < hoje ? 'era para' : 'previsto'} ${dataBr(data).slice(0, 5)}`}
                   </span>
                 </span>
-                {veValores && <b className="shrink-0">{formatarReais(valor)}</b>}
+                <span className="flex shrink-0 items-center gap-2">
+                  {veValores && <b>{formatarReais(valor)}</b>}
+                  <button type="button" className="rounded-md border border-line-strong px-2 py-0.5 text-xs font-semibold text-ink-2 hover:border-ink" onClick={() => setLancando({ clienteId: c.id })}>
+                    Lançar
+                  </button>
+                </span>
               </li>
             ))}
           </ul>

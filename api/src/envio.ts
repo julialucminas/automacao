@@ -131,6 +131,37 @@ export function servicoEnvio(db: Banco, repo: Repositorio, pastaDados: string, c
     configurado: () => lerConta(pastaDados) !== null,
     contaUsuario: () => lerConta(pastaDados)?.usuario ?? null,
 
+    /**
+     * Fatura que saiu por fora do sistema (e-mail mandado à mão, entregue em mãos…): fica no Histórico como
+     * "lançada manualmente", conta como faturada no mês e marca o dia no Calendário.
+     */
+    lancarManual(m: { cliente: Cliente; referencia: string; numero: string; data: string; observacao: string }, usuarioId: number): Envio {
+      const e: Envio = {
+        id: randomUUID(),
+        enviadoEm: `${m.data}T15:00:00.000Z`,
+        referencia: m.referencia,
+        numero: m.numero,
+        clienteId: m.cliente.id,
+        clienteNome: m.cliente.nome,
+        para: [],
+        cc: [],
+        assunto: '',
+        anexos: [],
+        messageId: `manual:${randomUUID()}`,
+        copiaEmEnviados: false,
+        pediuLeitura: false,
+        status: 'enviado',
+        detalhe: 'Lançada manualmente: a fatura foi enviada por fora do sistema.',
+        observacao: m.observacao,
+      };
+      db.transaction(() => {
+        gravar(e, '', usuarioId);
+        repo.registrarLog(m.cliente.id, usuarioId, `lançou manualmente a fatura ${m.numero || '(sem número)'} de ${m.referencia.split('-').reverse().join('/')}`, null, null, 'cliente');
+        repo.marcarFaturado(m.cliente.id, m.data, usuarioId, 'manual');
+      })();
+      return e;
+    },
+
     /** Envio de verdade para o cliente: registra no Histórico, guarda os PDFs e marca faturado. */
     async enviar(p: PedidoEnvio, nomeRemetente: string, usuarioId: number): Promise<Envio> {
       const conta = lerConta(pastaDados);

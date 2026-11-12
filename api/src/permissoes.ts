@@ -39,15 +39,15 @@ export const PERFIS_PADRAO: Omit<Perfil, 'padrao'>[] = [
   {
     id: 'financeiro',
     nome: 'Financeiro',
-    descricao: 'Acesso a tudo, menos usuários e senhas. Abre na Central do financeiro.',
-    permissoes: com(2, { usuarios: 0, registro: 1, appDono: 1, inicio: 1 }),
+    descricao: 'Todas as abas, menos usuários e senhas. Abre na Central do financeiro.',
+    permissoes: com(2, { usuarios: 0 }),
     veValores: true,
   },
   {
     id: 'operacoes',
     nome: 'Operações',
-    descricao: 'Movimentações, conferência e frotas. Alterações de cadastro vão para aprovação.',
-    permissoes: com(0, { inicio: 2, solicitacoes: 2, manutencao: 2, ordens: 2, externos: 2, movimentacoes: 2, conferencia: 2, calendario: 1, frotas: 2 }),
+    descricao: 'Movimentações, conferência e frotas. O que registra entra direto no cadastro.',
+    permissoes: com(0, { inicio: 2, solicitacoes: 2, manutencao: 2, ordens: 2, externos: 2, movimentacoes: 2, conferencia: 2, calendario: 1, frotas: 2, aprovacoes: 2 }),
     veValores: false,
   },
   {

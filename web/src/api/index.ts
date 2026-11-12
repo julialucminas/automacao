@@ -93,6 +93,8 @@ export interface Api {
   /** venda/compra: anexa o PDF (DANFE) ou o XML da NF-e; arquivo em base64 */
   anexarNfe(id: string, arquivo: string, nome: string): Promise<Movimentacao>;
   tirarNfe(id: string): Promise<Movimentacao>;
+  /** fatura enviada por fora do sistema: fica no histórico e conta como faturada */
+  lancarFaturaManual(d: { clienteId: string; referencia: string; data: string; numero: string; observacao: string }): Promise<Envio>;
   /** mais uma observação numa movimentação já lançada */
   adicionarNotaMov(id: string, texto: string, urgente: boolean): Promise<Movimentacao>;
   /** app do dono: evolução mês a mês */

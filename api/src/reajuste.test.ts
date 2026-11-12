@@ -35,6 +35,8 @@ beforeEach(async () => {
   ).id;
   equipamentos(db).salvar('53', { contratoValor: 385000, contratoReajuste: 400000, contratoVencimento: '2026-11-20' }, u.id);
   app = criarApp(db, { cookieSeguro: false });
+  // estes testes cobrem o fluxo de aprovação: aqui operações volta a não aprovar (o padrão agora é registrar direto)
+  db.prepare("UPDATE perfis SET permissoes = json_set(permissoes, '$.aprovacoes', 0) WHERE id = 'operacoes'").run();
   for (const [k, e] of [
     ['angelise', 'financeiro@lucminas.com.br'],
     ['junior', 'locacao@lucminas.com.br'],

@@ -3,6 +3,7 @@ import { useBuscaDaUrl } from '../lib/buscaDaUrl';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useEstado } from '../state';
 import type { Cliente, Faturamento, Frota } from '../types';
+import { cuidaDoFaturamento, LancarFatura } from '../components/LancarFatura';
 import { ROTULO_FATURA, resumirFaturas, situacaoFaturas, type EstadoFatura, type SituacaoFatura } from '../lib/faturado';
 import { BalaoUrgente, SeloHelbert } from '../components/Balao';
 import { BotaoOk } from '../components/BotaoOk';
@@ -69,8 +70,10 @@ export function Frotas() {
   const daqui30 = somarDias(hoje, 30);
 
   // ---- faturado no mês (pelos envios de fatura e pelas marcações do calendário) ----
-  const { envios } = useEstado();
-  const veFaturas = pode('envio') || pode('historico');
+  const { envios, usuario } = useEstado();
+  // só você (administrador) e o financeiro
+  const veFaturas = cuidaDoFaturamento(usuario?.perfil);
+  const [lancando, setLancando] = useState<{ clienteId?: string } | null>(null);
   const [urlParams, setUrlParams] = useSearchParams();
   const [mesFat, setMesFat] = useState(referenciaAtual());
   const [filtroFat, setFiltroFat] = useState<FiltroFat>(() => {
@@ -231,8 +234,10 @@ export function Frotas() {
           veValor={veValorFrota}
           filtro={filtroFat}
           filtrar={(f) => setFiltroFat(filtroFat === f ? 'todas' : f)}
+          lancar={() => setLancando({})}
         />
       )}
+      {lancando && <LancarFatura clienteId={lancando.clienteId} mes={mesFat} fechar={() => setLancando(null)} />}
 
       {/* resumo numa linha */}
       <p className="flex flex-wrap gap-x-5 gap-y-1 rounded-xl border border-line bg-white px-4 py-3 text-[14px] text-ink-2">
@@ -420,7 +425,7 @@ export function Frotas() {
                     </td>
                     {veFaturas && (
                       <td className="whitespace-nowrap px-3 py-2.5">
-                        <CelulaFatura s={situacao.get(l.cliente.id)} />
+                        <CelulaFatura s={situacao.get(l.cliente.id)} lancar={() => setLancando({ clienteId: l.cliente.id })} />
                       </td>
                     )}
                   </tr>
@@ -1093,7 +1098,7 @@ function BolinhaFatura({ estado }: { estado: EstadoFatura }) {
   return <span aria-hidden className="inline-block h-3 w-3 shrink-0 rounded-full border-2 border-line-strong bg-white" />;
 }
 
-function CelulaFatura({ s }: { s: SituacaoFatura | undefined }) {
+function CelulaFatura({ s, lancar }: { s: SituacaoFatura | undefined; lancar?: () => void }) {
   const e = s?.estado ?? 'pendente';
   const detalhe =
     e === 'pendente' ? '' : s?.numeros.length ? `nº ${s.numeros.join(', ')}${s.quando ? ` · ${dataCurta(s.quando)}` : ''}` : s?.quando ? `${s.manual ? 'marcado' : ''} ${dataCurta(s.quando)}`.trim() : '';
@@ -1102,6 +1107,19 @@ function CelulaFatura({ s }: { s: SituacaoFatura | undefined }) {
       <BolinhaFatura estado={e} />
       <span className={`text-[13px] ${e === 'faturado' ? 'font-semibold text-[#15803D]' : e === 'devolvido' ? 'font-semibold text-warn-strong' : 'text-ink-3'}`}>{ROTULO_FATURA[e]}</span>
       {detalhe && <span className="text-xs text-ink-3">{detalhe}</span>}
+      {lancar && e !== 'faturado' && (
+        <button
+          type="button"
+          className="ml-1 rounded-md border border-line-strong bg-white px-2 py-0.5 text-xs font-semibold text-ink-2 hover:border-ink"
+          title="A fatura foi enviada por fora do sistema: lançar como emitida"
+          onClick={(ev) => {
+            ev.stopPropagation();
+            lancar();
+          }}
+        >
+          Lançar
+        </button>
+      )}
     </span>
   );
 }
@@ -1114,7 +1132,9 @@ function PainelFaturamento({
   veValor,
   filtro,
   filtrar,
+  lancar,
 }: {
+  lancar: () => void;
   mes: string;
   mudarMes: (m: string) => void;
   resumo: ReturnType<typeof resumirFaturas>;
@@ -1151,6 +1171,9 @@ function PainelFaturamento({
           </span>
         </h2>
         <span className="flex items-center gap-1">
+          <button type="button" className="btn-secondary btn-sm mr-2" onClick={lancar}>
+            + Lançar fatura emitida
+          </button>
           <button type="button" className="btn-secondary btn-sm" aria-label="Mês anterior" onClick={() => mudarMes(mesSeguinte(mes, -1))}>
             ‹
           </button>

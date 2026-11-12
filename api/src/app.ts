@@ -1380,6 +1380,20 @@ export function criarApp(db: Banco, opcoes: { cookieSeguro: boolean; logger?: bo
     return envio.enviar({ ...p, cliente }, remetente(), req.usuario.id);
   });
 
+  // fatura enviada por fora do sistema: a Angelise lança que foi emitida
+  app.post('/api/envios/manual', { preHandler: exigir(2, 'envio', 'historico') }, async (req, reply) => {
+    const b = (req.body ?? {}) as Record<string, unknown>;
+    const cliente = repo.buscarCliente(typeof b.clienteId === 'string' ? b.clienteId : '');
+    const referencia = typeof b.referencia === 'string' && /^\d{4}-(0[1-9]|1[0-2])$/.test(b.referencia) ? b.referencia : invalido('Mês de referência inválido.');
+    const data = lerDataIso(b.data, 'Data') ?? invalido('Informe a data em que a fatura foi enviada.');
+    const numero = texto(b.numero, 'número da fatura', 30);
+    if (numero) {
+      const anterior = repo.listarEnvios().find((e) => e.referencia === referencia && e.numero === numero && e.status !== 'falhou');
+      if (anterior) throw new Conflito(`A fatura ${numero} de ${referencia.split('-').reverse().join('/')} já está registrada.`);
+    }
+    return reply.code(201).send(envio.lancarManual({ cliente, referencia, numero, data, observacao: texto(b.observacao, 'observação', 300) }, req.usuario.id));
+  });
+
   app.post('/api/envios/teste', { preHandler: exigir(2, 'envio'), ...limite }, async (req, reply) => {
     if (!envio.configurado()) return reply.code(503).send({ erro: SEM_CONTA });
     const p = lerPedido((req.body ?? {}) as Record<string, unknown>);
