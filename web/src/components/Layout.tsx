@@ -21,19 +21,25 @@ const ICONE: Record<Grupo, (p: { tamanho?: number }) => ReactNode> = {
 };
 
 const CHAVE_FECHADOS = 'lucminas:menu-fechados';
-const lerFechados = (): Grupo[] => {
+const lerFechados = (padrao: Grupo[]): Grupo[] => {
   try {
-    return JSON.parse(localStorage.getItem(CHAVE_FECHADOS) ?? '[]');
+    const s = localStorage.getItem(CHAVE_FECHADOS);
+    return s ? JSON.parse(s) : padrao;
   } catch {
-    return [];
+    return padrao;
   }
 };
+
+/** Quem usa a Central do financeiro: o financeiro (e quem mais aprova e envia faturas). */
+export const usaCentralFinanceiro = (pode: (a: Aba, n?: 1 | 2) => boolean, aprova: boolean) => aprova && pode('envio', 2);
+/** O financeiro vê o menu na ordem do trabalho dele: financeiro e clientes primeiro; operação e frota começam fechadas. */
+const ORDEM_FINANCEIRO: Grupo[] = ['financeiro', 'clientes', 'inicio', 'operacao', 'frota', 'administracao'];
 
 export type ItemMenu = { aba: Aba; rotulo: string; rota: string; grupo: Grupo; badge: number; alerta: boolean };
 
 /** Monta o menu do usuário: só as abas que o perfil dele vê, nos 6 grupos. */
 export function useMenu(): ItemMenu[] {
-  const { lote, clientes, envios, pendentesParaMim, solicitacoes, aguardandoAprovacao, propostas, movimentacoes, pode, aprova } = useEstado();
+  const { lote, clientes, envios, pendentesParaMim, solicitacoes, aguardandoAprovacao, propostas, movimentacoes, pode, aprova, usuario } = useEstado();
   const avisosLote = lote ? lote.itens.filter((i) => temAviso(i, clientes)).length : 0;
   const devolvidos = envios.filter((e) => e.status === 'devolvido').length;
   const meusPendentes = propostas.filter((p) => p.status === 'pendente').length + movimentacoes.filter((m) => m.status === 'pendente').length;
@@ -42,6 +48,8 @@ export function useMenu(): ItemMenu[] {
   const propoe = pode('movimentacoes', 2) || pode('conferencia', 2) || pode('frotas', 2);
 
   const itens: ItemMenu[] = [];
+  if (usaCentralFinanceiro(pode, aprova))
+    itens.push({ aba: 'envio', rotulo: 'Central do financeiro', rota: '/financeiro', grupo: 'financeiro', badge: aguardandoAprovacao + pendentesParaMim.length + devolvidos, alerta: true });
   for (const a of ABAS) {
     if (a.id === 'aprovacoes' && !aprova) {
       if (propoe) itens.push({ aba: a.id, rotulo: 'Minhas alterações', rota: a.rota, grupo: 'inicio', badge: meusPendentes, alerta: false });
@@ -63,6 +71,13 @@ export function useMenu(): ItemMenu[] {
     // os formulários das OS: quem abre e encerra OS monta os modelos
     if (a.id === 'ordens' && pode('ordens', 2) && pode('manutencao', 2)) itens.push({ aba: 'ordens', rotulo: 'Modelos de OS', rota: '/modelos-os', grupo: a.grupo, badge: 0, alerta: false });
   }
+  // financeiro: o que é do dia a dia dela fica junto, no grupo Financeiro
+  if (usuario?.perfil === 'financeiro') {
+    const ordem = ['/financeiro', '/aprovacoes', '/envio', '/calendario', '/historico', '/movimentacoes', '/conferencia', '/externos', '/configuracoes'];
+    for (const i of itens) if (ordem.includes(i.rota)) i.grupo = 'financeiro';
+    const pos = (i: ItemMenu) => (i.grupo === 'financeiro' ? ordem.indexOf(i.rota) + 1 || 99 : 0);
+    itens.sort((x, y) => pos(x) - pos(y));
+  }
   return itens;
 }
 
@@ -76,7 +91,10 @@ function Selo({ n, alerta }: { n: number; alerta: boolean }) {
 }
 
 function Menu({ itens }: { itens: ItemMenu[] }) {
-  const [fechados, setFechados] = useState<Grupo[]>(lerFechados);
+  const { usuario } = useEstado();
+  const ehFinanceiro = usuario?.perfil === 'financeiro';
+  const [fechados, setFechados] = useState<Grupo[]>(() => lerFechados(ehFinanceiro ? ['operacao', 'frota'] : []));
+  const grupos = ehFinanceiro ? ORDEM_FINANCEIRO.map((id) => GRUPOS.find((g) => g.id === id)!) : GRUPOS;
   const local = useLocation();
   const alternar = (g: Grupo) => {
     const novo = fechados.includes(g) ? fechados.filter((x) => x !== g) : [...fechados, g];
@@ -89,7 +107,7 @@ function Menu({ itens }: { itens: ItemMenu[] }) {
   };
   return (
     <nav aria-label="Menu" className="flex flex-col gap-1 p-3">
-      {GRUPOS.map((g) => {
+      {grupos.map((g) => {
         const doGrupo = itens.filter((i) => i.grupo === g.id);
         if (!doGrupo.length) return null;
         const aberto = !fechados.includes(g.id) || doGrupo.some((i) => local.pathname.startsWith(i.rota));

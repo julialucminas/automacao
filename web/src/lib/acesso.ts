@@ -77,8 +77,8 @@ export const PERFIS_PADRAO: PerfilAcesso[] = [
   {
     id: 'financeiro',
     nome: 'Financeiro',
-    descricao: 'Faturas, envio, clientes e aprovações.',
-    permissoes: com(2, { usuarios: 0, registro: 1, manutencao: 1, ordens: 1, appDono: 0 }),
+    descricao: 'Acesso a tudo, menos usuários e senhas. Abre na Central do financeiro.',
+    permissoes: com(2, { usuarios: 0, registro: 1, appDono: 1, inicio: 1 }),
     veValores: true,
     padrao: true,
   },

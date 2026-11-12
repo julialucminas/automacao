@@ -22,7 +22,8 @@ import { Manutencao } from './pages/Manutencao';
 import { AppDono } from './pages/AppDono';
 import { Ordens } from './pages/Ordens';
 import { Campo } from './pages/Campo';
-import { useMenu } from './components/Layout';
+import { useMenu, usaCentralFinanceiro } from './components/Layout';
+import { CentralFinanceiro } from './pages/CentralFinanceiro';
 import type { Aba } from './lib/acesso';
 import type { ReactNode } from 'react';
 
@@ -48,13 +49,14 @@ const TELAS: [Aba, string, ReactNode][] = [
 ];
 
 function RotasLogado() {
-  const { pode } = useEstado();
+  const { pode, aprova, usuario } = useEstado();
   const menu = useMenu();
+  const central = usaCentralFinanceiro(pode, aprova);
   // quem só consulta (o dono) abre direto no app do celular
   const soConsulta = !(['envio', 'manutencao', 'movimentacoes', 'clientes', 'frotas', 'conferencia', 'usuarios'] as const).some((a) => pode(a, 2));
   // técnico de campo (faz OS, não cuida do painel) abre direto nas OS dele
   const tecnico = pode('ordens', 2) && !pode('manutencao', 2);
-  const primeira = tecnico ? '/campo' : pode('appDono') && soConsulta ? '/app' : pode('inicio') ? '/inicio' : (menu[0]?.rota ?? '/inicio');
+  const primeira = central && usuario?.perfil === 'financeiro' ? '/financeiro' : tecnico ? '/campo' : pode('appDono') && soConsulta ? '/app' : pode('inicio') ? '/inicio' : (menu[0]?.rota ?? '/inicio');
   return (
     <Routes>
       {pode('appDono') && <Route path="/app" element={<AppDono />} />}
@@ -65,6 +67,7 @@ function RotasLogado() {
         ))}
         {/* aprovações (quem aprova) ou "Minhas alterações" (quem propõe) */}
         <Route path="/aprovacoes" element={<Aprovacoes />} />
+        {central && <Route path="/financeiro" element={<CentralFinanceiro />} />}
         <Route path="*" element={menu.length ? <Navigate to={primeira} replace /> : <SemAcesso />} />
       </Route>
     </Routes>

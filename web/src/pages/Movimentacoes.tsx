@@ -66,8 +66,8 @@ export const tituloMov = (m: Pick<Movimentacao, 'tipo' | 'frota' | 'frotaNova'>)
     : `${NOMES_TIPO[m.tipo]} FT${m.frota}${m.tipo === 'troca' && m.frotaNova ? ` → FT${m.frotaNova}` : ''}`;
 
 /** Contratos que vencem nos próximos 30 dias (ou venceram há pouco) — hora de reajustar/renovar. */
-type Vencendo = { frota: string; vence: string; cliente: Cliente | null; valor: number | null };
-function contratosVencendo(eqs: Equipamento[], clientes: Cliente[], hoje: string): Vencendo[] {
+export type Vencendo = { frota: string; vence: string; cliente: Cliente | null; valor: number | null };
+export function contratosVencendo(eqs: Equipamento[], clientes: Cliente[], hoje: string): Vencendo[] {
   const ate = somarMeses(hoje, 1);
   const desde = somarMeses(hoje, -3);
   return eqs
@@ -93,6 +93,15 @@ export function Movimentacoes() {
   const [eqs, setEqs] = useState<Equipamento[]>([]);
   const [verVencendo, setVerVencendo] = useState(false);
   const aberta = movimentacoes.find((m) => m.id === params.get('id')) ?? null;
+  // atalho da Central do financeiro: /movimentacoes?nova=reajuste abre o painel já no reajuste
+  useEffect(() => {
+    const t = params.get('nova');
+    if (registra && t && ['locacao', 'troca', 'devolucao', 'reajuste'].includes(t)) {
+      setNova({ tipo: t as TipoMov });
+      setParams({}, { replace: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- só quando o endereço muda
+  }, [params]);
 
   useEffect(() => {
     if (registra || veValores) api.listarEquipamentos().then(setEqs, () => undefined);

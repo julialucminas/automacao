@@ -115,6 +115,15 @@ Ao aplicar, muda o valor no cliente e na ficha (`contratoValor`, `contratoVencim
 era o mesmo valor). Devolução e troca guardam `dados.valorAnterior`. Painel do dia tem o cartão "Máquinas: últimos 7 dias"
 para quem aprova ou vê valores. Atenção: conferir o tipo com `npx tsc -p tsconfig.app.json` (o `-p .` não confere nada).
 
+## Central do financeiro (nov/2026)
+Perfil financeiro (Angelise): tudo em nível 2, menos `usuarios` (0) e `registro` (1); migração 19 atualiza o perfil
+já existente. Quem é do perfil financeiro abre em `/financeiro` (pages/CentralFinanceiro.tsx): indicadores (receita
+mensal de locação, variação no mês, faturas enviadas, contratos para reajustar), "O que está esperando você"
+(aprovações e reajustes pendentes, faturas de hoje, e-mails devolvidos/falhos, solicitações e mensagens, contratos
+vencendo, serviços externos a cobrar/orçar, conferência a partir do dia 20), máquinas dos últimos 7 dias, acesso rápido.
+Menu do financeiro: grupos Financeiro e Clientes primeiro; Aprovações, Calendário, Movimentações, Conferência e
+Externos ficam no grupo Financeiro; Operação e Frota começam fechados. `/movimentacoes?nova=reajuste` abre o reajuste.
+
 ## Navegação
 Menu lateral com 6 grupos (Início, Operação, Frota, Financeiro, Clientes, Administração), Painel do dia em
 `/inicio` (cartões conforme o perfil) e busca no topo (`components/BuscaGeral.tsx`; as telas leem `?busca=`).

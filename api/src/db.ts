@@ -386,6 +386,10 @@ const MIGRACOES = [
      atualizado_em TEXT NOT NULL
    );
    CREATE INDEX externos_etapa ON servicos_externos(etapa);`,
+  // 19: financeiro (Angelise) passa a ver e editar tudo, menos usuários e senhas
+  `UPDATE perfis SET permissoes = '{"inicio":1,"appDono":1,"solicitacoes":2,"manutencao":2,"ordens":2,"externos":2,"movimentacoes":2,"conferencia":2,"calendario":2,"frotas":2,"envio":2,"historico":2,"configuracoes":2,"clientes":2,"aprovacoes":2,"registro":1,"usuarios":0}', ve_valores = 1,
+     descricao = 'Acesso a tudo, menos usuários e senhas. Abre na Central do financeiro.'
+   WHERE id = 'financeiro';`,
 ];
 
 export function abrirBanco(caminho: string) {
