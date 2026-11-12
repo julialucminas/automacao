@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../api';
 import { useEstado } from '../state';
 import type { Equipamento, FotoMensal, Ordem, PecaHistorico, Pendencia, ServicoExterno } from '../types';
@@ -61,6 +61,15 @@ export function AppDono() {
     setParams({ aba: a, ...extra });
     window.scrollTo(0, 0);
   };
+  const navegar = useNavigate();
+  const local = useLocation();
+  // Voltar: desfaz o último passo dentro do app (ex.: alerta → máquina → volta ao alerta); sem histórico, vai para Hoje
+  const temVoltar = aba !== 'hoje' || params.has('q');
+  const voltar = () => {
+    if (local.key !== 'default') navegar(-1);
+    else setParams({ aba: 'hoje' }, { replace: true });
+    window.scrollTo(0, 0);
+  };
   const [fichas, setFichas] = useState<Equipamento[]>([]);
   const [pendencias, setPendencias] = useState<Pendencia[]>([]);
   const [gastos, setGastos] = useState<Gasto[]>([]);
@@ -108,11 +117,21 @@ export function AppDono() {
     <div className="min-h-screen bg-canvas pb-[84px]">
       <header className="sticky top-0 z-20 bg-noite px-4 pb-3 pt-[max(12px,env(safe-area-inset-top))] text-white">
         <div className="mx-auto flex max-w-[640px] items-center justify-between gap-3">
-          <div className="flex items-center gap-2.5">
-            <img src="./logo-icone.png" alt="" width={32} height={32} className="h-8 w-8" />
-            <div className="leading-tight">
+          <div className="flex min-w-0 items-center gap-2.5">
+            {temVoltar && (
+              <button type="button" onClick={voltar} aria-label="Voltar" className="-ml-2 flex h-11 items-center gap-1 rounded-lg pl-1.5 pr-2.5 text-[15px] font-semibold hover:bg-white/10">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                  <path d="M15 18l-6-6 6-6" />
+                </svg>
+                Voltar
+              </button>
+            )}
+            <img src="./logo-icone.png" alt="" width={32} height={32} className={`h-8 w-8 ${temVoltar ? 'hidden min-[380px]:block' : ''}`} />
+            <div className="min-w-0 leading-tight">
               <div className="text-[15px] font-bold">Lucminas</div>
-              <div className="text-xs text-white/65">{new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}</div>
+              <div className={`truncate text-xs text-white/65 ${temVoltar ? 'hidden min-[380px]:block' : ''}`}>
+                {new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}
+              </div>
             </div>
           </div>
           <div className="flex items-center gap-1">
@@ -1008,8 +1027,14 @@ function Buscar({ inicial, linhas, veValores }: { inicial: string; linhas: Linha
           {itens.length === 0 ? (
             <Cartao>
               <p className="text-[15px]">
-                Nada encontrado para <b>{p.termos.join(' ').toLowerCase() || 'essa busca'}</b>
-                {p.frota && ` na FT${p.frota}`}.
+                {p.termos.length ? (
+                  <>
+                    Nada encontrado para <b>{p.termos.join(' ').toLowerCase()}</b>
+                    {p.frota && ` na FT${p.frota}`}.
+                  </>
+                ) : (
+                  `Nenhuma peça ou serviço registrado na FT${p.frota}.`
+                )}
               </p>
             </Cartao>
           ) : (

@@ -6,6 +6,18 @@
   html,
   body {
     @apply bg-canvas text-ink font-sans text-sm antialiased;
+    /* celular: toque duplo não dá zoom, e o texto não muda de tamanho ao virar a tela */
+    touch-action: manipulation;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+  /* no celular, campo com letra menor que 16px faz o iPhone dar zoom ao tocar (e a tela fica ampliada) */
+  @media (pointer: coarse) {
+    input,
+    select,
+    textarea {
+      font-size: 16px !important;
+    }
   }
   h1,
   h2 {
