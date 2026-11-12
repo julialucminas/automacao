@@ -11,7 +11,9 @@ import { NaoEncontrado, type Banco, type Cliente, type ClienteInput, type Frota,
 
 export class Conflito2 extends Error {}
 
-export type TipoMov = 'locacao' | 'devolucao' | 'troca';
+export type TipoMov = 'locacao' | 'devolucao' | 'troca' | 'reajuste';
+/** reajuste: uma linha por frota do cliente */
+export type ItemReajuste = { frota: string; antes: number; novo: number };
 export type DadosMov = {
   data: string; // AAAA-MM-DD
   valor: number | null; // centavos
@@ -26,6 +28,14 @@ export type DadosMov = {
   contatoTelefone: string;
   descricao: string;
   observacoes: string;
+  /** reajuste: frotas e valores (antes → novo) */
+  itens?: ItemReajuste[];
+  /** reajuste: percentual usado, se foi aplicado igual a todas (ex.: 4.8) */
+  percentual?: number | null;
+  /** reajuste: novo vencimento do contrato (renovação), se houver */
+  renovaAte?: string | null;
+  /** valor que a frota tinha no cliente antes de aplicar (devolução e troca) */
+  valorAnterior?: number | null;
 };
 export type NovaMov = { tipo: TipoMov; frota: string; frotaNova?: string; clienteId?: string | null; clienteNome?: string } & DadosMov;
 
@@ -115,7 +125,7 @@ export const CONFIG_PADRAO: Record<string, string> = {
 };
 
 const agora = () => new Date().toISOString();
-const NOMES_TIPO: Record<TipoMov, string> = { locacao: 'Nova locação', devolucao: 'Devolução', troca: 'Troca de frota' };
+const NOMES_TIPO: Record<TipoMov, string> = { locacao: 'Nova locação', devolucao: 'Devolução', troca: 'Troca de frota', reajuste: 'Reajuste' };
 const brl = (c: number) => (c / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
 const CAMPOS_CLIENTE = ['nome', 'apelidos', 'cnpj', 'para', 'cc', 'observacoes', 'diaEmissao', 'regra', 'inicioLocacao', 'periodoDias', 'contato', 'telefone', 'prazoPagamento', 'semBoleto'] as const;
@@ -140,7 +150,10 @@ export function mesclarProposta(atual: Cliente, base: Cliente | null, dados: Cli
   return r as ClienteInput;
 }
 
-export function operacoes(db: Banco, repo: Repositorio) {
+/** O que muda na ficha da máquina quando uma movimentação é aplicada (valor e vencimento do contrato). */
+export type AtualizarFicha = (frota: string, d: { contratoValor?: number; contratoVencimento?: string; limparReajusteSe?: number }, usuarioId: number) => void;
+
+export function operacoes(db: Banco, repo: Repositorio, atualizarFicha?: AtualizarFicha) {
   const nomeUsuario = (id: number | null) => (id ? ((db.prepare('SELECT nome FROM usuarios WHERE id = ?').get(id) as { nome: string } | undefined)?.nome ?? '') : '');
 
   const deLinhaMov = (r: Record<string, unknown>): Movimentacao => ({
@@ -217,8 +230,32 @@ export function operacoes(db: Banco, repo: Repositorio) {
       return cliente.id;
     }
 
+    if (m.tipo === 'reajuste') {
+      if (!m.clienteId) throw new Conflito2('Informe o cliente.');
+      const atual = repo.buscarCliente(m.clienteId);
+      const itens = d.itens ?? [];
+      const fora = itens.filter((i) => !atual.frotas.some((f) => f.numero === i.frota));
+      if (fora.length) throw new Conflito2(`FT${fora.map((i) => i.frota).join(', FT')} não ${fora.length > 1 ? 'estão' : 'está'} mais em ${atual.nome}.`);
+      // guarda o valor de agora (pode ter mudado desde o registro)
+      d.itens = itens.map((i) => ({ ...i, antes: atual.frotas.find((f) => f.numero === i.frota)!.valor }));
+      repo.salvarCliente(
+        {
+          ...atual,
+          frotas: atual.frotas.map((f) => {
+            const i = itens.find((x) => x.frota === f.numero);
+            return i ? { ...f, valor: i.novo, ...(d.renovaAte ? { fim: d.renovaAte } : {}) } : f;
+          }),
+        },
+        usuarioId,
+        `reajuste a partir de ${d.data.split('-').reverse().join('/')}: ${itens.map((i) => `FT${i.frota} ${brl(i.novo)}`).join(', ')}`,
+      );
+      for (const i of itens) atualizarFicha?.(i.frota, { contratoValor: i.novo, limparReajusteSe: i.novo, ...(d.renovaAte ? { contratoVencimento: d.renovaAte } : {}) }, usuarioId);
+      return atual.id;
+    }
+
     const cliente = m.clienteId ? repo.buscarCliente(m.clienteId) : donoDaFrota(m.frota);
     if (!cliente || !cliente.frotas.some((f) => f.numero === m.frota)) throw new Conflito2(`A frota ${m.frota} não está em nenhum cliente${m.clienteId ? ' informado' : ''}.`);
+    d.valorAnterior = cliente.frotas.find((f) => f.numero === m.frota)?.valor ?? null;
 
     if (m.tipo === 'devolucao') {
       tirarFrota(cliente, m.frota, usuarioId, `devolução em ${d.data.split('-').reverse().join('/')}`);
@@ -265,6 +302,7 @@ export function operacoes(db: Banco, repo: Repositorio) {
           contatoTelefone: n.contatoTelefone,
           descricao: n.descricao,
           observacoes: n.observacoes,
+          ...(n.tipo === 'reajuste' ? { itens: n.itens ?? [], percentual: n.percentual ?? null, renovaAte: n.renovaAte ?? null } : {}),
         };
         let clienteId = n.clienteId ?? null;
         if (aprovarJa) clienteId = aplicar({ tipo: n.tipo, frota: n.frota, frotaNova: n.frotaNova ?? null, clienteId, clienteNome, dados }, usuarioId);
@@ -272,7 +310,10 @@ export function operacoes(db: Banco, repo: Repositorio) {
           `INSERT INTO movimentacoes (id, tipo, frota, frota_nova, cliente_id, cliente_nome, dados, status, criada_em, criada_por, decidida_em, decidida_por)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         ).run(id, n.tipo, n.frota, n.frotaNova ?? null, clienteId, clienteNome, JSON.stringify(dados), aprovarJa ? 'aprovada' : 'pendente', t, usuarioId, aprovarJa ? t : null, aprovarJa ? usuarioId : null);
-        const resumo = `${NOMES_TIPO[n.tipo]} ${n.frota}${n.frotaNova ? ` → ${n.frotaNova}` : ''}${n.valor ? ` · ${brl(n.valor)}` : ''}`;
+        const resumo =
+          n.tipo === 'reajuste'
+            ? `reajuste de ${clienteNome} (${(dados.itens ?? []).map((i) => `FT${i.frota} ${brl(i.antes)} → ${brl(i.novo)}`).join(', ')})`
+            : `${NOMES_TIPO[n.tipo]} ${n.frota}${n.frotaNova ? ` → ${n.frotaNova}` : ''}${n.valor ? ` · ${brl(n.valor)}` : ''}`;
         repo.registrarLog(clienteId ?? '', usuarioId, aprovarJa ? `registrou ${resumo}` : `registrou ${resumo} (aguardando aprovação)`, null, dados, 'movimentacao');
         return buscarMov(id);
       })();
@@ -284,12 +325,13 @@ export function operacoes(db: Banco, repo: Repositorio) {
         if (m.status !== 'pendente') throw new Conflito2('Essa movimentação já foi decidida.');
         let clienteId = m.clienteId;
         if (aprovar) clienteId = aplicar(m, usuarioId);
-        db.prepare('UPDATE movimentacoes SET status = ?, decidida_em = ?, decidida_por = ?, motivo = ?, cliente_id = ? WHERE id = ?').run(
+        db.prepare('UPDATE movimentacoes SET status = ?, decidida_em = ?, decidida_por = ?, motivo = ?, cliente_id = ?, dados = ? WHERE id = ?').run(
           aprovar ? 'aprovada' : 'rejeitada',
           agora(),
           usuarioId,
           motivo,
           clienteId,
+          JSON.stringify(m.dados),
           id,
         );
         repo.registrarLog(clienteId ?? '', usuarioId, `${aprovar ? 'aprovou' : 'recusou'} ${NOMES_TIPO[m.tipo]} ${m.frota} (de ${m.criadaPorNome})${motivo ? `: ${motivo}` : ''}`, null, null, 'movimentacao');

@@ -166,7 +166,21 @@ function limitador(max: number, janelaMs: number) {
 
 export function criarApp(db: Banco, opcoes: { cookieSeguro: boolean; logger?: boolean; pastaDados?: string; carteiro?: Carteiro; monitorar?: boolean; esperaCopiaMs?: number }) {
   const repo = repositorio(db);
-  const ops = operacoes(db, repo);
+  const ops = operacoes(db, repo, (frota, d, usuarioId) => {
+    // reajuste aprovado: o valor (e a renovação) vai também para a ficha da máquina, se ela existir
+    const eqs = tabelaEquipamentos(db);
+    const atual = eqs.buscar(frota);
+    if (!atual) return;
+    eqs.salvar(
+      frota,
+      {
+        ...(d.contratoValor !== undefined ? { contratoValor: d.contratoValor } : {}),
+        ...(d.contratoVencimento ? { contratoVencimento: d.contratoVencimento } : {}),
+        ...(d.limparReajusteSe !== undefined && atual.contratoReajuste === d.limparReajusteSe ? { contratoReajuste: null } : {}),
+      },
+      usuarioId,
+    );
+  });
   const app = Fastify({ logger: opcoes.logger ?? false, trustProxy: true, bodyLimit: 1_000_000 });
   const podeTentar = limitador(10, 15 * 60_000);
 
@@ -311,7 +325,8 @@ export function criarApp(db: Banco, opcoes: { cookieSeguro: boolean; logger?: bo
   // ---------- movimentações ----------
   const lerMov = (corpo: unknown): NovaMov => {
     const b = (corpo ?? {}) as Record<string, unknown>;
-    const tipo = (['locacao', 'devolucao', 'troca'].includes(b.tipo as string) ? b.tipo : invalido('Tipo de movimentação inválido.')) as TipoMov;
+    const tipo = (['locacao', 'devolucao', 'troca', 'reajuste'].includes(b.tipo as string) ? b.tipo : invalido('Tipo de movimentação inválido.')) as TipoMov;
+    if (tipo === 'reajuste') return lerReajuste(b);
     const frota = texto(b.frota, 'frota', 50).toUpperCase().replace(/^FT[\s-]*/, '');
     if (!frota) throw new Invalido('Informe a frota.');
     const frotaNova = texto(b.frotaNova, 'frota nova', 50).toUpperCase().replace(/^FT[\s-]*/, '');
@@ -341,6 +356,45 @@ export function criarApp(db: Banco, opcoes: { cookieSeguro: boolean; logger?: bo
       contatoTelefone: texto(b.contatoTelefone, 'telefone', 40),
       descricao: texto(b.descricao, 'descrição', 200),
       observacoes: texto(b.observacoes, 'observações', 2000),
+    };
+  };
+
+  /** Reajuste: cliente + uma linha por frota com o valor novo. O "antes" sai do cadastro. */
+  const lerReajuste = (b: Record<string, unknown>): NovaMov => {
+    const clienteId = typeof b.clienteId === 'string' && b.clienteId ? b.clienteId : invalido('Escolha o cliente.');
+    const cliente = repo.buscarCliente(clienteId);
+    const data = lerDataIso(b.data, 'A partir de') ?? invalido('Informe a partir de quando vale o valor novo.');
+    if (!Array.isArray(b.itens) || !b.itens.length) throw new Invalido('Escolha pelo menos uma frota para reajustar.');
+    const itens = (b.itens as Record<string, unknown>[]).map((i) => {
+      const frota = texto(i.frota, 'frota', 50).toUpperCase().replace(/^FT[\s-]*/, '');
+      const f = cliente.frotas.find((x) => x.numero === frota) ?? invalido(`A FT${frota} não está em ${cliente.nome}.`);
+      const novo = Number(i.novo);
+      if (!Number.isInteger(novo) || novo <= 0 || novo > 100_000_000_00) throw new Invalido(`Valor novo inválido na FT${frota}.`);
+      return { frota, antes: f.valor, novo };
+    });
+    if (new Set(itens.map((i) => i.frota)).size !== itens.length) throw new Invalido('Frota repetida no reajuste.');
+    const percentual = b.percentual === null || b.percentual === undefined || b.percentual === '' ? null : Number(b.percentual);
+    if (percentual !== null && (!Number.isFinite(percentual) || percentual < -50 || percentual > 100)) throw new Invalido('Percentual inválido.');
+    return {
+      tipo: 'reajuste',
+      frota: itens.map((i) => i.frota).join(', '),
+      clienteId,
+      clienteNome: cliente.nome,
+      data,
+      valor: null,
+      frete: '',
+      gas: 0,
+      contrato: '',
+      fim: null,
+      prazoPagamento: '',
+      emails: [],
+      contatoNome: '',
+      contatoTelefone: '',
+      descricao: '',
+      observacoes: texto(b.observacoes, 'motivo', 2000),
+      itens,
+      percentual,
+      renovaAte: lerDataIso(b.renovaAte, 'Renovação do contrato') ?? null,
     };
   };
 

@@ -1,9 +1,30 @@
-import type { Cliente, NovaMovimentacao, TipoMov } from '../types';
+import type { Cliente, Movimentacao, NovaMovimentacao, TipoMov } from '../types';
 import { lerReais } from './dinheiro';
 import { encontrarCliente } from './pareamento';
 import { semAcento } from './normalizar';
 
-export const NOMES_TIPO: Record<TipoMov, string> = { locacao: 'Nova locação', devolucao: 'Devolução', troca: 'Troca de frota' };
+export const NOMES_TIPO: Record<TipoMov, string> = { locacao: 'Nova locação', devolucao: 'Devolução', troca: 'Troca de frota', reajuste: 'Reajuste' };
+
+/** Quanto a movimentação muda na receita mensal (centavos; null = não dá para saber). */
+export function efeitoNaReceita(m: Pick<Movimentacao, 'tipo' | 'dados'>): number | null {
+  const d = m.dados;
+  if (m.tipo === 'reajuste') return (d.itens ?? []).reduce((t, i) => t + i.novo - i.antes, 0);
+  if (m.tipo === 'locacao') return d.valor ?? null;
+  if (m.tipo === 'devolucao') return d.valorAnterior != null ? -d.valorAnterior : null;
+  if (m.tipo === 'troca') return d.valor != null && d.valorAnterior != null ? d.valor - d.valorAnterior : 0;
+  return null;
+}
+
+/** Primeiro dia do mês seguinte (reajuste costuma valer a partir do próximo faturamento). */
+export const proximoMes = (hoje: string) => {
+  const [a, mm] = hoje.split('-').map(Number);
+  return mm === 12 ? `${a + 1}-01-01` : `${a}-${String(mm + 1).padStart(2, '0')}-01`;
+};
+export const somarMeses = (iso: string, n: number) => {
+  const [a, m, d] = iso.split('-').map(Number);
+  const t = new Date(Date.UTC(a, m - 1 + n, d));
+  return t.toISOString().slice(0, 10);
+};
 
 export const movVazia = (data: string): NovaMovimentacao => ({
   tipo: 'locacao',

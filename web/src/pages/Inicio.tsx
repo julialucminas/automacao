@@ -8,6 +8,9 @@ import { formatarReais } from '../lib/dinheiro';
 import { montarEquipamentos } from '../lib/equipamentos';
 import { montarPainel, regrasDe, type LinhaPainel } from '../lib/manutencao';
 import type { Ordem, Pendencia, ServicoExterno } from '../types';
+import { efeitoNaReceita, NOMES_TIPO } from '../lib/movimentacao';
+import { STATUS_MOV, TOM_TIPO } from './Movimentacoes';
+import { Chip } from '../components/ui';
 
 const somarDias = (iso: string, n: number) => paraIso(new Date(paraData(iso).getTime() + n * 86_400_000));
 
@@ -70,6 +73,14 @@ export function Inicio() {
 
   // aprovações
   const pendentes = movimentacoes.filter((m) => m.status === 'pendente').length + propostas.filter((p) => p.status === 'pendente').length;
+
+  // mudanças nas máquinas (locação, troca, devolução, reajuste) dos últimos 7 dias — para o financeiro
+  const veMudancas = aprova || veValores;
+  const seteDias = somarDias(hoje, -7);
+  const mudancas = movimentacoes
+    .filter((m) => m.status !== 'rejeitada' && (m.criadaEm.slice(0, 10) >= seteDias || m.dados.data >= seteDias))
+    .sort((a, b) => b.criadaEm.localeCompare(a.criadaEm));
+  const saldoSemana = mudancas.filter((m) => m.status === 'aprovada').reduce((t, m) => t + (efeitoNaReceita(m) ?? 0), 0);
 
   // conferência do mês
   // painel de manutenção (quem vê a manutenção)
@@ -163,6 +174,34 @@ export function Inicio() {
               <Numero n={pendentes} rotulo="aguardando aprovação do financeiro" />
             </Cartao>
           )
+        )}
+
+        {veMudancas && mudancas.length > 0 && (
+          <Cartao titulo="Máquinas: últimos 7 dias" link="/movimentacoes" rotuloLink="Ver tudo">
+            <ul className="flex flex-col gap-1.5 text-[13.5px]">
+              {mudancas.slice(0, 6).map((m) => (
+                <li key={m.id} className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                  <Chip tom={TOM_TIPO[m.tipo]}>{NOMES_TIPO[m.tipo].replace(' de frota', '')}</Chip>
+                  <b>FT{m.tipo === 'reajuste' ? m.frota.split(', ').join(', FT') : m.frota}</b>
+                  {m.tipo === 'troca' && m.frotaNova && <span>→ FT{m.frotaNova}</span>}
+                  <span className="text-ink-2">{m.clienteNome}</span>
+                  {veValores && (efeitoNaReceita(m) ?? 0) !== 0 && (
+                    <span className={`text-xs font-semibold ${(efeitoNaReceita(m) ?? 0) > 0 ? 'text-ok' : 'text-bad'}`}>
+                      {(efeitoNaReceita(m) ?? 0) > 0 ? '+' : '−'}
+                      {formatarReais(Math.abs(efeitoNaReceita(m) ?? 0))}
+                    </span>
+                  )}
+                  {m.status === 'pendente' && <Chip tom={STATUS_MOV.pendente.tom}>aguardando aprovação</Chip>}
+                </li>
+              ))}
+            </ul>
+            {mudancas.length > 6 && <p className="mt-1 text-xs text-ink-3">e mais {mudancas.length - 6}</p>}
+            {veValores && saldoSemana !== 0 && (
+              <p className="mt-2 text-[13px] text-ink-2">
+                Na receita mensal: <b className={saldoSemana > 0 ? 'text-ok' : 'text-bad'}>{saldoSemana > 0 ? '+' : '−'}{formatarReais(Math.abs(saldoSemana))}</b>
+              </p>
+            )}
+          </Cartao>
         )}
 
         {pode('envio') && (

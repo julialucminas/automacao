@@ -106,6 +106,15 @@ Tabela `servicos_externos` (migração 18), módulo `api/src/externos.ts`, aba d
 Sem automação (nada de e-mail ou boleto): só etapa, responsável, previsão, nº da OS e histórico de quem mudou.
 Valor do orçamento só para quem vê valores (os outros recebem null e não conseguem mudar).
 
+## Movimentações e reajustes (nov/2026)
+Tela `/movimentacoes` em linha do tempo: resumo do mês (quantas locações/trocas/devoluções/reajustes e o efeito na
+receita mensal, só para quem vê valores), aviso de contratos vencendo (ficha `contratoVencimento`, próximos 30 dias
+ou vencidos há até 3 meses) e lista por mês; o formulário abre num painel lateral. Tipo novo `reajuste`: cliente +
+`dados.itens` [{frota, antes, novo}], `percentual`, `renovaAte`; segue a mesma aprovação (operações → financeiro).
+Ao aplicar, muda o valor no cliente e na ficha (`contratoValor`, `contratoVencimento`; limpa `contratoReajuste` se
+era o mesmo valor). Devolução e troca guardam `dados.valorAnterior`. Painel do dia tem o cartão "Máquinas: últimos 7 dias"
+para quem aprova ou vê valores. Atenção: conferir o tipo com `npx tsc -p tsconfig.app.json` (o `-p .` não confere nada).
+
 ## Navegação
 Menu lateral com 6 grupos (Início, Operação, Frota, Financeiro, Clientes, Administração), Painel do dia em
 `/inicio` (cartões conforme o perfil) e busca no topo (`components/BuscaGeral.tsx`; as telas leem `?busca=`).
