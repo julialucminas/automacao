@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
 import { hojeIso, janelaConferencia } from '../lib/calendario';
 import { useEstado } from '../state';
+import { emailsComProblema } from '../lib/avisos';
 import { temAviso } from '../lib/pareamento';
 import { EMPRESA, REMETENTE } from '../lib/email';
 import { ABAS, GRUPOS, type Aba, type Grupo } from '../lib/acesso';
@@ -39,9 +40,12 @@ export type ItemMenu = { aba: Aba; rotulo: string; rota: string; grupo: Grupo; b
 
 /** Monta o menu do usuário: só as abas que o perfil dele vê, nos 6 grupos. */
 export function useMenu(): ItemMenu[] {
-  const { lote, clientes, envios, pendentesParaMim, solicitacoes, aguardandoAprovacao, propostas, movimentacoes, pode, aprova, usuario, config } = useEstado();
+  const { lote, clientes, envios, pendentesParaMim, solicitacoes, aguardandoAprovacao, propostas, movimentacoes, pode, aprova, usuario, config, novasMov, avisosOk, veValores } = useEstado();
   const avisosLote = lote ? lote.itens.filter((i) => temAviso(i, clientes)).length : 0;
-  const devolvidos = envios.filter((e) => e.status === 'devolvido').length;
+  // e-mails com problema que ninguém deu ok
+  const devolvidos = emailsComProblema(envios, avisosOk).length;
+  // financeiro (e quem vê valores): movimentações que ainda não viu
+  const novas = aprova || veValores ? novasMov.length : 0;
   const meusPendentes = propostas.filter((p) => p.status === 'pendente').length + movimentacoes.filter((m) => m.status === 'pendente').length;
   const badgeSolicitacoes = new Set([...pendentesParaMim.map((s) => s.id), ...solicitacoes.filter((s) => s.naoLidas > 0).map((s) => s.id)]).size;
   // quem não aprova acompanha as próprias alterações em "Minhas alterações"
@@ -49,7 +53,7 @@ export function useMenu(): ItemMenu[] {
 
   const itens: ItemMenu[] = [];
   if (usaCentralFinanceiro(pode, aprova))
-    itens.push({ aba: 'envio', rotulo: 'Central do financeiro', rota: '/financeiro', grupo: 'financeiro', badge: aguardandoAprovacao + pendentesParaMim.length + devolvidos, alerta: true });
+    itens.push({ aba: 'envio', rotulo: 'Central do financeiro', rota: '/financeiro', grupo: 'financeiro', badge: aguardandoAprovacao + pendentesParaMim.length + devolvidos + novas, alerta: true });
   for (const a of ABAS) {
     if (a.id === 'aprovacoes' && !aprova) {
       if (propoe) itens.push({ aba: a.id, rotulo: 'Minhas alterações', rota: a.rota, grupo: 'inicio', badge: meusPendentes, alerta: false });
@@ -62,6 +66,7 @@ export function useMenu(): ItemMenu[] {
       solicitacoes: [badgeSolicitacoes, true],
       aprovacoes: [aguardandoAprovacao, true],
       historico: [devolvidos, true],
+      movimentacoes: [novas, true],
       clientes: [clientes.filter((c) => c.ativo).length, false],
     };
     const [n, alerta] = badge[a.id] ?? [0, false];

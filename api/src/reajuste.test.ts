@@ -172,3 +172,43 @@ describe('modalidade e janela da conferência', () => {
     expect(janelaConferencia('2027-01-06', 25, 5).aberta).toBe(false);
   });
 });
+
+describe('novas movimentações e frete do cliente', () => {
+  it('o que outra pessoa registra aparece como nova até a pessoa dar ciente; quem registra já viu', async () => {
+    const base = { frete: 'cliente', freteValor: 35000, gas: 0, contrato: '', prazoPagamento: '', emails: [], contatoNome: '', contatoTelefone: '', descricao: '', observacoes: '', modalidade: 'contrato' };
+    // a Angelise registra (já aplicada): para ela não é nova; para o Júnior é
+    const m = (await como('angelise')('POST', '/api/movimentacoes', { ...base, tipo: 'locacao', frota: '95', data: '2026-11-12', clienteId, valor: 100000 })).json();
+    expect(m.dados.freteValor).toBe(35000);
+    const cli = (await como('angelise')('GET', '/api/clientes')).json();
+    expect((cli.clientes ?? cli).find((c: { id: string }) => c.id === clienteId).frotas.find((f: { numero: string }) => f.numero === '95')).toMatchObject({ frete: 'cliente', freteValor: 35000 });
+    const daAngelise = (await como('angelise')('GET', '/api/movimentacoes')).json();
+    expect(daAngelise.find((x: { id: string }) => x.id === m.id).vista).toBe(true);
+    let doJunior = (await como('junior')('GET', '/api/movimentacoes')).json();
+    expect(doJunior.find((x: { id: string }) => x.id === m.id).vista).toBe(false);
+    await como('junior')('POST', '/api/movimentacoes/vistas', { ids: [m.id] });
+    doJunior = (await como('junior')('GET', '/api/movimentacoes')).json();
+    expect(doJunior.every((x: { vista: boolean }) => x.vista)).toBe(true);
+    // o Júnior registra (pendente): nova para a Angelise; ao aprovar, deixa de ser
+    const p = (await como('junior')('POST', '/api/movimentacoes', { ...base, frete: 'lucminas', tipo: 'locacao', frota: '96', data: '2026-11-12', clienteId, valor: 100000 })).json();
+    expect(p.dados.freteValor).toBeUndefined();
+    expect((await como('angelise')('GET', '/api/movimentacoes')).json().find((x: { id: string }) => x.id === p.id).vista).toBe(false);
+    await como('angelise')('POST', `/api/movimentacoes/${p.id}/aprovar`);
+    expect((await como('angelise')('GET', '/api/movimentacoes')).json().find((x: { id: string }) => x.id === p.id).vista).toBe(true);
+    // marcar todas
+    expect((await como('angelise')('POST', '/api/movimentacoes/vistas', { ids: 'x' })).statusCode).toBe(400);
+    expect((await como('angelise')('POST', '/api/movimentacoes/vistas', {})).statusCode).toBe(200);
+  });
+});
+
+describe('ok nas pendências', () => {
+  it('dá ok, lista com quem e quando, desfaz; chave inválida é recusada', async () => {
+    const a = como('angelise');
+    expect((await a('POST', '/api/avisos-ok', { chave: 'envio:abc-123', obs: 'cliente trocou o e-mail' })).statusCode).toBe(200);
+    expect((await a('POST', '/api/avisos-ok', { chave: 'x; drop' })).statusCode).toBe(400);
+    let l = (await como('junior')('GET', '/api/avisos-ok')).json();
+    expect(l).toEqual([expect.objectContaining({ chave: 'envio:abc-123', feitoPor: 'Angelise', obs: 'cliente trocou o e-mail' })]);
+    await a('POST', '/api/avisos-ok/desfazer', { chave: 'envio:abc-123' });
+    l = (await a('GET', '/api/avisos-ok')).json();
+    expect(l).toEqual([]);
+  });
+});

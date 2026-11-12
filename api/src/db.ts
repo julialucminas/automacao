@@ -13,6 +13,8 @@ export type Frota = {
   contrato?: string;
   gas?: number;
   frete?: '' | 'lucminas' | 'cliente';
+  /** frete por conta do cliente: quanto (centavos) */
+  freteValor?: number | null;
   /** locação por contrato ou esporádica (etiqueta no cadastro) */
   modalidade?: '' | 'contrato' | 'esporadico';
 };
@@ -392,6 +394,22 @@ const MIGRACOES = [
   `UPDATE perfis SET permissoes = '{"inicio":1,"appDono":1,"solicitacoes":2,"manutencao":2,"ordens":2,"externos":2,"movimentacoes":2,"conferencia":2,"calendario":2,"frotas":2,"envio":2,"historico":2,"configuracoes":2,"clientes":2,"aprovacoes":2,"registro":1,"usuarios":0}', ve_valores = 1,
      descricao = 'Acesso a tudo, menos usuários e senhas. Abre na Central do financeiro.'
    WHERE id = 'financeiro';`,
+  // 20: quem já viu cada movimentação (as "novas" do financeiro); as que já existem contam como vistas
+  `CREATE TABLE movimentacoes_vistas (
+     usuario_id INTEGER NOT NULL REFERENCES usuarios(id),
+     movimentacao_id TEXT NOT NULL REFERENCES movimentacoes(id),
+     visto_em TEXT NOT NULL,
+     PRIMARY KEY (usuario_id, movimentacao_id)
+   );
+   INSERT INTO movimentacoes_vistas (usuario_id, movimentacao_id, visto_em)
+     SELECT u.id, m.id, strftime('%Y-%m-%dT%H:%M:%fZ', 'now') FROM usuarios u, movimentacoes m;`,
+  // 21: "ok" dado numa pendência (e-mail devolvido, contrato vencendo…): some das notificações, o registro fica
+  `CREATE TABLE avisos_ok (
+     chave TEXT PRIMARY KEY,
+     feito_em TEXT NOT NULL,
+     feito_por INTEGER REFERENCES usuarios(id),
+     obs TEXT NOT NULL DEFAULT ''
+   );`,
 ];
 
 export function abrirBanco(caminho: string) {

@@ -26,7 +26,7 @@ export type Rascunho = {
   prazoPagamento: string;
   semBoleto: boolean;
   /** frotas com o valor como texto do campo, para permitir digitar à vontade; extra = dados da locação (vêm das movimentações) */
-  frotas: { numero: string; valor: string; descricao: string; extra?: Pick<Frota, 'inicio' | 'fim' | 'contrato' | 'gas' | 'frete' | 'modalidade'> }[];
+  frotas: { numero: string; valor: string; descricao: string; extra?: Pick<Frota, 'inicio' | 'fim' | 'contrato' | 'gas' | 'frete' | 'freteValor' | 'modalidade'> }[];
 };
 
 export const rascunhoVazio = (nome = ''): Rascunho => ({ nome, apelidos: '', cnpj: '', para: [], cc: [], observacoes: '', regra: 'dia', dia: '', inicio: '', periodo: '', contato: '', telefone: '', prazoPagamento: '', semBoleto: false, frotas: [] });
@@ -52,7 +52,7 @@ export const rascunhoDe = (c: Cliente): Rascunho => ({
     numero: f.numero,
     valor: f.valor ? reaisParaCampo(f.valor) : '',
     descricao: f.descricao,
-    extra: { inicio: f.inicio ?? null, fim: f.fim ?? null, contrato: f.contrato ?? '', gas: f.gas ?? 0, frete: f.frete ?? '', modalidade: f.modalidade ?? '' },
+    extra: { inicio: f.inicio ?? null, fim: f.fim ?? null, contrato: f.contrato ?? '', gas: f.gas ?? 0, frete: f.frete ?? '', freteValor: f.freteValor ?? null, modalidade: f.modalidade ?? '' },
   })),
 });
 
@@ -457,14 +457,14 @@ function Faturamento({ d, setD }: { d: Rascunho; setD: (r: Rascunho) => void }) 
 }
 
 /** "desde 20/10/2026 · contrato 12 meses · 1 vasilhame de gás · frete Lucminas" */
-export function resumoLocacao(x?: Pick<Frota, 'inicio' | 'fim' | 'contrato' | 'gas' | 'frete'>): string {
+export function resumoLocacao(x?: Pick<Frota, 'inicio' | 'fim' | 'contrato' | 'gas' | 'frete' | 'freteValor'>): string {
   if (!x) return '';
   return [
     x.inicio ? `desde ${dataBr(x.inicio)}` : '',
     x.fim ? `até ${dataBr(x.fim)}` : '',
     x.contrato ? `contrato ${x.contrato}` : '',
     x.gas ? `${x.gas} vasilhame${x.gas > 1 ? 's' : ''} de gás` : '',
-    x.frete === 'lucminas' ? 'frete Lucminas' : x.frete === 'cliente' ? 'frete do cliente' : '',
+    x.frete === 'lucminas' ? 'frete Lucminas' : x.frete === 'cliente' ? `frete do cliente${x.freteValor ? ` (${formatarReais(x.freteValor)})` : ''}` : '',
   ]
     .filter(Boolean)
     .join(' · ');

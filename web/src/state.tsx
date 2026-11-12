@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { api } from './api';
-import type { Cliente, ClienteInput, ConfigEmail, Envio, FrotaOficina, ItemLote, Lote, Movimentacao, Proposta, Solicitacao, Usuario } from './types';
+import type { Cliente, ClienteInput, ConfigEmail, Envio, FrotaOficina, ItemLote, Lote, Movimentacao, Proposta, Solicitacao, Usuario, AvisoOk } from './types';
 import { hojeIso } from './lib/calendario';
 import { encontrarCliente, statusDoItem } from './lib/pareamento';
 import { nivel, type Aba } from './lib/acesso';
@@ -28,6 +28,13 @@ type Estado = {
   proporCliente(input: ClienteInput): Promise<void>;
 
   movimentacoes: Movimentacao[];
+  /** movimentações que este usuário ainda não viu (financeiro: "novas movimentações") */
+  novasMov: Movimentacao[];
+  marcarMovVistas(ids?: string[]): Promise<void>;
+  /** pendências com "ok" (e-mail devolvido, contrato vencendo…) */
+  avisosOk: Map<string, AvisoOk>;
+  darOk(chave: string, obs?: string): Promise<void>;
+  desfazerOk(chave: string): Promise<void>;
   propostas: Proposta[];
   oficina: FrotaOficina[];
   definirOficina(l: FrotaOficina[]): void;
@@ -95,6 +102,7 @@ export function EstadoProvider({ children }: { children: ReactNode }) {
   const [lote, setLote] = useState<Lote | null>(null);
   const [aviso, setAviso] = useState<Aviso | null>(null);
   const [movimentacoes, setMovimentacoes] = useState<Movimentacao[]>([]);
+  const [avisos, setAvisos] = useState<AvisoOk[]>([]);
   const [propostas, setPropostas] = useState<Proposta[]>([]);
   const [oficina, setOficina] = useState<FrotaOficina[]>([]);
   const [config, setConfig] = useState<ConfigEmail | null>(null);
@@ -118,8 +126,9 @@ export function EstadoProvider({ children }: { children: ReactNode }) {
 
   const recarregarOperacoes = useCallback(async () => {
     try {
-      const [m, p, o] = await Promise.all([api.listarMovimentacoes(), api.listarPropostas(), api.listarOficina()]);
+      const [m, p, o, a] = await Promise.all([api.listarMovimentacoes(), api.listarPropostas(), api.listarOficina(), api.listarAvisosOk().catch(() => null)]);
       setMovimentacoes(m);
+      if (a) setAvisos(a);
       setPropostas(p);
       setOficina(o);
     } catch {
@@ -229,6 +238,20 @@ export function EstadoProvider({ children }: { children: ReactNode }) {
         await recarregarOperacoes();
       },
       movimentacoes,
+      novasMov: movimentacoes.filter((m) => !m.vista),
+      async marcarMovVistas(ids) {
+        setMovimentacoes((l) => l.map((m) => (!ids || ids.includes(m.id) ? { ...m, vista: true } : m)));
+        await api.marcarMovVistas(ids);
+      },
+      avisosOk: new Map(avisos.map((a) => [a.chave, a])),
+      async darOk(chave, obs) {
+        await api.darOk(chave, obs);
+        setAvisos(await api.listarAvisosOk());
+      },
+      async desfazerOk(chave) {
+        await api.desfazerOk(chave);
+        setAvisos(await api.listarAvisosOk());
+      },
       propostas,
       oficina,
       definirOficina: setOficina,
@@ -319,6 +342,7 @@ export function EstadoProvider({ children }: { children: ReactNode }) {
       veValores,
       aprova,
       movimentacoes,
+      avisos,
       propostas,
       oficina,
       aguardandoAprovacao,

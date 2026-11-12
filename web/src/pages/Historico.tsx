@@ -2,6 +2,8 @@ import { Fragment, useEffect, useMemo, useState } from 'react';
 import { useBuscaDaUrl } from '../lib/buscaDaUrl';
 import { api } from '../api';
 import { useEstado } from '../state';
+import { chaveEnvio, textoOk } from '../lib/avisos';
+import { BotaoOk } from '../components/BotaoOk';
 import type { Envio, StatusEnvio } from '../types';
 import { dataHora, referenciaTitulo } from '../lib/email';
 import { chaveEmpresa, semAcento } from '../lib/normalizar';
@@ -20,7 +22,7 @@ type Filtro = 'todos' | StatusEnvio;
 const COLUNAS = 'grid grid-cols-[136px_64px_minmax(200px,1.2fr)_minmax(200px,1.2fr)_minmax(220px,1.5fr)_164px] gap-3';
 
 export function Historico() {
-  const { envios, recarregarEnvios, avisar, pode } = useEstado();
+  const { envios, recarregarEnvios, avisar, pode, avisosOk } = useEstado();
   const age = pode('historico', 2) || pode('envio', 2);
   const [filtro, setFiltro] = useState<Filtro>('todos');
   const [busca, setBusca] = useState('');
@@ -199,6 +201,9 @@ export function Historico() {
                         </span>
                       )}
                       {e.devolucao && <span className="text-xs font-medium text-bad">{e.devolucao}</span>}
+                      {(e.status === 'devolvido' || e.status === 'falhou') && avisosOk.get(chaveEnvio(e)) && (
+                        <span className="text-xs font-semibold text-ok">✓ {textoOk(avisosOk.get(chaveEnvio(e))!)}</span>
+                      )}
                       {!e.lidoEm && !e.devolucao && <span className="text-xs text-ink-3">{e.detalhe}</span>}
                     </div>
                     <div className="flex flex-wrap gap-1.5">
@@ -218,6 +223,7 @@ export function Historico() {
                           {reenviando === e.id ? 'Reenviando…' : 'Reenviar'}
                         </button>
                       )}
+                      {(e.status === 'devolvido' || e.status === 'falhou') && <BotaoOk chave={chaveEnvio(e)} />}
                       <button type="button" className="btn-secondary btn-sm" aria-expanded={estaAberto} onClick={() => setAberto(estaAberto ? null : e.id)}>
                         {estaAberto ? 'Fechar' : 'Detalhes'}
                       </button>

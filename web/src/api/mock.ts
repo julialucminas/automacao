@@ -2,7 +2,7 @@ import type { Api } from './index';
 import type { Cliente, Conferencia, Envio, FrotaOficina, Faturamento, Solicitacao, Usuario } from '../types';
 import { REMETENTE } from '../lib/email';
 import { PERFIS_PADRAO } from '../lib/acesso';
-import type { Equipamento, ModeloOS, ServicoExterno, Ordem, PecaHistorico, Pendencia, PerfilAcesso, UsuarioAdmin } from '../types';
+import type { AvisoOk, Equipamento, ModeloOS, ServicoExterno, Ordem, PecaHistorico, Pendencia, PerfilAcesso, UsuarioAdmin } from '../types';
 
 /*
  * Implementação SIMULADA da API, só para desenvolvimento da interface.
@@ -130,6 +130,8 @@ const EQUIP_DEMO = new Map<string, Equipamento>();
 let HIST_DEMO: PecaHistorico[] = [];
 let PEND_DEMO: Pendencia[] = [];
 let EXTERNOS_DEMO: ServicoExterno[] = [];
+let AVISOS_DEMO: AvisoOk[] = [];
+let OS_VISTAS: string[] = [];
 let MODELOS_DEMO: ModeloOS[] = [
   {
     id: 'padrao-corretiva',
@@ -445,6 +447,18 @@ export const mockApi: Api = {
         ? { ...o, execucao: { ...o.execucao, respostas: { ...(o.execucao.respostas ?? {}), [campoId]: [...((o.execucao.respostas?.[campoId] as string[] | undefined) ?? []), nome] } } }
         : { ...o, execucao: { ...o.execucao, fotos: [...(o.execucao.fotos ?? []), nome] } },
     );
+  },
+  async marcarMovVistas(ids) {
+    OS_VISTAS = ids ? [...OS_VISTAS, ...ids] : ['*'];
+  },
+  async listarAvisosOk() {
+    return AVISOS_DEMO;
+  },
+  async darOk(chave, obs) {
+    AVISOS_DEMO = [...AVISOS_DEMO.filter((a) => a.chave !== chave), { chave, obs: obs ?? '', feitoEm: new Date().toISOString(), feitoPor: 'Demonstração' }];
+  },
+  async desfazerOk(chave) {
+    AVISOS_DEMO = AVISOS_DEMO.filter((a) => a.chave !== chave);
   },
   async listarExternos() {
     return EXTERNOS_DEMO;

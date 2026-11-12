@@ -202,7 +202,7 @@ export function textoMensagem(m: Pick<Movimentacao, 'tipo' | 'frota' | 'clienteN
   if (m.clienteNome) l.push(m.clienteNome.toUpperCase());
   if (m.tipo === 'locacao' && d.modalidade) l.push(`- Locação: ${d.modalidade === 'contrato' ? 'Contrato' : 'Esporádica'}`);
   if (d.valor != null) l.push(`- Valor da Locação: ${formatarReais(d.valor)}`);
-  if (d.frete) l.push(`- Frete: ${d.frete === 'lucminas' ? 'Por conta da Lucminas' : 'Por conta do cliente'}`);
+  if (d.frete) l.push(`- Frete: ${d.frete === 'lucminas' ? 'Por conta da Lucminas' : `Por conta do cliente${d.freteValor ? ` (${formatarReais(d.freteValor)})` : ''}`}`);
   if (d.gas) l.push(`- Gás: ${d.gas} vasilhame${d.gas > 1 ? 's' : ''}`);
   if (d.contrato) l.push(`- Tempo de contrato: ${d.contrato}`);
   if (d.fim) l.push(`- Término previsto: ${dataBr(d.fim)}`);

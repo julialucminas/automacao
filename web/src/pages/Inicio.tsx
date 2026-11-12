@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { useEstado } from '../state';
+import { emailsComProblema } from '../lib/avisos';
 import { api } from '../api';
 import { dataCurta, hojeIso, paraData, paraIso, proximasDatas, regraDoCliente } from '../lib/calendario';
 import { referenciaAtual, referenciaPorExtenso } from '../lib/email';
@@ -42,7 +43,7 @@ function Numero({ n, rotulo, tom = 'ink' }: { n: number | string; rotulo: string
 
 /** Primeira tela de todo mundo: cada um vê só o que é dele. */
 export function Inicio() {
-  const { usuario, clientes, envios, oficina, movimentacoes, propostas, pendentesParaMim, aprova, pode, veValores, config } = useEstado();
+  const { usuario, clientes, envios, oficina, movimentacoes, propostas, pendentesParaMim, aprova, pode, veValores, config, avisosOk } = useEstado();
   const hoje = hojeIso();
   const ref = referenciaAtual();
   const nome = usuario?.chamar?.trim() || usuario?.nome.trim().split(/\s+/)[0] || '';
@@ -64,7 +65,7 @@ export function Inicio() {
   }, [ativos, hoje, pode]);
   const faturasHoje = faturas.filter((f) => f.data === hoje);
   const enviadasNoMes = envios.filter((e) => e.referencia === ref && e.status !== 'falhou').length;
-  const devolvidos = envios.filter((e) => e.status === 'devolvido').length;
+  const devolvidos = emailsComProblema(envios, avisosOk).length;
 
   // locações
   const frotas = ativos.flatMap((c) => c.frotas.map((f) => ({ c, f })));

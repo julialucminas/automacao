@@ -9,12 +9,15 @@ import { formatarReais } from '../lib/dinheiro';
 import { efeitoNaReceita, NOMES_TIPO } from '../lib/movimentacao';
 import { contratosVencendo, STATUS_MOV, TOM_TIPO } from './Movimentacoes';
 import { Chip, type Tom } from '../components/ui';
+import { BotaoOk } from '../components/BotaoOk';
+import { chaveContrato, chaveEnvio, emailsComProblema } from '../lib/avisos';
 import { IcAlerta, IcCheck, IcDinheiro, IcEmail, IcEmpilhadeira, IcEnviar, IcNota, IcPredio, IcPrancheta } from '../components/Icones';
 
 const somarDias = (iso: string, n: number) => paraIso(new Date(paraData(iso).getTime() + n * 86_400_000));
 const sinal = (c: number) => `${c > 0 ? '+' : c < 0 ? '−' : ''}${formatarReais(Math.abs(c))}`;
 
-type Pendencia = { chave: string; tom: Tom; rotulo: string; texto: ReactNode; link: string; acao: string };
+/** ok: chave do "ok" (a pendência some das notificações, o registro fica) */
+type Pendencia = { chave: string; tom: Tom; rotulo: string; texto: ReactNode; link: string; acao: string; ok?: string };
 
 /**
  * Central do financeiro: a primeira tela da Angelise.
@@ -22,7 +25,7 @@ type Pendencia = { chave: string; tom: Tom; rotulo: string; texto: ReactNode; li
  * depois os números do mês, o acesso rápido e o que mudou nas máquinas.
  */
 export function CentralFinanceiro() {
-  const { config, usuario, clientes, envios, movimentacoes, propostas, pendentesParaMim, solicitacoes, pode, veValores } = useEstado();
+  const { config, usuario, clientes, envios, movimentacoes, propostas, pendentesParaMim, solicitacoes, pode, veValores, avisosOk, novasMov, marcarMovVistas } = useEstado();
   const hoje = hojeIso();
   const ref = referenciaAtual();
   const janela = janelaConferencia(config);
@@ -55,7 +58,8 @@ export function CentralFinanceiro() {
   const doMes = envios.filter((e) => e.referencia === ref);
   const enviadas = doMes.filter((e) => e.status !== 'falhou').length;
   const lidas = doMes.filter((e) => e.status === 'lido').length;
-  const comProblema = envios.filter((e) => e.status === 'devolvido' || (e.status === 'falhou' && e.referencia === ref));
+  // e-mails com problema que ninguém deu ok (o ok tira daqui, mas o registro fica no Histórico)
+  const comProblema = emailsComProblema(envios, avisosOk);
 
   // locação e movimentações
   const frotas = ativos.flatMap((c) => c.frotas);
@@ -65,7 +69,7 @@ export function CentralFinanceiro() {
   const movPend = movimentacoes.filter((m) => m.status === 'pendente');
   const reajPend = movPend.filter((m) => m.tipo === 'reajuste');
   const propPend = propostas.filter((p) => p.status === 'pendente');
-  const vencendo = useMemo(() => contratosVencendo(eqs, clientes, hoje), [eqs, clientes, hoje]);
+  const vencendo = useMemo(() => contratosVencendo(eqs, clientes, hoje).filter((v) => !avisosOk.has(chaveContrato(v.frota, v.vence))), [eqs, clientes, hoje, avisosOk]);
   const seteDias = somarDias(hoje, -7);
   const recentes = movimentacoes
     .filter((m) => m.status !== 'rejeitada' && (m.criadaEm.slice(0, 10) >= seteDias || m.dados.data >= seteDias))
@@ -107,19 +111,23 @@ export function CentralFinanceiro() {
       link: '/envio',
       acao: 'Enviar',
     });
-  if (comProblema.length)
+  for (const e of comProblema.slice(0, 5))
     pend.push({
-      chave: 'mail',
+      chave: `mail-${e.id}`,
       tom: 'bad',
-      rotulo: 'E-mails',
+      rotulo: e.status === 'devolvido' ? 'Devolvido' : 'Não saiu',
       texto: (
         <>
-          <b>{comProblema.length}</b> fatura{comProblema.length > 1 ? 's' : ''} com e-mail devolvido ou que não saiu: {[...new Set(comProblema.map((e) => e.clienteNome))].slice(0, 4).join(', ')}
+          Fatura {e.numero} · <b>{e.clienteNome}</b>
+          <span className="text-ink-3"> · {e.status === 'devolvido' ? e.devolucao || 'e-mail devolvido' : 'o e-mail não saiu'}</span>
         </>
       ),
-      link: '/historico',
+      link: `/historico?busca=${encodeURIComponent(e.numero)}`,
       acao: 'Ver',
+      ok: chaveEnvio(e),
     });
+  if (comProblema.length > 5)
+    pend.push({ chave: 'mail-mais', tom: 'bad', rotulo: 'E-mails', texto: <>e mais {comProblema.length - 5} e-mails com problema</>, link: '/historico', acao: 'Ver' });
   for (const s of pendentesParaMim.slice(0, 5))
     pend.push({
       chave: `sol-${s.id}`,
@@ -150,24 +158,22 @@ export function CentralFinanceiro() {
       link: '/solicitacoes',
       acao: 'Ler',
     });
-  if (vencendo.length)
+  for (const v of vencendo.slice(0, 5))
     pend.push({
-      chave: 'reaj',
+      chave: `reaj-${v.frota}`,
       tom: 'warn',
       rotulo: 'Reajuste',
       texto: (
         <>
-          <b>{vencendo.length}</b> contrato{vencendo.length > 1 ? 's' : ''} vencendo ou vencido{vencendo.length > 1 ? 's' : ''}:{' '}
-          {vencendo
-            .slice(0, 4)
-            .map((v) => `FT${v.frota} (${v.cliente?.nome}, ${dataBr(v.vence).slice(0, 5)})`)
-            .join(', ')}
-          {vencendo.length > 4 ? '…' : ''}
+          Contrato da <b>FT{v.frota}</b> ({v.cliente?.nome}) {v.vence < hoje ? 'venceu' : 'vence'} em {dataBr(v.vence)}
         </>
       ),
-      link: '/movimentacoes',
+      link: `/movimentacoes?nova=reajuste&cliente=${v.cliente?.id ?? ''}&frota=${v.frota}`,
       acao: 'Reajustar',
+      ok: chaveContrato(v.frota, v.vence),
     });
+  if (vencendo.length > 5)
+    pend.push({ chave: 'reaj-mais', tom: 'warn', rotulo: 'Reajuste', texto: <>e mais {vencendo.length - 5} contratos vencendo</>, link: '/movimentacoes', acao: 'Ver' });
   if (aCobrar.length)
     pend.push({
       chave: 'cobrar',
@@ -255,6 +261,49 @@ export function CentralFinanceiro() {
         />
       </section>
 
+      {novasMov.length > 0 && (
+        <section className="rounded-xl border-2 border-brand bg-white" aria-label="Novas movimentações">
+          <h2 className="flex flex-wrap items-center justify-between gap-2 border-b border-line bg-brand-tint px-5 py-3 text-[15px] font-bold">
+            <span>
+              Novas movimentações <span className="ml-1 rounded-full bg-brand px-2.5 text-[13px]">{novasMov.length}</span>
+              <span className="ml-2 text-[13px] font-normal text-ink-3">o que mudou nas máquinas desde a última vez que você viu</span>
+            </span>
+            {novasMov.length > 1 && (
+              <button type="button" className="btn-secondary btn-sm" onClick={() => void marcarMovVistas(novasMov.map((m) => m.id))}>
+                ✓ Ciente de todas
+              </button>
+            )}
+          </h2>
+          <ul>
+            {novasMov.slice(0, 10).map((m) => {
+              const ef = efeitoNaReceita(m);
+              return (
+                <li key={m.id} className="flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-line-soft px-5 py-2.5 text-[13.5px] last:border-0">
+                  <Link to={`/movimentacoes?id=${m.id}`} className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-0.5 hover:underline">
+                    <span className="w-[42px] text-xs text-ink-3">{dataBr(m.dados.data).slice(0, 5)}</span>
+                    <Chip tom={TOM_TIPO[m.tipo]}>{NOMES_TIPO[m.tipo].replace(' de frota', '')}</Chip>
+                    <b>FT{m.tipo === 'reajuste' ? m.frota.split(', ').join(', FT') : m.frota}</b>
+                    {m.tipo === 'troca' && m.frotaNova && <span>→ FT{m.frotaNova}</span>}
+                    <span className="text-ink-2">{m.clienteNome}</span>
+                    {veValores && ef != null && ef !== 0 && <span className={`text-xs font-semibold ${ef > 0 ? 'text-ok' : 'text-bad'}`}>{sinal(ef)}</span>}
+                    <span className="text-xs text-ink-3">· por {m.criadaPorNome}</span>
+                    {m.status === 'pendente' && <Chip tom={STATUS_MOV.pendente.tom}>aprovar</Chip>}
+                  </Link>
+                  <button type="button" className="btn-secondary btn-sm" onClick={() => void marcarMovVistas([m.id])}>
+                    ✓ Ciente
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+          {novasMov.length > 10 && (
+            <Link to="/movimentacoes" className="block px-5 py-2 text-[13px] font-semibold text-info">
+              e mais {novasMov.length - 10} →
+            </Link>
+          )}
+        </section>
+      )}
+
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
         {/* pendências */}
         <section className="flex flex-col rounded-xl border border-line bg-white" aria-label="Pendências">
@@ -269,14 +318,15 @@ export function CentralFinanceiro() {
           ) : (
             <ul>
               {pend.map((p) => (
-                <li key={p.chave} className="border-b border-line-soft last:border-0">
-                  <Link to={p.link} className="flex items-center gap-3 px-5 py-3 hover:bg-brand-tint">
+                <li key={p.chave} className="flex flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-line-soft px-5 py-3 last:border-0 hover:bg-brand-tint">
+                  <Link to={p.link} className="flex min-w-0 flex-1 items-center gap-3">
                     <span className="w-[92px] shrink-0">
                       <Chip tom={p.tom}>{p.rotulo}</Chip>
                     </span>
                     <span className="min-w-0 flex-1 text-[14px]">{p.texto}</span>
                     <span className="shrink-0 text-[13px] font-semibold text-info">{p.acao} →</span>
                   </Link>
+                  {p.ok && <BotaoOk chave={p.ok} rotulo="Ok" />}
                 </li>
               ))}
             </ul>

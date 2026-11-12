@@ -11,6 +11,8 @@ export type Frota = {
   contrato?: string;
   gas?: number;
   frete?: '' | 'lucminas' | 'cliente';
+  /** frete por conta do cliente: quanto (centavos) */
+  freteValor?: number | null;
   /** locação por contrato ou esporádica */
   modalidade?: '' | 'contrato' | 'esporadico';
 };
@@ -205,6 +207,8 @@ export type DadosMov = {
   valorAnterior?: number | null;
   /** locação: por contrato ou esporádica */
   modalidade?: '' | 'contrato' | 'esporadico';
+  /** frete por conta do cliente: quanto (centavos) */
+  freteValor?: number | null;
   /** venda e compra: nota fiscal */
   nf?: string;
   /** compra: identificação da máquina que entra */
@@ -225,7 +229,11 @@ export type Movimentacao = {
   decididaEm: string | null;
   decididaPorNome: string | null;
   motivo: string;
+  /** este usuário já viu (as "novas movimentações") */
+  vista: boolean;
 };
+/** "ok" dado numa pendência: some das notificações, o registro fica */
+export type AvisoOk = { chave: string; feitoEm: string; feitoPor: string; obs: string };
 export type Proposta = {
   id: string;
   clienteId: string | null;

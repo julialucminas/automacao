@@ -109,6 +109,7 @@ function lerFrotas(v: unknown): Frota[] | undefined {
     if (o.contrato !== undefined) f.contrato = texto(o.contrato, 'contrato', 60);
     if (o.gas !== undefined) f.gas = lerInteiro(o.gas, 'vasilhames de gás', 0, 50);
     if (o.frete !== undefined) f.frete = lerFrete(o.frete);
+    if (o.freteValor !== undefined) f.freteValor = o.freteValor === null || o.freteValor === '' ? null : lerCentavos(o.freteValor, `valor do frete da frota ${numero}`);
     if (o.modalidade !== undefined) f.modalidade = lerModalidade(o.modalidade);
     return f;
   });
@@ -133,6 +134,12 @@ export function janelaConferencia(hojeIso: string, abre: number, fecha: number):
   if (d >= abre) return { aberta: true, referencia: hojeIso.slice(0, 7) };
   if (d <= fecha) return { aberta: true, referencia: m === 1 ? `${a - 1}-12` : `${a}-${String(m - 1).padStart(2, '0')}` };
   return { aberta: false, referencia: hojeIso.slice(0, 7) };
+}
+
+function lerCentavos(v: unknown, campo: string): number {
+  const n = Number(v);
+  if (!Number.isInteger(n) || n < 0 || n > 100_000_000_00) throw new Invalido(`Valor inválido: ${campo}.`);
+  return n;
 }
 
 function lerFrete(v: unknown): '' | 'lucminas' | 'cliente' {
@@ -353,6 +360,7 @@ export function criarApp(db: Banco, opcoes: { cookieSeguro: boolean; logger?: bo
       data,
       valor,
       frete: lerFrete(b.frete),
+      freteValor: b.frete === 'cliente' && b.freteValor !== undefined && b.freteValor !== null && b.freteValor !== '' ? lerCentavos(b.freteValor, 'valor do frete') : null,
       gas: lerInteiro(b.gas, 'vasilhames de gás', 0, 50),
       contrato: texto(b.contrato, 'tempo de contrato', 60),
       fim: lerDataIso(b.fim, 'Término da locação') ?? null,
@@ -450,7 +458,13 @@ export function criarApp(db: Banco, opcoes: { cookieSeguro: boolean; logger?: bo
     };
   };
 
-  app.get('/api/movimentacoes', { preHandler: exigirLogin }, async () => ops.listarMovimentacoes());
+  app.get('/api/movimentacoes', { preHandler: exigirLogin }, async (req) => ops.listarMovimentacoes(req.usuario.id));
+  // "estou ciente": marca como vistas (sem ids, todas)
+  app.post('/api/movimentacoes/vistas', { preHandler: exigirLogin }, async (req) => {
+    const ids = (req.body as Record<string, unknown> | undefined)?.ids;
+    if (ids !== undefined && (!Array.isArray(ids) || ids.length > 1000 || ids.some((x) => typeof x !== 'string'))) throw new Invalido('Lista inválida.');
+    return ops.marcarVistas(req.usuario.id, ids as string[] | undefined);
+  });
   // financeiro registra já aplicando; operações registra pendente de aprovação
   app.post('/api/movimentacoes', { preHandler: exigir(2, 'movimentacoes') }, async (req, reply) =>
     reply.code(201).send(ops.registrarMovimentacao(lerMov(req.body), req.usuario.id, aprova(req))),
@@ -459,6 +473,38 @@ export function criarApp(db: Banco, opcoes: { cookieSeguro: boolean; logger?: bo
   app.post<{ Params: { id: string } }>('/api/movimentacoes/:id/recusar', { preHandler: exigir(2, 'aprovacoes') }, async (req) =>
     ops.decidirMovimentacao(req.params.id, req.usuario.id, false, texto((req.body as Record<string, unknown> | undefined)?.motivo, 'motivo', 500)),
   );
+
+  // ---------- "ok" nas pendências (some das notificações, mas o registro fica) ----------
+  // chave: "envio:<id>" (e-mail devolvido/falhou), "contrato:<frota>:<vencimento>" (contrato vencendo)
+  const lerChaveOk = (v: unknown) => {
+    const c = texto(v, 'aviso', 120);
+    if (!/^(envio|contrato|externo):[\w:.\-]+$/.test(c)) throw new Invalido('Aviso inválido.');
+    return c;
+  };
+  app.get('/api/avisos-ok', { preHandler: exigirLogin }, async () =>
+    (db.prepare('SELECT a.chave, a.feito_em, a.obs, COALESCE(u.nome, \'\') AS nome FROM avisos_ok a LEFT JOIN usuarios u ON u.id = a.feito_por').all() as { chave: string; feito_em: string; obs: string; nome: string }[]).map(
+      (r) => ({ chave: r.chave, feitoEm: r.feito_em, feitoPor: r.nome, obs: r.obs }),
+    ),
+  );
+  app.post('/api/avisos-ok', { preHandler: exigirLogin }, async (req) => {
+    const b = (req.body ?? {}) as Record<string, unknown>;
+    const chave = lerChaveOk(b.chave);
+    const obs = texto(b.obs, 'observação', 500);
+    db.prepare('INSERT INTO avisos_ok (chave, feito_em, feito_por, obs) VALUES (?, ?, ?, ?) ON CONFLICT (chave) DO UPDATE SET feito_em = excluded.feito_em, feito_por = excluded.feito_por, obs = excluded.obs').run(
+      chave,
+      new Date().toISOString(),
+      req.usuario.id,
+      obs,
+    );
+    repo.registrarLog('', req.usuario.id, `deu ok no aviso ${chave}${obs ? `: ${obs}` : ''}`, null, null, 'avisos');
+    return { ok: true };
+  });
+  app.post('/api/avisos-ok/desfazer', { preHandler: exigirLogin }, async (req) => {
+    const chave = lerChaveOk((req.body as Record<string, unknown> | undefined)?.chave);
+    db.prepare('DELETE FROM avisos_ok WHERE chave = ?').run(chave);
+    repo.registrarLog('', req.usuario.id, `desfez o ok do aviso ${chave}`, null, null, 'avisos');
+    return { ok: true };
+  });
 
   // ---------- propostas (alteração de cadastro feita por operações) ----------
   app.get('/api/propostas', { preHandler: exigirLogin }, async (req) => ops.listarPropostas(aprova(req) ? undefined : req.usuario.id));

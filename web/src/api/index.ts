@@ -37,6 +37,7 @@ import type {
   Pendencia,
   Visita,
   ModeloOS,
+  AvisoOk,
   DadosExterno,
   EtapaExterno,
   ServicoExterno,
@@ -81,6 +82,11 @@ export interface Api {
   alterarSolicitacao(id: string, mudanca: { status?: 'aberta' | 'concluida'; data?: string }): Promise<Solicitacao>;
 
   listarMovimentacoes(): Promise<Movimentacao[]>;
+  /** "ciente": marca como vistas (sem ids, todas) */
+  marcarMovVistas(ids?: string[]): Promise<void>;
+  listarAvisosOk(): Promise<AvisoOk[]>;
+  darOk(chave: string, obs?: string): Promise<void>;
+  desfazerOk(chave: string): Promise<void>;
   registrarMovimentacao(m: NovaMovimentacao): Promise<Movimentacao>;
   decidirMovimentacao(id: string, aprovar: boolean, motivo?: string): Promise<Movimentacao>;
   listarPropostas(): Promise<Proposta[]>;

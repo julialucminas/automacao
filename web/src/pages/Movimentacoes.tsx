@@ -9,6 +9,8 @@ import { emailValido, semAcento } from '../lib/normalizar';
 import { copiarTexto, efeitoNaReceita, fimSugerido, movVazia, NOMES_TIPO, proximoMes, somarMeses, textoMensagem } from '../lib/movimentacao';
 import { dataHora } from '../lib/email';
 import { Chip, Gaveta, type Tom } from '../components/ui';
+import { BotaoOk } from '../components/BotaoOk';
+import { chaveContrato } from '../lib/avisos';
 import { IcBusca, IcMais } from '../components/Icones';
 
 export const STATUS_MOV: Record<Movimentacao['status'], { rotulo: string; tom: Tom }> = {
@@ -63,7 +65,7 @@ export function detalhesMov(m: { tipo: TipoMov; frota: string; frotaNova?: strin
   if (m.tipo === 'troca' && d.valorAnterior != null && d.valor != null && d.valor !== d.valorAnterior)
     l.push(['Valor', `${formatarReais(d.valorAnterior)} → ${formatarReais(d.valor)}`]);
   else if (d.valor !== null) l.push(['Valor da locação', formatarReais(d.valor)]);
-  if (d.frete) l.push(['Frete', d.frete === 'lucminas' ? 'Por conta da Lucminas' : 'Por conta do cliente']);
+  if (d.frete) l.push(['Frete', d.frete === 'lucminas' ? 'Por conta da Lucminas' : `Por conta do cliente${d.freteValor ? ` · ${formatarReais(d.freteValor)}` : ''}`]);
   if (d.gas) l.push(['Gás', `${d.gas} vasilhame${d.gas > 1 ? 's' : ''}`]);
   if (d.contrato) l.push(['Tempo de contrato', d.contrato]);
   if (d.fim) l.push(['Término previsto', dataBr(d.fim)]);
@@ -96,7 +98,10 @@ export function contratosVencendo(eqs: Equipamento[], clientes: Cliente[], hoje:
 }
 
 export function Movimentacoes() {
-  const { clientes, movimentacoes, pode, veValores, aprova } = useEstado();
+  const { clientes, movimentacoes, pode, veValores, aprova, novasMov, marcarMovVistas, avisosOk } = useEstado();
+  // financeiro (e quem vê valores) acompanha as novas: o que mudou desde a última vez que viu
+  const acompanhaNovas = aprova || veValores;
+  const [soNovas, setSoNovas] = useState(false);
   const registra = pode('movimentacoes', 2);
   const [params, setParams] = useSearchParams();
   const hoje = hojeIso();
@@ -108,11 +113,16 @@ export function Movimentacoes() {
   const [eqs, setEqs] = useState<Equipamento[]>([]);
   const [verVencendo, setVerVencendo] = useState(false);
   const aberta = movimentacoes.find((m) => m.id === params.get('id')) ?? null;
+  // abriu o detalhe: está vista
+  useEffect(() => {
+    if (aberta && !aberta.vista) void marcarMovVistas([aberta.id]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- só quando abre outra
+  }, [aberta?.id]);
   // atalho da Central do financeiro: /movimentacoes?nova=reajuste abre o painel já no reajuste
   useEffect(() => {
     const t = params.get('nova');
     if (registra && t && (TODOS_TIPOS as string[]).includes(t)) {
-      setNova({ tipo: t as TipoMov });
+      setNova({ tipo: t as TipoMov, clienteId: params.get('cliente') || undefined, frota: params.get('frota') || undefined });
       setParams({}, { replace: true });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- só quando o endereço muda
@@ -131,10 +141,12 @@ export function Movimentacoes() {
   const vendido = doMes.filter((m) => m.tipo === 'venda').reduce((t, m) => t + (m.dados.valor ?? 0), 0);
   const comprado = doMes.filter((m) => m.tipo === 'compra').reduce((t, m) => t + (m.dados.valor ?? 0), 0);
   const pendentes = movimentacoes.filter((m) => m.status === 'pendente');
-  const vencendo = useMemo(() => contratosVencendo(eqs, clientes, hoje), [eqs, clientes, hoje]);
+  // o "ok" tira o contrato do aviso (até o vencimento mudar)
+  const vencendo = useMemo(() => contratosVencendo(eqs, clientes, hoje).filter((v) => !avisosOk.has(chaveContrato(v.frota, v.vence))), [eqs, clientes, hoje, avisosOk]);
 
   const q = semAcento(busca.trim().toUpperCase()).replace(/^FT\s*/, '');
   const lista = movimentacoes
+    .filter((x) => !soNovas || !x.vista)
     .filter((x) => tipo === 'todos' || x.tipo === tipo)
     .filter((x) => filtro === 'todas' || x.status === filtro)
     .filter((x) => !q || x.frota.split(', ').some((f) => f.includes(q)) || (x.frotaNova ?? '').includes(q) || semAcento(x.clienteNome).includes(q) || semAcento(x.criadaPorNome.toUpperCase()).includes(q))
@@ -163,6 +175,29 @@ export function Movimentacoes() {
           </button>
         )}
       </div>
+
+      {acompanhaNovas && novasMov.length > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border-2 border-brand bg-brand-tint px-4 py-3 text-[14px]">
+          <span>
+            <b>{novasMov.length}</b> nova{novasMov.length > 1 ? 's' : ''} movimentaç{novasMov.length > 1 ? 'ões' : 'ão'} desde a última vez que você viu
+          </span>
+          <span className="flex gap-2">
+            <button type="button" className="btn-secondary btn-sm" aria-pressed={soNovas} onClick={() => setSoNovas(!soNovas)}>
+              {soNovas ? 'Ver todas' : 'Ver só as novas'}
+            </button>
+            <button
+              type="button"
+              className="btn-primary btn-sm"
+              onClick={() => {
+                void marcarMovVistas(novasMov.map((m) => m.id));
+                setSoNovas(false);
+              }}
+            >
+              ✓ Ciente de todas
+            </button>
+          </span>
+        </div>
+      )}
 
       {pendentes.length > 0 && (
         <Link to="/aprovacoes" className="flex items-center justify-between gap-3 rounded-xl border border-warn-line bg-warn-soft px-4 py-3 text-[14px] hover:brightness-[0.98]">
@@ -229,6 +264,7 @@ export function Movimentacoes() {
                       Registrar reajuste
                     </button>
                   )}
+                  <BotaoOk chave={chaveContrato(v.frota, v.vence)} rotulo="Ok, já resolvido" />
                 </li>
               ))}
             </ul>
@@ -284,7 +320,10 @@ export function Movimentacoes() {
                       className={`cursor-pointer border-b border-line-soft last:border-0 hover:bg-brand-tint ${m.status === 'rejeitada' ? 'text-ink-3 line-through decoration-ink-3/40' : ''}`}
                       onClick={() => setParams({ id: m.id })}
                     >
-                      <td className="w-[64px] whitespace-nowrap py-2.5 pl-4 pr-2 text-ink-2">{dataBr(m.dados.data).slice(0, 5)}</td>
+                      <td className={`w-[64px] whitespace-nowrap py-2.5 pl-4 pr-2 text-ink-2 ${acompanhaNovas && !m.vista ? 'shadow-[inset_3px_0_0_#FFC400]' : ''}`}>
+                        {dataBr(m.dados.data).slice(0, 5)}
+                        {acompanhaNovas && !m.vista && <span className="ml-1.5 rounded bg-brand px-1 text-[10px] font-bold text-ink">NOVA</span>}
+                      </td>
                       <td className="w-[120px] px-2 py-2.5">
                         <Chip tom={TOM_TIPO[m.tipo]}>{NOMES_TIPO[m.tipo].replace(' de frota', '')}</Chip>
                       </td>
@@ -369,6 +408,7 @@ function FormMov({ tipo, fechar }: { tipo: TipoMov; fechar: () => void }) {
   const { clientes, recarregarOperacoes, aprova: ehFinanceiro } = useEstado();
   const [m, setM] = useState<NovaMovimentacao>(() => ({ ...movVazia(hojeIso()), tipo }));
   const [valorTxt, setValorTxt] = useState('');
+  const [freteTxt, setFreteTxt] = useState('');
   const [emailsTxt, setEmailsTxt] = useState('');
   const [erro, setErro] = useState('');
   const [salvando, setSalvando] = useState(false);
@@ -407,7 +447,9 @@ function FormMov({ tipo, fechar }: { tipo: TipoMov; fechar: () => void }) {
     if (inval) return setErro(`O e-mail "${inval}" não parece válido.`);
     setSalvando(true);
     try {
-      const salva = await api.registrarMovimentacao({ ...m, valor, emails, clienteNome: m.clienteNome?.trim().toUpperCase() });
+      const freteValor = m.frete === 'cliente' && freteTxt.trim() ? lerReais(freteTxt) : null;
+      if (m.frete === 'cliente' && freteTxt.trim() && freteValor === null) throw new Error(`Não entendi o valor do frete "${freteTxt}".`);
+      const salva = await api.registrarMovimentacao({ ...m, valor, emails, freteValor, clienteNome: m.clienteNome?.trim().toUpperCase() });
       await recarregarOperacoes();
       setFeita(salva);
     } catch (e) {
@@ -422,7 +464,8 @@ function FormMov({ tipo, fechar }: { tipo: TipoMov; fechar: () => void }) {
     const valor = valorTxt.trim() ? lerReais(valorTxt) : null;
     const emails = emailsTxt.split(/[\s,;]+/).map((e) => e.trim().toLowerCase()).filter(Boolean);
     const cliente = clienteAtual?.nome ?? m.clienteNome?.trim() ?? (ondeEsta[0]?.nome || '');
-    return textoMensagem({ tipo: m.tipo, frota: m.frota, frotaNova: m.frotaNova ?? null, clienteNome: cliente || (m.tipo === 'devolucao' ? ondeEsta[0]?.nome ?? '' : ''), dados: { ...m, valor, emails } });
+    const freteValor = m.frete === 'cliente' && freteTxt.trim() ? lerReais(freteTxt) : null;
+    return textoMensagem({ tipo: m.tipo, frota: m.frota, frotaNova: m.frotaNova ?? null, clienteNome: cliente || (m.tipo === 'devolucao' ? ondeEsta[0]?.nome ?? '' : ''), dados: { ...m, valor, emails, freteValor } });
   };
 
   if (feita) return <Registrada m={feita} fechar={fechar} />;
@@ -535,6 +578,20 @@ function FormMov({ tipo, fechar }: { tipo: TipoMov; fechar: () => void }) {
                 <option value="lucminas">Por conta da Lucminas</option>
                 <option value="cliente">Por conta do cliente</option>
               </select>
+              {m.frete === 'cliente' && (
+                <input
+                  aria-label="Valor do frete"
+                  className="input text-right"
+                  inputMode="decimal"
+                  value={freteTxt}
+                  onChange={(e) => setFreteTxt(e.target.value)}
+                  onBlur={() => {
+                    const v = lerReais(freteTxt);
+                    if (v !== null) setFreteTxt(reaisParaCampo(v));
+                  }}
+                  placeholder="Valor do frete (R$)"
+                />
+              )}
             </div>
             <div className="flex flex-col gap-1.5">
               <label htmlFor="mov-contrato" className="label">

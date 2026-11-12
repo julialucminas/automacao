@@ -101,6 +101,10 @@ export const httpApi: Api = {
   alterarSolicitacao: (id, mudanca) => chamar('PATCH', `/api/solicitacoes/${id}`, mudanca),
 
   listarMovimentacoes: () => chamar('GET', '/api/movimentacoes'),
+  marcarMovVistas: (ids) => chamar('POST', '/api/movimentacoes/vistas', ids ? { ids } : {}).then(() => undefined),
+  listarAvisosOk: () => chamar('GET', '/api/avisos-ok'),
+  darOk: (chave, obs) => chamar('POST', '/api/avisos-ok', { chave, obs: obs ?? '' }).then(() => undefined),
+  desfazerOk: (chave) => chamar('POST', '/api/avisos-ok/desfazer', { chave }).then(() => undefined),
   registrarMovimentacao: (m) => chamar('POST', '/api/movimentacoes', m),
   decidirMovimentacao: (id, aprovar, motivo) => chamar('POST', `/api/movimentacoes/${id}/${aprovar ? 'aprovar' : 'recusar'}`, { motivo: motivo ?? '' }),
   listarPropostas: () => chamar('GET', '/api/propostas'),

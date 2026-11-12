@@ -36,6 +36,8 @@ export type DadosMov = {
   renovaAte?: string | null;
   /** valor que a frota tinha no cliente antes de aplicar (devolução, troca e venda de máquina locada) */
   valorAnterior?: number | null;
+  /** frete por conta do cliente: quanto (centavos) */
+  freteValor?: number | null;
   /** locação: por contrato ou esporádica */
   modalidade?: '' | 'contrato' | 'esporadico';
   /** venda e compra: nota fiscal */
@@ -59,6 +61,8 @@ export type Movimentacao = {
   decididaEm: string | null;
   decididaPorNome: string | null;
   motivo: string;
+  /** este usuário já viu (para as "novas movimentações") */
+  vista: boolean;
 };
 
 export type Proposta = {
@@ -186,6 +190,7 @@ export function operacoes(db: Banco, repo: Repositorio, fichas?: Fichas) {
     decididaEm: (r.decidida_em as string) ?? null,
     decididaPorNome: (r.decidida_por_nome as string) ?? null,
     motivo: r.motivo as string,
+    vista: r.vista === undefined ? true : !!r.vista,
   });
 
   const SELECT_MOV = `SELECT m.*, c.nome AS cliente_atual, cu.nome AS criada_por_nome, du.nome AS decidida_por_nome
@@ -277,6 +282,7 @@ export function operacoes(db: Banco, repo: Repositorio, fichas?: Fichas) {
         contrato: d.contrato,
         gas: d.gas,
         frete: d.frete,
+        ...(d.frete === 'cliente' && d.freteValor ? { freteValor: d.freteValor } : {}),
         ...(d.modalidade ? { modalidade: d.modalidade } : {}),
       };
       const atual = repo.buscarCliente(cliente.id);
@@ -364,8 +370,21 @@ export function operacoes(db: Banco, repo: Repositorio, fichas?: Fichas) {
 
   return {
     // ---------- movimentações ----------
-    listarMovimentacoes(): Movimentacao[] {
-      return (db.prepare(`${SELECT_MOV} ORDER BY m.criada_em DESC`).all() as Record<string, unknown>[]).map(deLinhaMov);
+    /** com usuarioId: diz se ele já viu cada uma ("novas" = não vistas) */
+    listarMovimentacoes(usuarioId?: number): Movimentacao[] {
+      if (usuarioId === undefined) return (db.prepare(`${SELECT_MOV} ORDER BY m.criada_em DESC`).all() as Record<string, unknown>[]).map(deLinhaMov);
+      const vistas = new Set((db.prepare('SELECT movimentacao_id FROM movimentacoes_vistas WHERE usuario_id = ?').all(usuarioId) as { movimentacao_id: string }[]).map((x) => x.movimentacao_id));
+      return (db.prepare(`${SELECT_MOV} ORDER BY m.criada_em DESC`).all() as Record<string, unknown>[]).map((r) => ({ ...deLinhaMov(r), vista: vistas.has(r.id as string) }));
+    },
+    /** marca como vistas (sem ids: todas) */
+    marcarVistas(usuarioId: number, ids?: string[]) {
+      const ins = db.prepare('INSERT OR IGNORE INTO movimentacoes_vistas (usuario_id, movimentacao_id, visto_em) VALUES (?, ?, ?)');
+      const lista = ids ?? (db.prepare('SELECT id FROM movimentacoes').all() as { id: string }[]).map((x) => x.id);
+      const t = agora();
+      db.transaction(() => {
+        for (const id of lista) if (db.prepare('SELECT 1 FROM movimentacoes WHERE id = ?').get(id)) ins.run(usuarioId, id, t);
+      })();
+      return { ok: true };
     },
 
     registrarMovimentacao(n: NovaMov, usuarioId: number, aprovarJa: boolean): Movimentacao {
@@ -389,6 +408,7 @@ export function operacoes(db: Banco, repo: Repositorio, fichas?: Fichas) {
           ...(n.tipo === 'reajuste' ? { itens: n.itens ?? [], percentual: n.percentual ?? null, renovaAte: n.renovaAte ?? null } : {}),
           ...(n.tipo === 'venda' || n.tipo === 'compra' ? { nf: n.nf ?? '' } : {}),
           ...(n.tipo === 'locacao' && n.modalidade ? { modalidade: n.modalidade } : {}),
+          ...(n.frete === 'cliente' && n.freteValor ? { freteValor: n.freteValor } : {}),
           ...(n.tipo === 'compra' && n.maquina ? { maquina: n.maquina } : {}),
         };
         let clienteId = n.clienteId ?? null;
@@ -397,6 +417,8 @@ export function operacoes(db: Banco, repo: Repositorio, fichas?: Fichas) {
           `INSERT INTO movimentacoes (id, tipo, frota, frota_nova, cliente_id, cliente_nome, dados, status, criada_em, criada_por, decidida_em, decidida_por)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         ).run(id, n.tipo, n.frota, n.frotaNova ?? null, clienteId, clienteNome, JSON.stringify(dados), aprovarJa ? 'aprovada' : 'pendente', t, usuarioId, aprovarJa ? t : null, aprovarJa ? usuarioId : null);
+        // quem registrou já viu
+        db.prepare('INSERT OR IGNORE INTO movimentacoes_vistas (usuario_id, movimentacao_id, visto_em) VALUES (?, ?, ?)').run(usuarioId, id, t);
         const resumo =
           n.tipo === 'reajuste'
             ? `reajuste de ${clienteNome} (${(dados.itens ?? []).map((i) => `FT${i.frota} ${brl(i.antes)} → ${brl(i.novo)}`).join(', ')})`
@@ -410,6 +432,8 @@ export function operacoes(db: Banco, repo: Repositorio, fichas?: Fichas) {
       return db.transaction(() => {
         const m = buscarMov(id);
         if (m.status !== 'pendente') throw new Conflito2('Essa movimentação já foi decidida.');
+        // quem decide já viu
+        db.prepare('INSERT OR IGNORE INTO movimentacoes_vistas (usuario_id, movimentacao_id, visto_em) VALUES (?, ?, ?)').run(usuarioId, id, agora());
         let clienteId = m.clienteId;
         if (aprovar) clienteId = aplicar(m, usuarioId);
         db.prepare('UPDATE movimentacoes SET status = ?, decidida_em = ?, decidida_por = ?, motivo = ?, cliente_id = ?, dados = ? WHERE id = ?').run(

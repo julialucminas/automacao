@@ -141,6 +141,15 @@ cliente; etiqueta na Relação das locações (`/frotas`, antes "Relação de fr
 (`janelaConferencia` em app.ts e lib/calendario.ts); fora disso a aba fica desativada no menu e o servidor recusa
 marcar (409). O administrador entra sempre. Dias editáveis em Configurações.
 
+## Novas movimentações, "ok" nas pendências, valor do frete (nov/2026)
+`movimentacoes_vistas` (migração 20): cada usuário tem as movimentações que já viu; quem registra ou decide já viu.
+GET /api/movimentacoes devolve `vista`; POST /api/movimentacoes/vistas {ids?} = "ciente". Quem aprova ou vê valores
+vê "Novas movimentações" na Central do financeiro, selo NOVA e aviso na tela de Movimentações, número no menu; abrir
+o detalhe marca como vista. `avisos_ok` (migração 21): "ok" numa pendência (chave `envio:<id>` para e-mail
+devolvido/falhou, `contrato:<frota>:<vencimento>` para contrato vencendo) tira das notificações e do contador, mas o
+registro continua (Histórico mostra "✓ ok por X em dd/mm · obs"; dá para desfazer). Componente `BotaoOk`.
+Frete por conta do cliente tem valor (`freteValor`, centavos) na locação e na frota do cliente.
+
 ## Navegação
 Menu lateral com 6 grupos (Início, Operação, Frota, Financeiro, Clientes, Administração), Painel do dia em
 `/inicio` (cartões conforme o perfil) e busca no topo (`components/BuscaGeral.tsx`; as telas leem `?busca=`).
