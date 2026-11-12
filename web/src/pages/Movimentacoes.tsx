@@ -396,17 +396,17 @@ function NovaMov({ inicial, fechar }: { inicial: { tipo: TipoMov; clienteId?: st
       {tipo === 'reajuste' ? (
         <FormReajuste clienteInicial={inicial.clienteId} frotaInicial={inicial.frota} fechar={fechar} />
       ) : tipo === 'venda' || tipo === 'compra' ? (
-        <FormVendaCompra key={tipo} tipo={tipo} fechar={fechar} />
+        <FormVendaCompra key={tipo} tipo={tipo} frota={inicial.frota} fechar={fechar} />
       ) : (
-        <FormMov tipo={tipo} fechar={fechar} />
+        <FormMov tipo={tipo} frota={inicial.frota} fechar={fechar} />
       )}
     </div>
   );
 }
 
-function FormMov({ tipo, fechar }: { tipo: TipoMov; fechar: () => void }) {
+function FormMov({ tipo, frota, fechar }: { tipo: TipoMov; frota?: string; fechar: () => void }) {
   const { clientes, recarregarOperacoes, aprova: ehFinanceiro } = useEstado();
-  const [m, setM] = useState<NovaMovimentacao>(() => ({ ...movVazia(hojeIso()), tipo }));
+  const [m, setM] = useState<NovaMovimentacao>(() => ({ ...movVazia(hojeIso()), tipo, frota: frota ?? '' }));
   const [valorTxt, setValorTxt] = useState('');
   const [freteTxt, setFreteTxt] = useState('');
   const [emailsTxt, setEmailsTxt] = useState('');
@@ -709,10 +709,10 @@ function FormMov({ tipo, fechar }: { tipo: TipoMov; fechar: () => void }) {
 }
 
 /** Venda (máquina sai da frota) e compra (máquina nova entra, com a ficha montada). */
-function FormVendaCompra({ tipo, fechar }: { tipo: 'venda' | 'compra'; fechar: () => void }) {
+function FormVendaCompra({ tipo, frota, fechar }: { tipo: 'venda' | 'compra'; frota?: string; fechar: () => void }) {
   const { clientes, recarregarOperacoes, aprova: ehFinanceiro } = useEstado();
   const venda = tipo === 'venda';
-  const [d, setD] = useState({ frota: '', data: hojeIso(), parte: '', valor: '', nf: '', descricao: '', marca: '', modelo: '', serie: '', ano: '', capacidade: '', combustivel: '', obs: '' });
+  const [d, setD] = useState({ frota: venda ? (frota ?? '') : '', data: hojeIso(), parte: '', valor: '', nf: '', descricao: '', marca: '', modelo: '', serie: '', ano: '', capacidade: '', combustivel: '', obs: '' });
   const [erro, setErro] = useState('');
   const [salvando, setSalvando] = useState(false);
   const [feita, setFeita] = useState<Movimentacao | null>(null);

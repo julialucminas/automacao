@@ -150,6 +150,13 @@ devolvido/falhou, `contrato:<frota>:<vencimento>` para contrato vencendo) tira d
 registro continua (Histórico mostra "✓ ok por X em dd/mm · obs"; dá para desfazer). Componente `BotaoOk`.
 Frete por conta do cliente tem valor (`freteValor`, centavos) na locação e na frota do cliente.
 
+## Relação das locações reorganizada (nov/2026)
+`/frotas`: resumo numa linha, filtros (contrato, esporádico, terminando em 30 dias, na oficina, sem etiqueta), tabela
+com período (início → término), frete (com valor) e valor; clicar na linha abre o detalhe (`DetalheLocacao`) com todos
+os dados da locação e as ações (troca, devolução, reajuste, venda, nova locação, ficha, editar cliente, colocar/tirar
+da oficina). Tirar da oficina abre `DepoisDaOficina` ("volta para o cliente", troca, devolução, nova locação, venda),
+que leva para `/movimentacoes?nova=<tipo>&frota=<n>&cliente=<id>` com a frota preenchida. Exportar PDF/Excel num menu.
+
 ## Navegação
 Menu lateral com 6 grupos (Início, Operação, Frota, Financeiro, Clientes, Administração), Painel do dia em
 `/inicio` (cartões conforme o perfil) e busca no topo (`components/BuscaGeral.tsx`; as telas leem `?busca=`).
