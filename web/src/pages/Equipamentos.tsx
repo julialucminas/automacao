@@ -632,7 +632,7 @@ function FormFicha({
           {erro}
         </div>
       )}
-      <div className="sticky bottom-0 -mx-6 -mb-6 flex justify-end gap-2.5 border-t border-line bg-white px-6 py-3">
+      <div className="sticky -mx-6 -mb-[max(2rem,env(safe-area-inset-bottom))] bottom-[calc(-1*max(2rem,env(safe-area-inset-bottom)))] flex justify-end gap-2.5 border-t border-line bg-white px-6 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
         <button type="button" className="btn-secondary" onClick={cancelar}>
           Cancelar
         </button>
