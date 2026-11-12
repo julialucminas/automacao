@@ -432,6 +432,9 @@ const MIGRACOES = [
      clientes INTEGER NOT NULL,
      atualizada_em TEXT NOT NULL
    );`,
+  // 24: máquina que vai para a oficina sai do cliente; guarda de quem era para oferecer a volta
+  `ALTER TABLE oficina ADD COLUMN cliente_id TEXT;
+   ALTER TABLE oficina ADD COLUMN cliente_nome TEXT NOT NULL DEFAULT '';`,
 ];
 
 export function abrirBanco(caminho: string) {

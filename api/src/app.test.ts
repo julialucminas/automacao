@@ -308,7 +308,16 @@ describe('operações (Júnior) e aprovação', () => {
     expect((await jr('DELETE', '/api/oficina/59')).json().map((o: { frota: string }) => o.frota)).toEqual(['35']);
     expect((await jr('DELETE', '/api/oficina/59')).statusCode).toBe(404);
     const log = (await req('GET', '/api/registro')).json().filter((l: { area: string }) => l.area === 'oficina').map((l: { acao: string }) => l.acao);
-    expect(log).toEqual(['tirou a FT59 da oficina', 'colocou a FT35 na oficina', 'colocou a FT59 na oficina: motor']);
+    expect(log).toEqual(['tirou a FT59 da oficina', 'colocou a FT35 na oficina (saiu de FENIX)', 'colocou a FT59 na oficina: motor']);
+    // a FT35 estava na FENIX: foi para a oficina, saiu do cliente (devolução aplicada) e a oficina lembra de quem era
+    expect((await req('GET', '/api/clientes')).json().find((c: { nome: string }) => c.nome === 'FENIX').frotas).toEqual([]);
+    const dev = (await req('GET', '/api/movimentacoes')).json().find((m: { tipo: string; frota: string }) => m.tipo === 'devolucao' && m.frota === '35');
+    expect(dev).toMatchObject({ status: 'aprovada', clienteNome: 'FENIX', dados: { valorAnterior: 335000, observacoes: 'Foi para a oficina' } });
+    expect((await jr('GET', '/api/oficina')).json()[0]).toMatchObject({ frota: '35', clienteAnterior: 'FENIX', clienteAnteriorId: fenix.id });
+    // marcar de novo (já sem cliente) não registra outra devolução e não esquece o cliente
+    await req('POST', '/api/oficina', { frota: '35', observacao: 'freio' });
+    expect((await req('GET', '/api/movimentacoes')).json().filter((m: { tipo: string; frota: string }) => m.tipo === 'devolucao' && m.frota === '35')).toHaveLength(1);
+    expect((await jr('GET', '/api/oficina')).json()[0]).toMatchObject({ observacao: 'freio', clienteAnterior: 'FENIX' });
   });
 
   it('configuração do e-mail: só financeiro altera, fica no registro', async () => {

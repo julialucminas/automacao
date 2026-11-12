@@ -405,16 +405,27 @@ function NovaMov({ inicial, fechar }: { inicial: { tipo: TipoMov; clienteId?: st
       ) : tipo === 'venda' || tipo === 'compra' ? (
         <FormVendaCompra key={tipo} tipo={tipo} frota={inicial.frota} fechar={fechar} />
       ) : (
-        <FormMov tipo={tipo} frota={inicial.frota} fechar={fechar} />
+        <FormMov tipo={tipo} frota={inicial.frota} clienteId={inicial.clienteId} fechar={fechar} />
       )}
     </div>
   );
 }
 
-function FormMov({ tipo, frota, fechar }: { tipo: TipoMov; frota?: string; fechar: () => void }) {
-  const { clientes, recarregarOperacoes, aprova: ehFinanceiro } = useEstado();
-  const [m, setM] = useState<NovaMovimentacao>(() => ({ ...movVazia(hojeIso()), tipo, frota: frota ?? '' }));
-  const [valorTxt, setValorTxt] = useState('');
+function FormMov({ tipo, frota, clienteId, fechar }: { tipo: TipoMov; frota?: string; clienteId?: string; fechar: () => void }) {
+  const { clientes, recarregarOperacoes, aprova: ehFinanceiro, movimentacoes } = useEstado();
+  // volta da oficina: já vem com o cliente e com o valor que a máquina tinha nele
+  const clienteDado = clienteId ? clientes.find((c) => c.id === clienteId) : undefined;
+  const valorDeAntes =
+    tipo === 'locacao' && clienteDado && frota
+      ? movimentacoes.find((x) => x.tipo === 'devolucao' && x.status === 'aprovada' && x.frota === frota.replace(/^FT[\s-]*/i, '') && x.clienteId === clienteDado.id)?.dados.valorAnterior
+      : null;
+  const [m, setM] = useState<NovaMovimentacao>(() => ({
+    ...movVazia(hojeIso()),
+    tipo,
+    frota: frota ?? '',
+    ...(clienteDado && tipo !== 'devolucao' ? { clienteId: clienteDado.id, clienteNome: clienteDado.nome } : {}),
+  }));
+  const [valorTxt, setValorTxt] = useState(valorDeAntes ? reaisParaCampo(valorDeAntes) : '');
   const [freteTxt, setFreteTxt] = useState('');
   const [emailsTxt, setEmailsTxt] = useState('');
   const [erro, setErro] = useState('');

@@ -70,6 +70,9 @@ export type Movimentacao = {
   vista: boolean;
 };
 
+/** Máquina na oficina; clienteAnterior: com quem estava quando entrou (ela sai do cliente) */
+export type FrotaOficina = { frota: string; desde: string; observacao: string; usuario: string; clienteAnteriorId: string | null; clienteAnterior: string };
+
 export type Proposta = {
   id: string;
   clienteId: string | null;
@@ -600,17 +603,51 @@ export function operacoes(db: Banco, repo: Repositorio, fichas?: Fichas) {
     },
 
     // ---------- oficina ----------
-    listarOficina(): { frota: string; desde: string; observacao: string; usuario: string }[] {
-      return db
-        .prepare("SELECT o.frota, o.desde, o.observacao, COALESCE(u.nome, '') AS usuario FROM oficina o LEFT JOIN usuarios u ON u.id = o.usuario_id ORDER BY o.desde")
-        .all() as { frota: string; desde: string; observacao: string; usuario: string }[];
+    listarOficina(): FrotaOficina[] {
+      return (
+        db
+          .prepare("SELECT o.frota, o.desde, o.observacao, o.cliente_id, o.cliente_nome, COALESCE(u.nome, '') AS usuario FROM oficina o LEFT JOIN usuarios u ON u.id = o.usuario_id ORDER BY o.desde")
+          .all() as { frota: string; desde: string; observacao: string; usuario: string; cliente_id: string | null; cliente_nome: string }[]
+      ).map((r) => ({ frota: r.frota, desde: r.desde, observacao: r.observacao, usuario: r.usuario, clienteAnteriorId: r.cliente_id, clienteAnterior: r.cliente_nome }));
     },
-    colocarNaOficina(frota: string, observacao: string, usuarioId: number) {
-      const dono = repo.listarClientes().find((c) => c.frotas.some((f) => f.numero === frota));
-      db.prepare(
-        'INSERT INTO oficina (frota, desde, observacao, usuario_id) VALUES (?, ?, ?, ?) ON CONFLICT (frota) DO UPDATE SET observacao = excluded.observacao',
-      ).run(frota, agora(), observacao, usuarioId);
-      repo.registrarLog(dono?.id ?? '', usuarioId, `colocou a FT${frota} na oficina${observacao ? `: ${observacao}` : ''}`, null, null, 'oficina');
+    /**
+     * Máquina na oficina fica sem locação: se estava com um cliente, sai dele na hora (registra uma
+     * devolução já aplicada, que limpa o contrato da ficha e aparece nas "novas movimentações").
+     * Guarda de quem era, para a volta virar uma nova locação para o mesmo cliente.
+     */
+    colocarNaOficina(frota: string, observacao: string, usuarioId: number): { devolucao: Movimentacao | null } {
+      return db.transaction(() => {
+        const dono = repo.listarClientes().find((c) => c.frotas.some((f) => f.numero === frota));
+        const ja = db.prepare('SELECT cliente_id, cliente_nome FROM oficina WHERE frota = ?').get(frota) as { cliente_id: string | null; cliente_nome: string } | undefined;
+        db.prepare(
+          `INSERT INTO oficina (frota, desde, observacao, usuario_id, cliente_id, cliente_nome) VALUES (?, ?, ?, ?, ?, ?)
+           ON CONFLICT (frota) DO UPDATE SET observacao = excluded.observacao, cliente_id = excluded.cliente_id, cliente_nome = excluded.cliente_nome`,
+        ).run(frota, agora(), observacao, usuarioId, dono?.id ?? ja?.cliente_id ?? null, dono?.nome ?? ja?.cliente_nome ?? '');
+        repo.registrarLog(dono?.id ?? '', usuarioId, `colocou a FT${frota} na oficina${observacao ? `: ${observacao}` : ''}${dono ? ` (saiu de ${dono.nome})` : ''}`, null, null, 'oficina');
+        if (!dono) return { devolucao: null };
+        const hoje = new Date(Date.now() - 3 * 3_600_000).toISOString().slice(0, 10);
+        const devolucao = this.registrarMovimentacao(
+          {
+            tipo: 'devolucao',
+            frota,
+            clienteId: dono.id,
+            data: hoje,
+            valor: null,
+            frete: '',
+            gas: 0,
+            contrato: '',
+            prazoPagamento: '',
+            emails: [],
+            contatoNome: '',
+            contatoTelefone: '',
+            descricao: '',
+            observacoes: `Foi para a oficina${observacao ? `: ${observacao}` : ''}`,
+          },
+          usuarioId,
+          true,
+        );
+        return { devolucao };
+      })();
     },
     tirarDaOficina(frota: string, usuarioId: number) {
       const r = db.prepare('DELETE FROM oficina WHERE frota = ?').run(frota);

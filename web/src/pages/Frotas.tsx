@@ -32,7 +32,7 @@ const somarDias = (iso: string, n: number) => {
 const freteTexto = (f: Frota) => (f.frete === 'lucminas' ? 'Lucminas' : f.frete === 'cliente' ? `Cliente${f.freteValor ? ` · ${formatarReais(f.freteValor)}` : ''}` : '');
 
 export function Frotas() {
-  const { clientes, avisar, oficina, definirOficina, veValores: ehFinanceiro, pode, movimentacoes, avisosOk } = useEstado();
+  const { clientes, avisar, oficina, definirOficina, veValores: ehFinanceiro, pode, movimentacoes, avisosOk, recarregarClientes, recarregarOperacoes } = useEstado();
   // etiqueta Helbert vem da ficha da máquina
   const [helbert, setHelbert] = useState<Set<string>>(new Set());
   useEffect(() => {
@@ -61,8 +61,8 @@ export function Frotas() {
   const [editando, setEditando] = useState<Rascunho | null>(null);
   /** detalhe aberto: frota (com ou sem cliente) */
   const [aberta, setAberta] = useState<string | null>(null);
-  /** acabou de sair da oficina: perguntar o que fazer com a máquina */
-  const [saiu, setSaiu] = useState<string | null>(null);
+  /** acabou de sair da oficina: perguntar o que fazer com a máquina (com quem estava antes de entrar) */
+  const [saiu, setSaiu] = useState<FrotaOficina | null>(null);
   const hoje = hojeIso();
   const daqui30 = somarDias(hoje, 30);
 
@@ -129,10 +129,11 @@ export function Frotas() {
 
   const editar = (c: Cliente) => setEditando(rascunhoDe(c));
   const tirarDaOficina = async (frota: string) => {
+    const antes = oficina.find((o) => o.frota === frota) ?? { frota, desde: '', observacao: '', usuario: '' };
     try {
       definirOficina(await api.tirarDaOficina(frota));
       setAberta(null);
-      setSaiu(frota);
+      setSaiu(antes);
     } catch (e) {
       avisar(e instanceof Error ? e.message : 'Não foi possível tirar da oficina.', 'bad');
     }
@@ -431,16 +432,26 @@ export function Frotas() {
           }}
           tirarDaOficina={() => void tirarDaOficina(aberta)}
           colocarNaOficina={async (obs) => {
+            const dono = linhaAberta?.cliente ?? null;
             try {
               definirOficina(await api.colocarNaOficina(aberta, obs));
-              avisar(`FT${aberta} marcada como na oficina.`);
+              // se estava num cliente, saiu dele (devolução registrada): atualiza cadastro e movimentações
+              if (dono) await Promise.all([recarregarClientes(), recarregarOperacoes()]);
+              avisar(dono ? `FT${aberta} foi para a oficina e saiu de ${dono.nome} (devolução registrada).` : `FT${aberta} marcada como na oficina.`);
             } catch (e) {
               avisar(e instanceof Error ? e.message : 'Não foi possível salvar.', 'bad');
             }
           }}
         />
       )}
-      {saiu && <DepoisDaOficina frota={saiu} cliente={linhas.find((l) => l.frota.numero === saiu)?.cliente ?? null} fechar={() => setSaiu(null)} />}
+      {saiu && (
+        <DepoisDaOficina
+          frota={saiu.frota}
+          cliente={linhas.find((l) => l.frota.numero === saiu.frota)?.cliente ?? null}
+          anterior={saiu.clienteAnteriorId ? (clientes.find((c) => c.id === saiu.clienteAnteriorId) ?? null) : null}
+          fechar={() => setSaiu(null)}
+        />
+      )}
 
       <ClienteForm inicial={editando} fechar={() => setEditando(null)} />
       <RelatorioPdf aberto={relatorio} fechar={() => setRelatorio(false)} />
@@ -452,9 +463,10 @@ export function Frotas() {
         clientes={clientes}
         avisar={avisar}
         podeEditar={editaFrotas}
-        saiu={(f) => {
+        saiu={(o) => {
           setVerOficina(false);
-          setSaiu(f);
+          setSaiu(o);
+          void recarregarClientes();
         }}
       />
     </div>
@@ -550,6 +562,11 @@ function DetalheLocacao({
             {edita && !oficina && (
               marcando ? (
                 <span className="flex flex-wrap items-center gap-2">
+                  {c && (
+                    <span className="w-full rounded-lg bg-[#FFF4E5] px-3 py-2 text-[13px] text-[#92400E]">
+                      Ao ir para a oficina, a FT{frota} sai de <b>{c.nome}</b> e fica sem locação (o sistema registra a devolução e deixa de faturar). Na volta, dá para devolver ao mesmo cliente.
+                    </span>
+                  )}
                   <input className="input h-9 min-w-[200px] flex-1" autoFocus value={obs} onChange={(e) => setObs(e.target.value)} placeholder="O que foi fazer (opcional)" />
                   <button
                     type="button"
@@ -580,13 +597,13 @@ function DetalheLocacao({
 }
 
 /** Saiu da oficina: já pergunta o que vai acontecer com a máquina e leva para a movimentação. */
-function DepoisDaOficina({ frota, cliente, fechar }: { frota: string; cliente: Cliente | null; fechar: () => void }) {
+function DepoisDaOficina({ frota, cliente, anterior, fechar }: { frota: string; cliente: Cliente | null; anterior: Cliente | null; fechar: () => void }) {
   const { pode } = useEstado();
   const navegar = useNavigate();
   const registra = pode('movimentacoes', 2);
-  const ir = (tipo: string) => {
+  const ir = (tipo: string, c: Cliente | null = cliente) => {
     fechar();
-    navegar(`/movimentacoes?nova=${tipo}&frota=${encodeURIComponent(frota)}${cliente ? `&cliente=${cliente.id}` : ''}`);
+    navegar(`/movimentacoes?nova=${tipo}&frota=${encodeURIComponent(frota)}${c ? `&cliente=${c.id}` : ''}`);
   };
   const opcao = (rot: string, dica: string, fazer: () => void, principal = false) => (
     <button type="button" onClick={fazer} className={`flex flex-col items-start rounded-xl border px-4 py-3 text-left hover:border-brand hover:bg-brand-tint ${principal ? 'border-ink' : 'border-line-strong'}`}>
@@ -606,7 +623,8 @@ function DepoisDaOficina({ frota, cliente, fechar }: { frota: string; cliente: C
           </>
         ) : (
           <>
-            {registra && opcao('Nova locação', 'Já vai para um cliente', () => ir('locacao'), true)}
+            {registra && anterior && opcao(`Volta para ${anterior.nome}`, 'Registra uma nova locação para o mesmo cliente de antes', () => ir('locacao', anterior), true)}
+            {registra && opcao(anterior ? 'Vai para outro cliente' : 'Nova locação', 'Já vai para um cliente', () => ir('locacao'), !anterior)}
             {opcao('Fica disponível', 'Sem cliente por enquanto. Não precisa registrar nada.', fechar)}
           </>
         )}
@@ -632,7 +650,7 @@ function Oficina({
 }: {
   podeEditar: boolean;
   /** depois de tirar da oficina: pergunta o que fazer com a máquina */
-  saiu: (frota: string) => void;
+  saiu: (o: FrotaOficina) => void;
   aberto: boolean;
   fechar: () => void;
   lista: FrotaOficina[];
@@ -640,6 +658,7 @@ function Oficina({
   clientes: Cliente[];
   avisar: (t: string, tom?: 'ok' | 'bad') => void;
 }) {
+  const { recarregarClientes, recarregarOperacoes } = useEstado();
   const [frota, setFrota] = useState('');
   const [obs, setObs] = useState('');
   const [ocupado, setOcupado] = useState(false);
@@ -667,9 +686,11 @@ function Oficina({
           onSubmit={(e) => {
             e.preventDefault();
             if (!numero) return;
-            void rodar(() => api.colocarNaOficina(numero, obs.trim()), `FT${numero} marcada como na oficina.`).then(() => {
+            const com = dono(numero);
+            void rodar(() => api.colocarNaOficina(numero, obs.trim()), com ? `FT${numero} foi para a oficina e saiu de ${com} (devolução registrada).` : `FT${numero} marcada como na oficina.`).then(() => {
               setFrota('');
               setObs('');
+              if (com) void Promise.all([recarregarClientes(), recarregarOperacoes()]);
             });
           }}
         >
@@ -688,7 +709,7 @@ function Oficina({
       )}
       {numero && dono(numero) && (
         <p className="-mt-1 text-xs text-ink-3">
-          A FT{numero} está com {dono(numero)}: ela continua no cadastro do cliente, só ganha a marca de oficina.
+          A FT{numero} está com {dono(numero)}. Ao ir para a oficina, ela sai desse cliente e fica sem locação (o sistema registra a devolução). Na volta, dá para devolver ao mesmo cliente.
         </p>
       )}
       {lista.length === 0 ? (
@@ -703,7 +724,7 @@ function Oficina({
                 <div className="text-xs text-ink-3">
                   desde {dataHora(o.desde)}
                   {o.usuario && ` · ${o.usuario}`}
-                  {dono(o.frota) ? ` · com ${dono(o.frota)}` : ' · sem cliente'}
+                  {dono(o.frota) ? ` · com ${dono(o.frota)}` : o.clienteAnterior ? ` · sem locação (estava com ${o.clienteAnterior})` : ' · sem locação'}
                 </div>
               </div>
               {podeEditar && (
@@ -711,7 +732,7 @@ function Oficina({
                   type="button"
                   className="btn-secondary btn-sm"
                   disabled={ocupado}
-                  onClick={() => void rodar(() => api.tirarDaOficina(o.frota), `FT${o.frota} saiu da oficina.`).then(() => saiu(o.frota))}
+                  onClick={() => void rodar(() => api.tirarDaOficina(o.frota), `FT${o.frota} saiu da oficina.`).then(() => saiu(o))}
                 >
                   Tirar da oficina
                 </button>

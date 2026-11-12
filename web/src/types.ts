@@ -300,7 +300,8 @@ export type Conferencia = {
 };
 
 /** Frota parada na oficina (pode estar ou não com um cliente). */
-export type FrotaOficina = { frota: string; desde: string; observacao: string; usuario: string };
+/** Máquina na oficina. Ela sai do cliente ao entrar; clienteAnterior é com quem estava (para oferecer a volta). */
+export type FrotaOficina = { frota: string; desde: string; observacao: string; usuario: string; clienteAnteriorId?: string | null; clienteAnterior?: string };
 
 /** Ficha de um equipamento (frota). Valores em centavos; datas AAAA-MM-DD. Campos de compra e contrato só chegam para quem vê valores. */
 export type DadosEquipamento = {

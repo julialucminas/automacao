@@ -197,3 +197,9 @@ oficina, candidatas a vender (gasto 12m > 30% da locação anual), retorno por m
 solicitações, serviços externos, faturas do mês.
 Foto mensal: tabela `fotos_mensais` (migração 23), regravada a cada 3 h e ao abrir o app; mês que passou fica congelado.
 Meses sem foto são estimados pelas movimentações (até um mês antes da primeira). Rota `GET /api/fotos-mensais` (aba appDono).
+
+## Oficina tira a máquina do cliente (nov/2026)
+Colocar na oficina uma frota que está num cliente registra na hora uma devolução aprovada ("Foi para a oficina: …"):
+a frota sai do cliente, o contrato da ficha é limpo e aparece nas novas movimentações. A tabela `oficina` guarda
+`cliente_id`/`cliente_nome` (migração 24) e, ao tirar da oficina, o sistema oferece "Volta para <cliente>", que abre
+uma nova locação já com o cliente e o valor de antes. Máquinas que já estavam na oficina antes disso não foram mexidas.
