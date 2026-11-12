@@ -4,6 +4,7 @@ import { Conflito, NaoEncontrado, repositorio, type Banco, type ClienteInput, ty
 import { CONFIG_PADRAO, Conflito2, operacoes, type NfArquivo, type NovaMov, type TipoMov } from './operacoes.js';
 import { monitorCaixa } from './monitor.js';
 import { agendarCopias, listarCopias } from './backup.js';
+import { fotos as tabelaFotos } from './fotos.js';
 import { createReadStream, existsSync, mkdirSync, unlinkSync, writeFileSync } from 'node:fs';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -1223,6 +1224,27 @@ export function criarApp(db: Banco, opcoes: { cookieSeguro: boolean; logger?: bo
     if (hashNovo) mudou.push('definiu uma senha nova');
     if (mudou.length) logUsuarios(req, `usuário ${depois.nome}: ${mudou.join(', ')}`);
     return depois;
+  });
+
+  // ---------- foto mensal (app do dono: evolução da receita) ----------
+  const fotosMes = tabelaFotos(db);
+  if (opcoes.monitorar) {
+    const gravar = () => {
+      try {
+        fotosMes.gravar();
+      } catch (e) {
+        app.log.warn(`falha na foto mensal: ${e}`);
+      }
+    };
+    gravar();
+    const t = setInterval(gravar, 3 * 3_600_000);
+    app.addHook('onClose', async () => clearInterval(t));
+  }
+  // grava o mês corrente na hora de ler, para estar sempre em dia
+  app.get('/api/fotos-mensais', { preHandler: exigir(1, 'appDono') }, async (req) => {
+    fotosMes.gravar();
+    const lista = fotosMes.listar();
+    return req.acesso.veValores ? lista : lista.map((f) => ({ ...f, receita: 0, receitaContrato: 0 }));
   });
 
   // ---------- cópias de segurança ----------

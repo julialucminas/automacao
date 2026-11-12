@@ -422,6 +422,16 @@ const MIGRACOES = [
        SELECT json_group_array(json(value)) FROM json_each(clientes.frotas) WHERE json_extract(value, '$.numero') NOT IN ('0', '00', '000')
      )
    WHERE EXISTS (SELECT 1 FROM json_each(clientes.frotas) WHERE json_extract(value, '$.numero') IN ('0', '00', '000'));`,
+  // 23: foto mensal do negócio (receita de locação, locadas, frota) para o app do dono ver a evolução
+  `CREATE TABLE fotos_mensais (
+     mes TEXT PRIMARY KEY,
+     receita INTEGER NOT NULL,
+     receita_contrato INTEGER NOT NULL DEFAULT 0,
+     locadas INTEGER NOT NULL,
+     frota INTEGER NOT NULL,
+     clientes INTEGER NOT NULL,
+     atualizada_em TEXT NOT NULL
+   );`,
 ];
 
 export function abrirBanco(caminho: string) {

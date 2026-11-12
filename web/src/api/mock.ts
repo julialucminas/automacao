@@ -655,6 +655,9 @@ export const mockApi: Api = {
   async anexarNfe() {
     throw new Error('Indisponível na demonstração.');
   },
+  async fotosMensais() {
+    return [];
+  },
   async tirarNfe() {
     throw new Error('Indisponível na demonstração.');
   },

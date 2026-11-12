@@ -20,6 +20,7 @@ import type {
   Envio,
   Faturamento,
   ItemLog,
+  FotoMensal,
   Movimentacao,
   NovaMovimentacao,
   NovaSolicitacao,
@@ -92,6 +93,8 @@ export interface Api {
   /** venda/compra: anexa o PDF (DANFE) ou o XML da NF-e; arquivo em base64 */
   anexarNfe(id: string, arquivo: string, nome: string): Promise<Movimentacao>;
   tirarNfe(id: string): Promise<Movimentacao>;
+  /** app do dono: evolução mês a mês */
+  fotosMensais(): Promise<FotoMensal[]>;
   listarPropostas(): Promise<Proposta[]>;
   proporAlteracao(input: ClienteInput): Promise<void>;
   decidirProposta(id: string, aprovar: boolean, motivo?: string): Promise<void>;

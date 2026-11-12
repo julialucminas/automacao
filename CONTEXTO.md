@@ -187,3 +187,13 @@ Menu lateral com 6 grupos (Início, Operação, Frota, Financeiro, Clientes, Adm
 Fases 1 (navegação e permissões), 2 (equipamentos + importação) e 3 (painel de manutenção) feitas. Fases 4 (app do dono) e 5 (ordens de serviço, com modelos de OS) feitas. Fase 6 (serviços externos) feita. Todas as fases do documento de requisitos estão entregues; próximos ajustes vêm do uso.
 Sem integração com o Auvo. A planilha real do Júnior NÃO vai para o repositório. Requisitos levantados com base em Auvo,
 Produttivo, Field Control e softwares de locação — ver documento de requisitos.
+
+## App do dono (nov/2026)
+Abas Hoje, Receita, Frota, Operação, Buscar (`web/src/pages/AppDono.tsx`; contas em `web/src/lib/dono.ts`, com testes).
+Hoje: receita mensal e variação, frota, "Pede sua atenção" (alertas ordenados por gravidade e R$), o que mudou em 7 dias.
+Receita: gráfico 12 meses, ponte do mês, concentração de clientes (alerta > 20%), contratos vencendo 30/60/90,
+sem reajuste há > 12 meses, contrato × esporádico, compras/vendas do ano. Frota: paradas (desde a última devolução),
+oficina, candidatas a vender (gasto 12m > 30% da locação anual), retorno por máquina. Operação: preventivas, OS por técnico,
+solicitações, serviços externos, faturas do mês.
+Foto mensal: tabela `fotos_mensais` (migração 23), regravada a cada 3 h e ao abrir o app; mês que passou fica congelado.
+Meses sem foto são estimados pelas movimentações (até um mês antes da primeira). Rota `GET /api/fotos-mensais` (aba appDono).

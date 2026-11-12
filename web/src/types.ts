@@ -465,3 +465,6 @@ export type ServicoExterno = {
   atualizadoEm: string;
 };
 export type DadosExterno = Partial<Pick<ServicoExterno, 'clienteId' | 'clienteNome' | 'contato' | 'equipamento' | 'descricao' | 'valor' | 'responsavelId' | 'osNumero' | 'previsao' | 'obs'>>;
+
+/** Foto do negócio no fim de cada mês (o mês corrente é regravado até virar). Valores em centavos. */
+export type FotoMensal = { mes: string; receita: number; receitaContrato: number; locadas: number; frota: number; clientes: number; atualizadaEm: string };
