@@ -209,3 +209,10 @@ uma nova locação já com o cliente e o valor de antes. Máquinas que já estav
 ou aprovações nível 2). Nota urgente tem o próprio ok: chave `obs:<movId>:<notaId>`. `urgenciasDe`/`urgenciasEmAberto`
 (web/src/lib/avisos.ts) juntam a observação do lançamento e as notas; usadas na linha do tempo, na Relação das
 locações e na Central do financeiro. A mensagem para o grupo inclui as notas.
+
+## Faturado no mês (nov/2026)
+`web/src/lib/faturado.ts`: por cliente e mês — faturado (envio com aquela referência que não falhou, ou marcado no
+calendário), "e-mail voltou" (todos os envios do mês devolvidos) ou a faturar. A fatura é por cliente, então todas as
+frotas do cliente herdam a situação. Relação das locações: painel do mês (com ‹ ›), coluna "Faturado em <mês>" com
+bolinha (verde/laranja/vazia) e filtros; `/frotas?fat=pendente|faturado|devolvido` abre já filtrado. Central do
+financeiro: cartão "Faturamento de <mês>" com valores e quem falta faturar. Só para quem vê envio ou histórico.

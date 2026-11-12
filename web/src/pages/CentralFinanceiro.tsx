@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { useEstado } from '../state';
 import { api } from '../api';
-import type { Equipamento, ServicoExterno } from '../types';
+import type { Equipamento, Faturamento, ServicoExterno } from '../types';
+import { resumirFaturas, situacaoFaturas } from '../lib/faturado';
 import { dataBr, hojeIso, janelaConferencia, paraData, paraIso, proximasDatas, regraDoCliente } from '../lib/calendario';
 import { referenciaAtual, referenciaPorExtenso } from '../lib/email';
 import { formatarReais } from '../lib/dinheiro';
@@ -37,6 +38,12 @@ export function CentralFinanceiro() {
   const [eqs, setEqs] = useState<Equipamento[]>([]);
   const [externos, setExternos] = useState<ServicoExterno[]>([]);
   const [conferidas, setConferidas] = useState<number | null>(null);
+  const [marcados, setMarcados] = useState<Faturamento[]>([]);
+  useEffect(() => {
+    const [a, m] = ref.split('-').map(Number);
+    const ultimo = new Date(Date.UTC(a, m, 0)).getUTCDate();
+    api.listarFaturamentos(`${ref}-01`, `${ref}-${String(ultimo).padStart(2, '0')}`).then(setMarcados, () => undefined);
+  }, [ref, envios.length]);
   useEffect(() => {
     if (pode('frotas')) api.listarEquipamentos().then(setEqs, () => undefined);
     if (pode('externos')) api.listarExternos().then(setExternos, () => undefined);
@@ -278,6 +285,8 @@ export function CentralFinanceiro() {
         />
       </section>
 
+      <FaturamentoDoMes clientes={ativos} envios={envios} marcados={marcados} mes={ref} veValores={veValores} hoje={hoje} />
+
       {novasMov.length > 0 && (
         <section className="rounded-xl border-2 border-brand bg-white" aria-label="Novas movimentações">
           <h2 className="flex flex-wrap items-center justify-between gap-2 border-b border-line bg-brand-tint px-5 py-3 text-[15px] font-bold">
@@ -435,5 +444,105 @@ function Indicador({ valor, rotulo, sub, link, tom = 'ink' }: { valor: string; r
       <span className="text-[13px] text-ink-2">{rotulo}</span>
       {sub && <span className="text-xs text-ink-3">{sub}</span>}
     </Link>
+  );
+}
+
+/** Faturamento do mês: quanto das locações já foi faturado, quanto falta e de quem. */
+function FaturamentoDoMes({
+  clientes,
+  envios,
+  marcados,
+  mes,
+  veValores,
+  hoje,
+}: {
+  clientes: ReturnType<typeof useEstado>['clientes'];
+  envios: ReturnType<typeof useEstado>['envios'];
+  marcados: Faturamento[];
+  mes: string;
+  veValores: boolean;
+  hoje: string;
+}) {
+  const sit = situacaoFaturas(clientes, envios, marcados, mes);
+  const linhas = clientes.flatMap((c) => c.frotas.map((f) => ({ clienteId: c.id, valor: f.valor })));
+  const r = resumirFaturas(linhas, sit);
+  if (!r.locacoes) return null;
+  const pct = (n: number) => (r.locacoes ? (n / r.locacoes) * 100 : 0);
+  const faltam = clientes
+    .filter((c) => c.frotas.length && sit.get(c.id)?.estado === 'pendente')
+    .map((c) => {
+      const regra = regraDoCliente(c);
+      return { c, data: regra ? (proximasDatas(regra, 1, `${mes}-01`)[0] ?? null) : null, valor: c.frotas.reduce((s, f) => s + f.valor, 0) };
+    })
+    .sort((a, b) => (a.data ?? '9999').localeCompare(b.data ?? '9999'));
+  const nomeMes = referenciaPorExtenso(mes).split(' ')[0];
+  return (
+    <section aria-label="Faturamento do mês" className="flex flex-col gap-3 rounded-xl border border-line bg-white p-5">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h2 className="text-[15px] font-bold">
+          Faturamento de {nomeMes}: <span className="text-[#15803D]">{Math.round(pct(r.faturadas + r.devolvidas))}% faturado</span>
+          <span className="ml-2 text-[13px] font-normal text-ink-3">
+            {r.faturadas + r.devolvidas} de {r.locacoes} locações
+          </span>
+        </h2>
+        <Link to="/frotas?fat=pendente" className="text-[13px] font-semibold underline underline-offset-2">
+          Ver na Relação das locações
+        </Link>
+      </div>
+      <div className="flex h-3 overflow-hidden rounded-full bg-line-soft" aria-hidden>
+        <div className="h-full bg-[#16A34A]" style={{ width: `${pct(r.faturadas)}%` }} />
+        <div className="h-full bg-[#F59E0B]" style={{ width: `${pct(r.devolvidas)}%` }} />
+      </div>
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+        <Link to="/frotas?fat=faturado" className="flex flex-col rounded-xl border border-line px-3.5 py-2.5 hover:border-ink">
+          <span className="flex items-center gap-1.5 text-[12.5px] font-semibold text-ink-3">
+            <span className="h-3 w-3 rounded-full bg-[#16A34A]" /> Faturado
+          </span>
+          <b className="text-[22px] text-[#15803D]">{veValores ? formatarReais(r.valorFaturado) : r.faturadas}</b>
+          <span className="text-[12.5px] text-ink-3">{r.faturadas} locações</span>
+        </Link>
+        <Link to="/frotas?fat=pendente" className="flex flex-col rounded-xl border border-line px-3.5 py-2.5 hover:border-ink">
+          <span className="flex items-center gap-1.5 text-[12.5px] font-semibold text-ink-3">
+            <span className="h-3 w-3 rounded-full border-2 border-line-strong" /> A faturar
+          </span>
+          <b className="text-[22px]">{veValores ? formatarReais(r.valorPendente) : r.pendentes}</b>
+          <span className="text-[12.5px] text-ink-3">
+            {r.pendentes} locações · {r.clientesPendentes} cliente{r.clientesPendentes === 1 ? '' : 's'}
+          </span>
+        </Link>
+        <Link to="/frotas?fat=devolvido" className="flex flex-col rounded-xl border border-line px-3.5 py-2.5 hover:border-ink">
+          <span className="flex items-center gap-1.5 text-[12.5px] font-semibold text-ink-3">
+            <span className="h-3 w-3 rounded-full bg-[#F59E0B]" /> E-mail voltou
+          </span>
+          <b className={`text-[22px] ${r.devolvidas ? 'text-warn-strong' : 'text-ink-3'}`}>{veValores ? formatarReais(r.valorDevolvido) : r.devolvidas}</b>
+          <span className="text-[12.5px] text-ink-3">{r.devolvidas} locações · reenviar</span>
+        </Link>
+      </div>
+      {faltam.length > 0 && (
+        <div>
+          <h3 className="mb-1 text-[12px] font-bold uppercase tracking-wide text-ink-3">Falta faturar</h3>
+          <ul className="flex flex-col divide-y divide-line-soft text-[13.5px]">
+            {faltam.slice(0, 6).map(({ c, data, valor }) => (
+              <li key={c.id} className="flex items-center justify-between gap-2 py-2">
+                <span className="min-w-0 truncate">
+                  <b>{c.nome}</b>
+                  <span className="text-ink-3">
+                    {' '}
+                    · {c.frotas.length} máquina{c.frotas.length > 1 ? 's' : ''}
+                    {data && ` · ${data < hoje ? 'era para' : 'previsto'} ${dataBr(data).slice(0, 5)}`}
+                  </span>
+                </span>
+                {veValores && <b className="shrink-0">{formatarReais(valor)}</b>}
+              </li>
+            ))}
+          </ul>
+          {faltam.length > 6 && (
+            <Link to="/frotas?fat=pendente" className="text-[13px] font-semibold underline underline-offset-2">
+              e mais {faltam.length - 6}
+            </Link>
+          )}
+        </div>
+      )}
+    </section>
   );
 }

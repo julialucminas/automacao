@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useBuscaDaUrl } from '../lib/buscaDaUrl';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useEstado } from '../state';
-import type { Cliente, Frota } from '../types';
+import type { Cliente, Faturamento, Frota } from '../types';
+import { ROTULO_FATURA, resumirFaturas, situacaoFaturas, type EstadoFatura, type SituacaoFatura } from '../lib/faturado';
 import { BalaoUrgente, SeloHelbert } from '../components/Balao';
 import { BotaoOk } from '../components/BotaoOk';
 import { urgenciasEmAberto, type Urgencia } from '../lib/avisos';
@@ -22,6 +23,7 @@ type Linha = { frota: Frota; cliente: Cliente; proxima: string | null; duplicada
 type Ordem = 'frota' | 'cliente' | 'valor' | 'proxima' | 'fim';
 type Visao = 'frotas' | 'clientes';
 type Filtro = 'todas' | 'contrato' | 'esporadico' | 'semEtiqueta' | 'oficina' | 'terminando';
+type FiltroFat = 'todas' | EstadoFatura;
 
 /** Ordena "F-2" antes de "F-10" (números dentro do texto comparados como números). */
 const comparaNumero = (a: string, b: string) => a.localeCompare(b, 'pt-BR', { numeric: true, sensitivity: 'base' });
@@ -66,6 +68,29 @@ export function Frotas() {
   const hoje = hojeIso();
   const daqui30 = somarDias(hoje, 30);
 
+  // ---- faturado no mês (pelos envios de fatura e pelas marcações do calendário) ----
+  const { envios } = useEstado();
+  const veFaturas = pode('envio') || pode('historico');
+  const [urlParams, setUrlParams] = useSearchParams();
+  const [mesFat, setMesFat] = useState(referenciaAtual());
+  const [filtroFat, setFiltroFat] = useState<FiltroFat>(() => {
+    const f = urlParams.get('fat');
+    return f === 'pendente' || f === 'faturado' || f === 'devolvido' ? f : 'todas';
+  });
+  useEffect(() => {
+    if (urlParams.has('fat')) setUrlParams({}, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- só ao abrir
+  }, []);
+  const [faturamentos, setFaturamentos] = useState<Faturamento[]>([]);
+  useEffect(() => {
+    if (!veFaturas) return;
+    const [a, m] = mesFat.split('-').map(Number);
+    const ultimo = new Date(Date.UTC(a, m, 0)).getUTCDate();
+    api.listarFaturamentos(`${mesFat}-01`, `${mesFat}-${String(ultimo).padStart(2, '0')}`).then(setFaturamentos, () => setFaturamentos([]));
+  }, [mesFat, veFaturas, envios.length]);
+  const situacao = useMemo(() => situacaoFaturas(clientes, envios, faturamentos, mesFat), [clientes, envios, faturamentos, mesFat]);
+  const estadoDe = (clienteId: string): EstadoFatura => situacao.get(clienteId)?.estado ?? 'pendente';
+
   const considerados = clientes.filter((c) => mostrarInativos || c.ativo);
   const linhas: Linha[] = useMemo(() => {
     const contagem = new Map<string, number>();
@@ -86,7 +111,7 @@ export function Frotas() {
     (f === 'semEtiqueta' && !l.frota.modalidade) ||
     (f === 'oficina' && naOficina.has(l.frota.numero)) ||
     (f === 'terminando' && terminando(l.frota));
-  const passaFiltro = (l: Linha) => combina(filtro, l);
+  const passaFiltro = (l: Linha) => combina(filtro, l) && (!veFaturas || filtroFat === 'todas' || estadoDe(l.cliente.id) === filtroFat);
   const filtradas = linhas
     .filter((l) => !q || chaveEmpresa(l.frota.numero).includes(q) || chaveEmpresa(l.cliente.nome).includes(q) || chaveEmpresa(l.frota.descricao).includes(q))
     .filter(passaFiltro)
@@ -102,7 +127,7 @@ export function Frotas() {
   const comCliente = new Set(linhas.map((l) => l.frota.numero));
   const soOficina = oficina
     .filter((o) => !comCliente.has(o.frota))
-    .filter(() => filtro === 'todas' || filtro === 'oficina')
+    .filter(() => (filtro === 'todas' || filtro === 'oficina') && (!veFaturas || filtroFat === 'todas'))
     .filter((o) => !q || chaveEmpresa(o.frota).includes(q) || chaveEmpresa(`oficina ${o.observacao}`).includes(q))
     .sort((a, b) => comparaNumero(a.frota, b.frota));
   type Entrada = { tipo: 'cliente'; l: Linha } | { tipo: 'oficina'; o: FrotaOficina };
@@ -115,6 +140,9 @@ export function Frotas() {
   const semFrota = considerados.filter((c) => c.ativo && !c.frotas.length).length;
   const semValor = linhas.filter((l) => !l.frota.valor).length;
   const conta = (f: Filtro) => (f === 'oficina' ? oficina.length : linhas.filter((l) => combina(f, l)).length);
+  const ativas = linhas.filter((l) => l.cliente.ativo);
+  const resumoFat = resumirFaturas(ativas.map((l) => ({ clienteId: l.cliente.id, valor: l.frota.valor })), situacao);
+  const contaFat = (e: FiltroFat) => (e === 'todas' ? linhas.length : linhas.filter((l) => estadoDe(l.cliente.id) === e).length);
 
   // visão por cliente
   const porCliente = useMemo(() => {
@@ -195,6 +223,17 @@ export function Frotas() {
         </div>
       </div>
 
+      {veFaturas && (
+        <PainelFaturamento
+          mes={mesFat}
+          mudarMes={setMesFat}
+          resumo={resumoFat}
+          veValor={veValorFrota}
+          filtro={filtroFat}
+          filtrar={(f) => setFiltroFat(filtroFat === f ? 'todas' : f)}
+        />
+      )}
+
       {/* resumo numa linha */}
       <p className="flex flex-wrap gap-x-5 gap-y-1 rounded-xl border border-line bg-white px-4 py-3 text-[14px] text-ink-2">
         <span>
@@ -250,6 +289,27 @@ export function Frotas() {
             </button>
           ))}
         </div>
+        {veFaturas && (
+          <div className="flex flex-wrap gap-1.5" role="group" aria-label={`Faturamento de ${mesCurto(mesFat)}`}>
+            {(
+              [
+                ['faturado', 'Faturado'],
+                ['pendente', 'A faturar'],
+                ['devolvido', 'E-mail voltou'],
+              ] as const
+            ).map(([id, rot]) => (
+              <button
+                key={id}
+                type="button"
+                aria-pressed={filtroFat === id}
+                onClick={() => setFiltroFat(filtroFat === id ? 'todas' : id)}
+                className={`flex h-9 items-center gap-1.5 rounded-full border px-3.5 text-[13px] font-semibold ${filtroFat === id ? 'border-ink bg-ink text-white' : 'border-line-strong bg-white text-ink-2'}`}
+              >
+                <BolinhaFatura estado={id} /> {rot} <span className="font-normal opacity-70">{contaFat(id)}</span>
+              </button>
+            ))}
+          </div>
+        )}
         <span className="ml-auto flex items-center gap-3">
           <label className="flex items-center gap-2 text-[13px] text-ink-2">
             <input type="checkbox" checked={mostrarInativos} onChange={(e) => setMostrarInativos(e.target.checked)} className="h-[18px] w-[18px] accent-ink" />
@@ -291,6 +351,7 @@ export function Frotas() {
                 <th className="px-3 py-2 font-semibold">Frete</th>
                 {veValorFrota && cabecalho('valor', 'Valor', 'text-right')}
                 {cabecalho('proxima', 'Próx. fatura')}
+                {veFaturas && <th className="px-3 py-2 font-semibold">Faturado em {mesCurto(mesFat)}</th>}
               </tr>
             </thead>
             <tbody>
@@ -303,7 +364,7 @@ export function Frotas() {
                         {o.frota} <SeloOficina />
                       </td>
                       <td className="px-3 py-2.5 text-[#B45309]">sem cliente</td>
-                      <td className="px-3 py-2.5 text-ink-2" colSpan={veValorFrota ? 4 : 3}>
+                      <td className="px-3 py-2.5 text-ink-2" colSpan={(veValorFrota ? 4 : 3) + (veFaturas ? 1 : 0)}>
                         {o.observacao || 'Na oficina'} <span className="text-xs text-ink-3">· desde {dataHora(o.desde).slice(0, 10)}</span>
                       </td>
                       <td className="px-3 py-2.5">
@@ -357,12 +418,17 @@ export function Frotas() {
                     <td className="whitespace-nowrap px-3 py-2.5" title={descreverRegra(regraDoCliente(l.cliente))}>
                       {l.proxima ? dataCurta(l.proxima) : '—'}
                     </td>
+                    {veFaturas && (
+                      <td className="whitespace-nowrap px-3 py-2.5">
+                        <CelulaFatura s={situacao.get(l.cliente.id)} />
+                      </td>
+                    )}
                   </tr>
                 );
               })}
               {entradas.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-4 py-6 text-ink-3">
+                  <td colSpan={8} className="px-4 py-6 text-ink-3">
                     Nada encontrado{busca ? ` para “${busca}”` : ' com esse filtro'}.
                   </td>
                 </tr>
@@ -376,6 +442,11 @@ export function Frotas() {
             <div key={g.cliente.id} className="card p-4">
               <div className="mb-2.5 flex flex-wrap items-baseline justify-between gap-2">
                 <div>
+                  {veFaturas && (
+                    <span className="mr-2 inline-flex align-middle">
+                      <CelulaFatura s={situacao.get(g.cliente.id)} />
+                    </span>
+                  )}
                   <b>{g.cliente.nome}</b>
                   <span className="ml-2 text-[13px] text-ink-3">
                     {g.frotas.length} máquina{g.frotas.length > 1 ? 's' : ''}
@@ -1003,6 +1074,104 @@ function DadosLocacao({ cliente, frota, proxima, veValor }: { cliente: Cliente; 
           )}
         </div>
       )}
+    </section>
+  );
+}
+
+const MESES_CURTOS = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+const mesCurto = (mes: string) => `${MESES_CURTOS[Number(mes.slice(5, 7)) - 1]}/${mes.slice(2, 4)}`;
+const mesSeguinte = (mes: string, n: number) => {
+  const [a, m] = mes.split('-').map(Number);
+  const d = new Date(Date.UTC(a, m - 1 + n, 1));
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+};
+
+/** Bolinha: verde = faturado; laranja = faturado, mas o e-mail voltou; vazia = a faturar. */
+function BolinhaFatura({ estado }: { estado: EstadoFatura }) {
+  if (estado === 'faturado') return <span aria-hidden className="inline-block h-3 w-3 shrink-0 rounded-full bg-[#16A34A]" />;
+  if (estado === 'devolvido') return <span aria-hidden className="inline-block h-3 w-3 shrink-0 rounded-full bg-[#F59E0B]" />;
+  return <span aria-hidden className="inline-block h-3 w-3 shrink-0 rounded-full border-2 border-line-strong bg-white" />;
+}
+
+function CelulaFatura({ s }: { s: SituacaoFatura | undefined }) {
+  const e = s?.estado ?? 'pendente';
+  const detalhe =
+    e === 'pendente' ? '' : s?.numeros.length ? `nº ${s.numeros.join(', ')}${s.quando ? ` · ${dataCurta(s.quando)}` : ''}` : s?.quando ? `${s.manual ? 'marcado' : ''} ${dataCurta(s.quando)}`.trim() : '';
+  return (
+    <span className="inline-flex items-center gap-1.5" title={detalhe ? `${ROTULO_FATURA[e]} · ${detalhe}` : ROTULO_FATURA[e]}>
+      <BolinhaFatura estado={e} />
+      <span className={`text-[13px] ${e === 'faturado' ? 'font-semibold text-[#15803D]' : e === 'devolvido' ? 'font-semibold text-warn-strong' : 'text-ink-3'}`}>{ROTULO_FATURA[e]}</span>
+      {detalhe && <span className="text-xs text-ink-3">{detalhe}</span>}
+    </span>
+  );
+}
+
+/** Indicador do faturamento do mês, bem à vista para o financeiro. Clicar num número filtra a lista. */
+function PainelFaturamento({
+  mes,
+  mudarMes,
+  resumo,
+  veValor,
+  filtro,
+  filtrar,
+}: {
+  mes: string;
+  mudarMes: (m: string) => void;
+  resumo: ReturnType<typeof resumirFaturas>;
+  veValor: boolean;
+  filtro: FiltroFat;
+  filtrar: (f: EstadoFatura) => void;
+}) {
+  const parte = resumo.locacoes ? (resumo.faturadas + resumo.devolvidas) / resumo.locacoes : 0;
+  const atual = referenciaAtual();
+  const bloco = (f: EstadoFatura, n: number, rot: string, valor: number | null, cor: string) => (
+    <button
+      type="button"
+      onClick={() => filtrar(f)}
+      aria-pressed={filtro === f}
+      className={`flex min-w-[150px] flex-1 flex-col items-start rounded-xl border px-3.5 py-2.5 text-left hover:border-ink ${filtro === f ? 'border-ink ring-1 ring-ink' : 'border-line'}`}
+    >
+      <span className="flex items-center gap-1.5 text-[12.5px] font-semibold text-ink-3">
+        <BolinhaFatura estado={f} /> {rot}
+      </span>
+      <span className={`text-[24px] font-bold leading-tight ${cor}`}>{n}</span>
+      <span className="text-[12.5px] text-ink-3">
+        {n === 1 ? 'locação' : 'locações'}
+        {veValor && valor !== null ? ` · ${formatarReais(valor)}` : ''}
+      </span>
+    </button>
+  );
+  return (
+    <section aria-label="Faturamento do mês" className="flex flex-col gap-3 rounded-xl border border-line bg-white p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="text-[15px] font-bold">
+          Faturamento de {mesCurto(mes)}: <span className="text-[#15803D]">{Math.round(parte * 100)}% faturado</span>
+          <span className="ml-2 text-[13px] font-normal text-ink-3">
+            {resumo.faturadas + resumo.devolvidas} de {resumo.locacoes} locações
+          </span>
+        </h2>
+        <span className="flex items-center gap-1">
+          <button type="button" className="btn-secondary btn-sm" aria-label="Mês anterior" onClick={() => mudarMes(mesSeguinte(mes, -1))}>
+            ‹
+          </button>
+          <span className="min-w-[64px] text-center text-[13px] font-semibold">{mesCurto(mes)}</span>
+          <button type="button" className="btn-secondary btn-sm" aria-label="Mês seguinte" disabled={mes >= atual} onClick={() => mudarMes(mesSeguinte(mes, 1))}>
+            ›
+          </button>
+        </span>
+      </div>
+      <div className="flex h-3 overflow-hidden rounded-full bg-line-soft" aria-hidden>
+        <div className="h-full bg-[#16A34A]" style={{ width: `${resumo.locacoes ? (resumo.faturadas / resumo.locacoes) * 100 : 0}%` }} />
+        <div className="h-full bg-[#F59E0B]" style={{ width: `${resumo.locacoes ? (resumo.devolvidas / resumo.locacoes) * 100 : 0}%` }} />
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {bloco('faturado', resumo.faturadas, 'Faturado', resumo.valorFaturado, 'text-[#15803D]')}
+        {bloco('pendente', resumo.pendentes, `A faturar · ${resumo.clientesPendentes} cliente${resumo.clientesPendentes === 1 ? '' : 's'}`, resumo.valorPendente, resumo.pendentes ? 'text-ink' : 'text-ink-3')}
+        {bloco('devolvido', resumo.devolvidas, 'E-mail voltou', resumo.valorDevolvido, resumo.devolvidas ? 'text-warn-strong' : 'text-ink-3')}
+      </div>
+      <p className="text-[12px] text-ink-3">
+        Pelos envios de fatura com referência {mesCurto(mes)} e pelos clientes marcados como faturados no calendário. A fatura é por cliente: todas as máquinas do cliente ficam com a mesma bolinha.
+      </p>
     </section>
   );
 }
