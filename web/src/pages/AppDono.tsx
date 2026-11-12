@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../api';
 import { useEstado } from '../state';
@@ -59,16 +59,17 @@ export function AppDono() {
   const aba: Aba = pedida === 'receita' && !veValores ? 'hoje' : pedida;
   const irPara: Ir = (a, extra = {}) => {
     setParams({ aba: a, ...extra });
-    window.scrollTo(0, 0);
+    rolagem.current?.scrollTo(0, 0);
   };
   const navegar = useNavigate();
+  const rolagem = useRef<HTMLDivElement>(null);
   const local = useLocation();
   // Voltar: desfaz o último passo dentro do app (ex.: alerta → máquina → volta ao alerta); sem histórico, vai para Hoje
   const temVoltar = aba !== 'hoje' || params.has('q');
   const voltar = () => {
     if (local.key !== 'default') navegar(-1);
     else setParams({ aba: 'hoje' }, { replace: true });
-    window.scrollTo(0, 0);
+    rolagem.current?.scrollTo(0, 0);
   };
   const [fichas, setFichas] = useState<Equipamento[]>([]);
   const [pendencias, setPendencias] = useState<Pendencia[]>([]);
@@ -114,8 +115,9 @@ export function AppDono() {
   ];
 
   return (
-    <div className="min-h-screen bg-canvas pb-[84px]">
-      <header className="sticky top-0 z-20 bg-noite px-4 pb-3 pt-[max(12px,env(safe-area-inset-top))] text-white">
+    // tela inteira com o topo e a barra de baixo fixos e só o meio rolando: a barra de baixo não some no celular
+    <div className="fixed inset-0 flex flex-col bg-canvas">
+      <header className="z-20 shrink-0 bg-noite px-4 pb-3 pt-[max(12px,env(safe-area-inset-top))] text-white">
         <div className="mx-auto flex max-w-[640px] items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-2.5">
             {temVoltar && (
@@ -147,7 +149,8 @@ export function AppDono() {
         </div>
       </header>
 
-      <main className="mx-auto flex max-w-[640px] flex-col gap-4 px-4 py-4">
+      <div ref={rolagem} className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+        <main className="mx-auto flex max-w-[640px] flex-col gap-4 px-4 py-4">
         {carregando && aba !== 'buscar' ? (
           <p className="py-10 text-center text-ink-3">Carregando…</p>
         ) : (
@@ -161,9 +164,10 @@ export function AppDono() {
             {aba === 'buscar' && <Buscar inicial={params.get('q') ?? ''} linhas={linhas} veValores={veValores} />}
           </>
         )}
-      </main>
+        </main>
+      </div>
 
-      <nav aria-label="Seções" className="fixed inset-x-0 bottom-0 z-20 border-t border-line bg-white pb-[env(safe-area-inset-bottom)]">
+      <nav aria-label="Seções" className="z-20 shrink-0 border-t border-line bg-white pb-[env(safe-area-inset-bottom)]">
         <div className="mx-auto flex max-w-[640px]">
           {abas.map((a) => (
             <button
@@ -959,7 +963,7 @@ function Buscar({ inicial, linhas, veValores }: { inicial: string; linhas: Linha
           e.preventDefault();
           setFeita(texto);
         }}
-        className="sticky top-[64px] z-10 -mx-4 bg-canvas px-4 pb-2 pt-1"
+        className="sticky top-0 z-10 -mx-4 bg-canvas px-4 pb-2 pt-1"
       >
         <label className="relative block">
           <span className="sr-only">O que procurar</span>
