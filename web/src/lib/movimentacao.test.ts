@@ -74,3 +74,22 @@ describe('término da locação', () => {
     expect(lerTextoMovimentacao('NOVA LOCAÇÃO FT35\n20/10/2026\nFENIX\n- Término: 19/10/2027', []).fim).toBe('2027-10-19');
   });
 });
+
+describe('mensagem para o grupo', () => {
+  it('locação, devolução e reajuste no formato do grupo', async () => {
+    const { textoMensagem } = await import('./movimentacao');
+    const base = { data: '2026-10-20', valor: 335000, frete: 'lucminas' as const, gas: 1, contrato: '12 meses', fim: null, prazoPagamento: '', emails: ['a@b.com'], contatoNome: 'João', contatoTelefone: '(31) 9999-0000', descricao: '', observacoes: '' };
+    expect(textoMensagem({ tipo: 'locacao', frota: '35', clienteNome: 'FENIX NOVUS', dados: base })).toBe(
+      'NOVA LOCAÇÃO FT35\n20/10/2026\nFENIX NOVUS\n- Valor da Locação: R$ 3.350,00\n- Frete: Por conta da Lucminas\n- Gás: 1 vasilhame\n- Tempo de contrato: 12 meses\n- E-mails para a fatura: a@b.com\n- Contato: João - (31) 9999-0000',
+    );
+    expect(textoMensagem({ tipo: 'troca', frota: 'ft35', frotaNova: '40', clienteNome: 'X', dados: { ...base, valor: null, gas: 0, frete: '', contrato: '', emails: [], contatoNome: '', contatoTelefone: '' } })).toBe('TROCA DE FROTA FT35 → FT40\n20/10/2026\nX');
+    expect(
+      textoMensagem({
+        tipo: 'reajuste',
+        frota: '35',
+        clienteNome: 'MINASBEV',
+        dados: { ...base, data: '2026-12-01', itens: [{ frota: '35', antes: 335000, novo: 351100 }], renovaAte: '2027-11-20', observacoes: 'IPCA' },
+      }),
+    ).toBe('REAJUSTE MINASBEV\nA partir de 01/12/2026\n- FT35: R$ 3.350,00 → R$ 3.511,00 (+4,8%)\n- Contrato renovado até: 20/11/2027\n- Motivo: IPCA');
+  });
+});

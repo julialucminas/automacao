@@ -1,5 +1,6 @@
 import type { Cliente, Movimentacao, NovaMovimentacao, TipoMov } from '../types';
-import { lerReais } from './dinheiro';
+import { formatarReais, lerReais } from './dinheiro';
+import { dataBr } from './calendario';
 import { encontrarCliente } from './pareamento';
 import { semAcento } from './normalizar';
 
@@ -162,4 +163,55 @@ export function fimSugerido(inicio: string, contrato: string): string | null {
   }
   d.setUTCDate(d.getUTCDate() - 1); // o último dia é o anterior ao "aniversário"
   return d.toISOString().slice(0, 10);
+}
+
+/** Texto da movimentação no formato que vai para o grupo (WhatsApp). */
+export function textoMensagem(m: Pick<Movimentacao, 'tipo' | 'frota' | 'clienteNome' | 'dados'> & { frotaNova?: string | null }): string {
+  const d = m.dados;
+  const ft = (f: string) => `FT${f.trim().toUpperCase().replace(/^FT[\s-]*/, '')}`;
+  const l: string[] = [];
+  if (m.tipo === 'reajuste') {
+    l.push(`REAJUSTE ${(m.clienteNome || '').toUpperCase()}`.trim());
+    l.push(`A partir de ${dataBr(d.data)}`);
+    for (const i of d.itens ?? []) {
+      const p = i.antes ? ` (${i.novo >= i.antes ? '+' : ''}${(((i.novo - i.antes) / i.antes) * 100).toFixed(1).replace('.', ',')}%)` : '';
+      l.push(`- ${ft(i.frota)}: ${formatarReais(i.antes)} → ${formatarReais(i.novo)}${p}`);
+    }
+    if (d.renovaAte) l.push(`- Contrato renovado até: ${dataBr(d.renovaAte)}`);
+    if (d.observacoes) l.push(`- Motivo: ${d.observacoes}`);
+    return l.join('\n').replace(/\u00a0/g, ' ');
+  }
+  const titulo = { locacao: 'NOVA LOCAÇÃO', devolucao: 'DEVOLUÇÃO', troca: 'TROCA DE FROTA' }[m.tipo];
+  l.push(`${titulo} ${ft(m.frota)}${m.tipo === 'troca' && m.frotaNova ? ` → ${ft(m.frotaNova)}` : ''}`);
+  if (d.data) l.push(dataBr(d.data));
+  if (m.clienteNome) l.push(m.clienteNome.toUpperCase());
+  if (d.valor != null) l.push(`- Valor da Locação: ${formatarReais(d.valor)}`);
+  if (d.frete) l.push(`- Frete: ${d.frete === 'lucminas' ? 'Por conta da Lucminas' : 'Por conta do cliente'}`);
+  if (d.gas) l.push(`- Gás: ${d.gas} vasilhame${d.gas > 1 ? 's' : ''}`);
+  if (d.contrato) l.push(`- Tempo de contrato: ${d.contrato}`);
+  if (d.fim) l.push(`- Término previsto: ${dataBr(d.fim)}`);
+  if (d.prazoPagamento) l.push(`- Prazo de pagamento: ${d.prazoPagamento}`);
+  if (d.emails?.length) l.push(`- E-mails para a fatura: ${d.emails.join(', ')}`);
+  if (d.contatoNome || d.contatoTelefone) l.push(`- Contato: ${[d.contatoNome, d.contatoTelefone].filter(Boolean).join(' - ')}`);
+  if (d.descricao) l.push(`- Equipamento: ${d.descricao}`);
+  if (d.observacoes) l.push(`- Obs.: ${d.observacoes}`);
+  return l.join('\n').replace(/\u00a0/g, ' ');
+}
+
+/** Copia texto (com saída para navegador sem permissão de área de transferência). */
+export async function copiarTexto(texto: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(texto);
+    return true;
+  } catch {
+    const t = document.createElement('textarea');
+    t.value = texto;
+    t.style.position = 'fixed';
+    t.style.opacity = '0';
+    document.body.appendChild(t);
+    t.select();
+    const ok = document.execCommand('copy');
+    t.remove();
+    return ok;
+  }
 }

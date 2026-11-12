@@ -6,7 +6,7 @@ import { api } from '../api';
 import { dataBr, hojeIso } from '../lib/calendario';
 import { formatarReais, lerReais, reaisParaCampo } from '../lib/dinheiro';
 import { emailValido, semAcento } from '../lib/normalizar';
-import { efeitoNaReceita, fimSugerido, lerTextoMovimentacao, movVazia, NOMES_TIPO, proximoMes, somarMeses } from '../lib/movimentacao';
+import { copiarTexto, efeitoNaReceita, fimSugerido, movVazia, NOMES_TIPO, proximoMes, somarMeses, textoMensagem } from '../lib/movimentacao';
 import { dataHora } from '../lib/email';
 import { Chip, Gaveta, type Tom } from '../components/ui';
 import { IcBusca, IcMais } from '../components/Icones';
@@ -287,7 +287,11 @@ export function Movimentacoes() {
 
       {aberta && (
         <Gaveta aberto fechar={() => setParams({})} titulo={tituloMov(aberta)}>
-          <CartaoMov m={aberta} semBorda />
+          <CartaoMov m={aberta} semBorda>
+            <div className="mt-4 flex justify-end">
+              <BotaoCopiar texto={() => textoMensagem(aberta)} />
+            </div>
+          </CartaoMov>
         </Gaveta>
       )}
       {nova && (
@@ -323,13 +327,13 @@ function NovaMov({ inicial, fechar }: { inicial: { tipo: TipoMov; clienteId?: st
 }
 
 function FormMov({ tipo, fechar }: { tipo: TipoMov; fechar: () => void }) {
-  const { clientes, recarregarOperacoes, aprova: ehFinanceiro, avisar } = useEstado();
+  const { clientes, recarregarOperacoes, aprova: ehFinanceiro } = useEstado();
   const [m, setM] = useState<NovaMovimentacao>(() => ({ ...movVazia(hojeIso()), tipo }));
   const [valorTxt, setValorTxt] = useState('');
   const [emailsTxt, setEmailsTxt] = useState('');
-  const [colado, setColado] = useState('');
   const [erro, setErro] = useState('');
   const [salvando, setSalvando] = useState(false);
+  const [feita, setFeita] = useState<Movimentacao | null>(null);
   useEffect(() => setM((x) => ({ ...x, tipo })), [tipo]);
 
   const ativos = useMemo(() => clientes.filter((c) => c.ativo).sort((a, b) => a.nome.localeCompare(b.nome)), [clientes]);
@@ -341,16 +345,6 @@ function FormMov({ tipo, fechar }: { tipo: TipoMov; fechar: () => void }) {
   const escolherCliente = (nome: string) => {
     const c = ativos.find((x) => x.nome === nome.trim().toUpperCase());
     mudar({ clienteNome: nome, clienteId: c?.id ?? null });
-  };
-
-  const preencherDoTexto = () => {
-    const r = lerTextoMovimentacao(colado, clientes);
-    if (!Object.keys(r).length) return setErro('Não reconheci nada nesse texto. Preencha os campos abaixo.');
-    setErro('');
-    setM((x) => ({ ...x, ...r }));
-    if (r.valor !== undefined) setValorTxt(r.valor === null ? '' : reaisParaCampo(r.valor));
-    if (r.emails) setEmailsTxt(r.emails.join(', '));
-    avisar('Campos preenchidos a partir do texto. Confira antes de registrar.');
   };
 
   const registrar = async () => {
@@ -375,8 +369,7 @@ function FormMov({ tipo, fechar }: { tipo: TipoMov; fechar: () => void }) {
     try {
       const salva = await api.registrarMovimentacao({ ...m, valor, emails, clienteNome: m.clienteNome?.trim().toUpperCase() });
       await recarregarOperacoes();
-      avisar(salva.status === 'aprovada' ? 'Movimentação registrada e aplicada no cadastro.' : 'Movimentação registrada. Ela entra no cadastro quando o financeiro aprovar.');
-      fechar();
+      setFeita(salva);
     } catch (e) {
       setErro(e instanceof Error ? e.message : 'Não foi possível registrar.');
     } finally {
@@ -384,24 +377,18 @@ function FormMov({ tipo, fechar }: { tipo: TipoMov; fechar: () => void }) {
     }
   };
 
+  /** mensagem com o que está preenchido agora */
+  const mensagemAtual = () => {
+    const valor = valorTxt.trim() ? lerReais(valorTxt) : null;
+    const emails = emailsTxt.split(/[\s,;]+/).map((e) => e.trim().toLowerCase()).filter(Boolean);
+    const cliente = clienteAtual?.nome ?? m.clienteNome?.trim() ?? (ondeEsta[0]?.nome || '');
+    return textoMensagem({ tipo: m.tipo, frota: m.frota, frotaNova: m.frotaNova ?? null, clienteNome: cliente || (m.tipo === 'devolucao' ? ondeEsta[0]?.nome ?? '' : ''), dados: { ...m, valor, emails } });
+  };
+
+  if (feita) return <Registrada m={feita} fechar={fechar} />;
+
   return (
     <div className="flex flex-col gap-4">
-      {m.tipo === 'locacao' && (
-        <details className="rounded-xl border border-dashed border-line-strong bg-[#F8F7F3] p-3" open={!m.frota}>
-          <summary className="cursor-pointer text-[13px] font-semibold">Colar a mensagem (preenche sozinho)</summary>
-          <textarea
-            aria-label="Mensagem da movimentação"
-            rows={6}
-            value={colado}
-            onChange={(e) => setColado(e.target.value)}
-            placeholder={'NOVA LOCAÇÃO FT35\n20/10/2026\nFENIX NOVUS\n- Valor da Locação: R$3.350,00\n- Frete: Por conta da Lucminas\n…'}
-            className="input mt-2 resize-y bg-white py-2 font-mono text-[12.5px]"
-          />
-          <button type="button" className="btn-secondary btn-sm mt-2" onClick={preencherDoTexto} disabled={!colado.trim()}>
-            Preencher campos
-          </button>
-        </details>
-      )}
       <div className="grid grid-cols-2 gap-3">
         <div className="flex flex-col gap-1.5">
           <label htmlFor="mov-frota" className="label">
@@ -595,10 +582,11 @@ function FormMov({ tipo, fechar }: { tipo: TipoMov; fechar: () => void }) {
           {erro}
         </div>
       )}
-      <div className="sticky bottom-0 flex justify-end gap-2 border-t border-line bg-white pt-3">
-        <button type="button" className="btn-secondary" onClick={fechar}>
+      <div className="sticky bottom-0 flex flex-wrap justify-end gap-2 border-t border-line bg-white pt-3">
+        <button type="button" className="btn-secondary mr-auto" onClick={fechar}>
           Cancelar
         </button>
+        {m.frota.trim() && <BotaoCopiar texto={mensagemAtual} />}
         <button type="button" className="btn-primary" onClick={registrar} disabled={salvando}>
           {salvando ? 'Registrando…' : ehFinanceiro ? 'Registrar movimentação' : 'Enviar para aprovação'}
         </button>
@@ -609,7 +597,7 @@ function FormMov({ tipo, fechar }: { tipo: TipoMov; fechar: () => void }) {
 
 /** Reajuste: escolhe o cliente, marca as frotas, põe o valor novo (ou um % para todas). */
 function FormReajuste({ clienteInicial, frotaInicial, fechar }: { clienteInicial?: string; frotaInicial?: string; fechar: () => void }) {
-  const { clientes, recarregarOperacoes, aprova: ehFinanceiro, avisar } = useEstado();
+  const { clientes, recarregarOperacoes, aprova: ehFinanceiro } = useEstado();
   const comFrotas = useMemo(() => clientes.filter((c) => c.ativo && c.frotas.length).sort((a, b) => a.nome.localeCompare(b.nome)), [clientes]);
   const [clienteId, setClienteId] = useState(clienteInicial ?? '');
   const cliente = comFrotas.find((c) => c.id === clienteId) ?? null;
@@ -620,6 +608,7 @@ function FormReajuste({ clienteInicial, frotaInicial, fechar }: { clienteInicial
   const [motivo, setMotivo] = useState('');
   const [erro, setErro] = useState('');
   const [salvando, setSalvando] = useState(false);
+  const [feita, setFeita] = useState<Movimentacao | null>(null);
 
   // ao trocar de cliente: marca a frota que veio do aviso (ou todas, se só tem uma)
   useEffect(() => {
@@ -675,14 +664,17 @@ function FormReajuste({ clienteInicial, frotaInicial, fechar }: { clienteInicial
         observacoes: motivo,
       });
       await recarregarOperacoes();
-      avisar(salva.status === 'aprovada' ? 'Reajuste registrado: os valores já mudaram no cadastro e nas fichas.' : 'Reajuste registrado. Os valores mudam quando o financeiro aprovar.');
-      fechar();
+      setFeita(salva);
     } catch (e) {
       setErro(e instanceof Error ? e.message : 'Não foi possível registrar.');
     } finally {
       setSalvando(false);
     }
   };
+
+  if (feita) return <Registrada m={feita} fechar={fechar} />;
+  const mensagemAtual = () =>
+    textoMensagem({ tipo: 'reajuste', frota: prontos.map((i) => i.frota).join(', '), clienteNome: cliente?.nome ?? '', dados: { ...movVazia(data), itens: prontos, renovaAte: renova || null, observacoes: motivo } });
 
   return (
     <div className="flex flex-col gap-4">
@@ -812,9 +804,51 @@ function FormReajuste({ clienteInicial, frotaInicial, fechar }: { clienteInicial
         <button type="button" className="btn-secondary" onClick={fechar}>
           Cancelar
         </button>
+        {prontos.length > 0 && <BotaoCopiar texto={mensagemAtual} />}
         <button type="button" className="btn-primary" onClick={registrar} disabled={salvando || !cliente}>
           {salvando ? 'Registrando…' : ehFinanceiro ? 'Registrar reajuste' : 'Enviar para aprovação'}
         </button>
+      </div>
+    </div>
+  );
+}
+
+/** Copia a movimentação no formato de mensagem para o grupo. */
+export function BotaoCopiar({ texto, rotulo = 'Copiar mensagem', className = 'btn-secondary' }: { texto: () => string; rotulo?: string; className?: string }) {
+  const { avisar } = useEstado();
+  const [copiado, setCopiado] = useState(false);
+  return (
+    <button
+      type="button"
+      className={className}
+      onClick={async () => {
+        const ok = await copiarTexto(texto());
+        if (!ok) return avisar('Não consegui copiar. Tente de novo.', 'bad');
+        setCopiado(true);
+        avisar('Mensagem copiada. É só colar no grupo.');
+        setTimeout(() => setCopiado(false), 2500);
+      }}
+    >
+      {copiado ? 'Copiada ✓' : rotulo}
+    </button>
+  );
+}
+
+/** Depois de registrar: mostra a mensagem pronta para o grupo. */
+function Registrada({ m, fechar }: { m: Movimentacao; fechar: () => void }) {
+  const texto = textoMensagem(m);
+  return (
+    <div className="flex flex-col gap-3">
+      <p className="rounded-[10px] bg-ok-soft px-3 py-2.5 text-[14px] text-ok">
+        {m.status === 'aprovada' ? 'Registrada e aplicada no cadastro.' : 'Registrada. Entra no cadastro quando o financeiro aprovar.'}
+      </p>
+      <span className="label">Mensagem para o grupo</span>
+      <pre className="whitespace-pre-wrap rounded-xl border border-line bg-[#F8F7F3] p-3 font-sans text-[13.5px]">{texto}</pre>
+      <div className="flex justify-end gap-2">
+        <button type="button" className="btn-secondary" onClick={fechar}>
+          Fechar
+        </button>
+        <BotaoCopiar texto={() => texto} className="btn-primary" />
       </div>
     </div>
   );

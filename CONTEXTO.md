@@ -109,7 +109,7 @@ Valor do orçamento só para quem vê valores (os outros recebem null e não con
 ## Movimentações e reajustes (nov/2026)
 Tela `/movimentacoes` em linha do tempo: resumo do mês (quantas locações/trocas/devoluções/reajustes e o efeito na
 receita mensal, só para quem vê valores), aviso de contratos vencendo (ficha `contratoVencimento`, próximos 30 dias
-ou vencidos há até 3 meses) e lista por mês; o formulário abre num painel lateral. Tipo novo `reajuste`: cliente +
+ou vencidos há até 3 meses) e lista por mês; o formulário abre num painel lateral (sem "colar mensagem"; tem "Copiar mensagem" para mandar no grupo, também depois de registrar e no detalhe). Tipo novo `reajuste`: cliente +
 `dados.itens` [{frota, antes, novo}], `percentual`, `renovaAte`; segue a mesma aprovação (operações → financeiro).
 Ao aplicar, muda o valor no cliente e na ficha (`contratoValor`, `contratoVencimento`; limpa `contratoReajuste` se
 era o mesmo valor). Devolução e troca guardam `dados.valorAnterior`. Painel do dia tem o cartão "Máquinas: últimos 7 dias"
