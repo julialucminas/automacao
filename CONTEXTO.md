@@ -170,6 +170,12 @@ de peças na ficha mostra 100 e tem "Mostrar mais". Migração 22 apaga a frota 
 pendências, oficina, conferências, movimentações e das frotas dos clientes. Ficha tem `helbert` ('sim'): etiqueta
 "Helbert" (dono divide a máquina com o irmão), só registro; aparece em Equipamentos e na Relação das locações.
 
+## Detalhe da máquina na Relação das locações: dados da locação (nov/2026)
+`DadosLocacao` (pages/Frotas.tsx): os mesmos campos da movimentação de locação (contrato/esporádica, valor, gás,
+início, vence, tempo de contrato, frete + valor, equipamento, prazo de pagamento, contato, telefone). Preenchido aparece
+como texto; em branco vira campo para preencher; "Corrigir dados preenchidos" abre todos. Salva no cadastro do cliente
+(financeiro direto; os outros vão para aprovação).
+
 ## Navegação
 Menu lateral com 6 grupos (Início, Operação, Frota, Financeiro, Clientes, Administração), Painel do dia em
 `/inicio` (cartões conforme o perfil) e busca no topo (`components/BuscaGeral.tsx`; as telas leem `?busca=`).

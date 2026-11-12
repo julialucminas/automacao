@@ -6,7 +6,7 @@ import type { Cliente, Frota, Movimentacao } from '../types';
 import { BalaoUrgente, SeloHelbert } from '../components/Balao';
 import { BotaoOk } from '../components/BotaoOk';
 import { chaveObs, urgentesEmAberto } from '../lib/avisos';
-import { formatarReais } from '../lib/dinheiro';
+import { formatarReais, lerReais, reaisParaCampo } from '../lib/dinheiro';
 import { dataBr, dataCurta, descreverRegra, hojeIso, proximasDatas, regraDoCliente } from '../lib/calendario';
 import { chaveEmpresa } from '../lib/normalizar';
 import { ClienteForm, rascunhoDe, type Rascunho } from '../components/ClienteForm';
@@ -493,12 +493,6 @@ function DetalheLocacao({
   const [marcando, setMarcando] = useState(false);
   const f = linha?.frota;
   const c = linha?.cliente;
-  const item = (rot: string, v: React.ReactNode) => (
-    <div>
-      <dt className="text-xs text-ink-3">{rot}</dt>
-      <dd className="text-[14px]">{v || <span className="text-ink-3">—</span>}</dd>
-    </div>
-  );
   const mov = (tipo: string) => `/movimentacoes?nova=${tipo}&frota=${encodeURIComponent(frota)}${c ? `&cliente=${c.id}` : ''}`;
   return (
     <Gaveta aberto fechar={fechar} titulo={`FT${frota}`}>
@@ -537,19 +531,7 @@ function DetalheLocacao({
             )}
           </div>
         )}
-        {f && (
-          <dl className="grid grid-cols-2 gap-x-4 gap-y-3 rounded-xl border border-line p-4">
-            {item('Máquina', f.descricao)}
-            {item('Locação', f.modalidade === 'contrato' ? 'Contrato' : f.modalidade === 'esporadico' ? 'Esporádica' : '')}
-            {item('Início', f.inicio ? dataBr(f.inicio) : '')}
-            {item('Término', f.fim ? dataBr(f.fim) : 'sem término')}
-            {item('Tempo de contrato', f.contrato)}
-            {veValor && item('Valor por mês', f.valor ? formatarReais(f.valor) : 'sem valor')}
-            {item('Frete', f.frete === 'lucminas' ? 'Por conta da Lucminas' : f.frete === 'cliente' ? `Por conta do cliente${f.freteValor ? ` · ${formatarReais(f.freteValor)}` : ''}` : '')}
-            {item('Gás', f.gas ? `${f.gas} vasilhame${f.gas > 1 ? 's' : ''}` : '')}
-            {c && item('Faturamento', `${descreverRegra(regraDoCliente(c))}${linha?.proxima ? ` · próxima ${dataCurta(linha.proxima)}` : ''}`)}
-          </dl>
-        )}
+        {f && c && <DadosLocacao key={`${c.id}|${f.numero}`} cliente={c} frota={f} proxima={linha?.proxima ?? null} veValor={veValor} />}
         {(registra || edita) && (
           <section className="flex flex-col gap-2">
             <h3 className="text-[12px] font-bold uppercase tracking-wide text-ink-3">O que fazer com esta máquina</h3>
@@ -819,5 +801,187 @@ export function SeloModalidade({ m }: { m?: Frota['modalidade'] }) {
     <span className="rounded-full bg-info-soft px-1.5 py-px font-sans text-[10.5px] font-bold uppercase tracking-wide text-info">Contrato</span>
   ) : (
     <span className="rounded-full bg-[#EDE9FE] px-1.5 py-px font-sans text-[10.5px] font-bold uppercase tracking-wide text-[#6D28D9]">Esporádico</span>
+  );
+}
+
+/**
+ * Os mesmos campos da movimentação de locação. O que já está preenchido aparece como dado;
+ * o que está em branco vira campo para preencher ali mesmo ("Corrigir" abre todos).
+ */
+function DadosLocacao({ cliente, frota, proxima, veValor }: { cliente: Cliente; frota: Frota; proxima: string | null; veValor: boolean }) {
+  const { pode, aprova, salvarCliente, proporCliente, avisar } = useEstado();
+  const podeSalvar = veValor && (pode('clientes', 2) || pode('frotas', 2) || pode('movimentacoes', 2));
+  const inicial = {
+    modalidade: frota.modalidade ?? '',
+    valor: frota.valor ? reaisParaCampo(frota.valor) : '',
+    inicio: frota.inicio ?? '',
+    fim: frota.fim ?? '',
+    contrato: frota.contrato ?? '',
+    frete: frota.frete ?? '',
+    freteValor: frota.freteValor ? reaisParaCampo(frota.freteValor) : '',
+    gas: frota.gas ? String(frota.gas) : '',
+    descricao: frota.descricao ?? '',
+    prazoPagamento: cliente.prazoPagamento ?? '',
+    contato: cliente.contato ?? '',
+    telefone: cliente.telefone ?? '',
+  };
+  type K = keyof typeof inicial;
+  const [d, setD] = useState(inicial);
+  const [corrigindo, setCorrigindo] = useState(false);
+  const [salvando, setSalvando] = useState(false);
+  const [erro, setErro] = useState('');
+  // aberto para preencher: o que veio em branco (ou tudo, se for corrigir)
+  const aberto = (k: K) => podeSalvar && (corrigindo || !inicial[k]);
+  const mudou = (Object.keys(inicial) as K[]).some((k) => d[k] !== inicial[k]);
+  const campo = (k: K) => ({ value: d[k], onChange: (e: { target: { value: string } }) => setD({ ...d, [k]: e.target.value }) });
+  const linhaDado = (rotulo: string, k: K, mostrar: string, editor: React.ReactNode, largo = false) => (
+    <div className={`flex min-w-0 flex-col gap-1 ${largo ? 'col-span-2' : ''}`}>
+      <span className="text-xs text-ink-3">{rotulo}</span>
+      {aberto(k) ? editor : <span className="text-[14px]">{mostrar || <span className="text-ink-3">—</span>}</span>}
+    </div>
+  );
+  const dinheiro = (k: 'valor' | 'freteValor', placeholder: string) => (
+    <input
+      className="input h-10 text-right"
+      inputMode="decimal"
+      {...campo(k)}
+      onBlur={() => {
+        const v = lerReais(d[k]);
+        if (v !== null) setD((x) => ({ ...x, [k]: reaisParaCampo(v) }));
+      }}
+      placeholder={placeholder}
+    />
+  );
+
+  const salvar = async () => {
+    setErro('');
+    const valor = d.valor.trim() ? lerReais(d.valor) : 0;
+    if (valor === null) return setErro(`Não entendi o valor "${d.valor}".`);
+    const freteValor = d.frete === 'cliente' && d.freteValor.trim() ? lerReais(d.freteValor) : null;
+    if (d.frete === 'cliente' && d.freteValor.trim() && freteValor === null) return setErro(`Não entendi o valor do frete "${d.freteValor}".`);
+    if (d.inicio && d.fim && d.fim < d.inicio) return setErro('O término está antes do início.');
+    const nova: Frota = {
+      ...frota,
+      valor,
+      descricao: d.descricao.trim(),
+      inicio: d.inicio || null,
+      fim: d.fim || null,
+      contrato: d.contrato.trim(),
+      gas: Number(d.gas) || 0,
+      frete: d.frete as Frota['frete'],
+      freteValor,
+      modalidade: d.modalidade as Frota['modalidade'],
+    };
+    const input = {
+      ...cliente,
+      prazoPagamento: d.prazoPagamento.trim(),
+      contato: d.contato.trim(),
+      telefone: d.telefone.trim(),
+      frotas: cliente.frotas.map((x) => (x.numero === frota.numero ? nova : x)),
+    };
+    setSalvando(true);
+    try {
+      if (aprova || pode('clientes', 2)) {
+        await salvarCliente(input);
+        avisar(`Dados da FT${frota.numero} salvos.`);
+      } else {
+        await proporCliente(input);
+        avisar(`Dados da FT${frota.numero} enviados para o financeiro aprovar.`);
+      }
+      setCorrigindo(false);
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : 'Não foi possível salvar.');
+    } finally {
+      setSalvando(false);
+    }
+  };
+
+  const faltam = (Object.keys(inicial) as K[]).filter((k) => !inicial[k] && k !== 'freteValor' && (veValor || k !== 'valor')).length;
+  return (
+    <section className="flex flex-col gap-3 rounded-xl border border-line p-4" aria-label="Dados da locação">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h3 className="text-[12px] font-bold uppercase tracking-wide text-ink-3">Dados da locação</h3>
+        {podeSalvar && faltam > 0 && !corrigindo && <span className="text-xs text-warn-strong">{faltam} em branco: preencha abaixo</span>}
+      </div>
+
+      {/* locação por: contrato ou esporádica */}
+      {linhaDado(
+        'Locação por',
+        'modalidade',
+        d.modalidade === 'contrato' ? 'Contrato' : d.modalidade === 'esporadico' ? 'Esporádica' : '',
+        <div className="grid grid-cols-2 gap-2">
+          {(
+            [
+              ['contrato', 'Contrato'],
+              ['esporadico', 'Esporádica'],
+            ] as const
+          ).map(([v, r]) => (
+            <button
+              key={v}
+              type="button"
+              aria-pressed={d.modalidade === v}
+              onClick={() => setD({ ...d, modalidade: d.modalidade === v ? '' : v })}
+              className={`h-10 rounded-[10px] border text-[14px] ${d.modalidade === v ? 'border-ink bg-ink font-semibold text-white' : 'border-line-strong bg-white text-ink-2'}`}
+            >
+              {r}
+            </button>
+          ))}
+        </div>,
+        true,
+      )}
+
+      <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+        {veValor && linhaDado('Valor da locação (por mês)', 'valor', frota.valor ? formatarReais(frota.valor) : '', dinheiro('valor', '3.350,00'))}
+        {linhaDado('Gás (vasilhames)', 'gas', frota.gas ? `${frota.gas} vasilhame${frota.gas > 1 ? 's' : ''}` : '', <input className="input h-10" inputMode="numeric" {...campo('gas')} placeholder="0" />)}
+        {linhaDado('Início', 'inicio', frota.inicio ? dataBr(frota.inicio) : '', <input type="date" className="input h-10" {...campo('inicio')} />)}
+        {linhaDado('Vence (término)', 'fim', frota.fim ? dataBr(frota.fim) : '', <input type="date" className="input h-10" {...campo('fim')} />)}
+        {linhaDado('Tempo de contrato', 'contrato', frota.contrato ?? '', <input className="input h-10" {...campo('contrato')} placeholder="12 meses" />)}
+        {linhaDado(
+          'Frete',
+          'frete',
+          frota.frete === 'lucminas' ? 'Por conta da Lucminas' : frota.frete === 'cliente' ? `Por conta do cliente${frota.freteValor ? ` · ${formatarReais(frota.freteValor)}` : ''}` : '',
+          <span className="flex gap-1.5">
+            <select className="input h-10 min-w-0 flex-1" {...campo('frete')}>
+              <option value="">—</option>
+              <option value="lucminas">Por conta da Lucminas</option>
+              <option value="cliente">Por conta do cliente</option>
+            </select>
+            {d.frete === 'cliente' && <span className="w-[100px]">{dinheiro('freteValor', 'R$')}</span>}
+          </span>,
+        )}
+        {linhaDado('Equipamento', 'descricao', frota.descricao, <input className="input h-10" {...campo('descricao')} placeholder="YALE GLP050VX" />, true)}
+        {linhaDado('Prazo de pagamento', 'prazoPagamento', cliente.prazoPagamento ?? '', <input className="input h-10" {...campo('prazoPagamento')} placeholder="30 dias após a emissão" />, true)}
+        {linhaDado('Contato', 'contato', cliente.contato ?? '', <input className="input h-10" {...campo('contato')} placeholder="Nome" />)}
+        {linhaDado('Telefone', 'telefone', cliente.telefone ?? '', <input className="input h-10" {...campo('telefone')} placeholder="(31) 99999-0000" />)}
+        <div className="col-span-2 flex flex-col gap-1">
+          <span className="text-xs text-ink-3">Faturamento</span>
+          <span className="text-[14px]">
+            {descreverRegra(regraDoCliente(cliente))}
+            {proxima ? ` · próxima ${dataCurta(proxima)}` : ''}
+          </span>
+        </div>
+      </div>
+
+      {erro && <p className="rounded-[10px] bg-bad-soft px-3 py-2 text-[13px] text-bad-strong">{erro}</p>}
+      {podeSalvar && (
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <button
+            type="button"
+            className="btn btn-sm text-ink-2 underline"
+            onClick={() => {
+              if (corrigindo) setD(inicial);
+              setCorrigindo(!corrigindo);
+            }}
+          >
+            {corrigindo ? 'Cancelar correção' : 'Corrigir dados preenchidos'}
+          </button>
+          {(mudou || corrigindo) && (
+            <button type="button" className="btn-primary btn-sm" disabled={!mudou || salvando} onClick={() => void salvar()}>
+              {salvando ? 'Salvando…' : aprova || pode('clientes', 2) ? 'Salvar' : 'Enviar para aprovação'}
+            </button>
+          )}
+        </div>
+      )}
+    </section>
   );
 }
