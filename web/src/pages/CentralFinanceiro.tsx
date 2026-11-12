@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { useEstado } from '../state';
 import { api } from '../api';
 import type { Equipamento, ServicoExterno } from '../types';
-import { dataBr, hojeIso, paraData, paraIso, proximasDatas, regraDoCliente } from '../lib/calendario';
+import { dataBr, hojeIso, janelaConferencia, paraData, paraIso, proximasDatas, regraDoCliente } from '../lib/calendario';
 import { referenciaAtual, referenciaPorExtenso } from '../lib/email';
 import { formatarReais } from '../lib/dinheiro';
 import { efeitoNaReceita, NOMES_TIPO } from '../lib/movimentacao';
@@ -22,9 +22,10 @@ type Pendencia = { chave: string; tom: Tom; rotulo: string; texto: ReactNode; li
  * depois os números do mês, o acesso rápido e o que mudou nas máquinas.
  */
 export function CentralFinanceiro() {
-  const { usuario, clientes, envios, movimentacoes, propostas, pendentesParaMim, solicitacoes, pode, veValores } = useEstado();
+  const { config, usuario, clientes, envios, movimentacoes, propostas, pendentesParaMim, solicitacoes, pode, veValores } = useEstado();
   const hoje = hojeIso();
   const ref = referenciaAtual();
+  const janela = janelaConferencia(config);
   const nome = usuario?.chamar?.trim() || usuario?.nome.trim().split(/\s+/)[0] || '';
   const hora = new Date().getHours();
   const saudacao = hora < 12 ? 'Bom dia' : hora < 18 ? 'Boa tarde' : 'Boa noite';
@@ -36,8 +37,8 @@ export function CentralFinanceiro() {
   useEffect(() => {
     if (pode('frotas')) api.listarEquipamentos().then(setEqs, () => undefined);
     if (pode('externos')) api.listarExternos().then(setExternos, () => undefined);
-    if (pode('conferencia')) api.listarConferencia(ref).then((l) => setConferidas(l.length), () => undefined);
-  }, [pode, ref]);
+    if (pode('conferencia')) api.listarConferencia(janela.referencia).then((l) => setConferidas(l.length), () => undefined);
+  }, [pode, janela.referencia]);
 
   // faturas: hoje e próximos 7 dias, pela regra de cada cliente
   const faturas = useMemo(() => {
@@ -194,14 +195,14 @@ export function CentralFinanceiro() {
       link: '/externos',
       acao: 'Ver',
     });
-  if (conferidas !== null && frotas.length && conferidas < frotas.length && Number(hoje.slice(8, 10)) >= 20)
+  if (conferidas !== null && frotas.length && conferidas < frotas.length && janela.aberta)
     pend.push({
       chave: 'conf',
       tom: 'info',
       rotulo: 'Conferência',
       texto: (
         <>
-          Conferência de {referenciaPorExtenso(ref)}: faltam <b>{frotas.length - conferidas}</b> de {frotas.length} frotas
+          Conferência de {referenciaPorExtenso(janela.referencia)}: faltam <b>{frotas.length - conferidas}</b> de {frotas.length} frotas
         </>
       ),
       link: '/conferencia',

@@ -47,7 +47,7 @@ export const ABAS: DefAba[] = [
   { id: 'movimentacoes', rotulo: 'Movimentações', grupo: 'operacao', rota: '/movimentacoes', ve: 'vê o que foi registrado', edita: 'registra locação, troca e devolução' },
   { id: 'conferencia', rotulo: 'Conferência de frotas', grupo: 'operacao', rota: '/conferencia', ve: 'vê a conferência do mês', edita: 'marca ✓ e envia correções' },
   { id: 'calendario', rotulo: 'Calendário', grupo: 'operacao', rota: '/calendario', ve: 'vê o calendário', edita: 'vê o calendário' },
-  { id: 'frotas', rotulo: 'Relação de frotas', grupo: 'frota', rota: '/frotas', ve: 'vê a relação e o relatório', edita: 'também marca frota na oficina' },
+  { id: 'frotas', rotulo: 'Relação das locações', grupo: 'frota', rota: '/frotas', ve: 'vê a relação e o relatório', edita: 'também marca frota na oficina' },
   { id: 'envio', rotulo: 'Envio do mês', grupo: 'financeiro', rota: '/envio', ve: 'vê as faturas no Calendário (sem a tela de envio)', edita: 'envia faturas e marca faturado' },
   { id: 'historico', rotulo: 'Histórico de envios', grupo: 'financeiro', rota: '/historico', ve: 'vê o que foi enviado', edita: 'reenvia e confere a caixa de entrada' },
   { id: 'configuracoes', rotulo: 'Configurações', grupo: 'financeiro', rota: '/configuracoes', ve: 'vê o texto do e-mail', edita: 'muda o texto do e-mail' },

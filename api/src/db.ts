@@ -13,6 +13,8 @@ export type Frota = {
   contrato?: string;
   gas?: number;
   frete?: '' | 'lucminas' | 'cliente';
+  /** locação por contrato ou esporádica (etiqueta no cadastro) */
+  modalidade?: '' | 'contrato' | 'esporadico';
 };
 
 export type Cliente = {

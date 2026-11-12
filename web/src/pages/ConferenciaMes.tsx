@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useEstado } from '../state';
+import { janelaConferencia } from '../lib/calendario';
 import { api } from '../api';
 import type { Cliente, Conferencia, Frota } from '../types';
 import { formatarReais, lerReais, reaisParaCampo } from '../lib/dinheiro';
@@ -22,11 +23,14 @@ function mudarMes(ref: string, delta: number) {
 }
 
 export function ConferenciaMes() {
-  const { clientes, propostas, pode, proporCliente, salvarCliente, avisar } = useEstado();
+  const { clientes, propostas, pode, proporCliente, salvarCliente, avisar, config, usuario } = useEstado();
   const ehFinanceiro = pode('clientes', 2);
-  const confere = pode('conferencia', 2);
+  // só abre no fim do mês (dia X até o dia Y do mês seguinte); o administrador entra sempre
+  const janela = janelaConferencia(config);
+  const admin = usuario?.perfil === 'admin';
   const aguardando = new Set(propostas.filter((p) => p.status === 'pendente' && p.clienteId).map((p) => p.clienteId));
-  const [ref, setRef] = useState(referenciaAtual());
+  const [ref, setRef] = useState(janela.aberta ? janela.referencia : referenciaAtual());
+  const confere = pode('conferencia', 2) && (admin || (janela.aberta && ref === janela.referencia));
   const [marcas, setMarcas] = useState<Conferencia[] | null>(null);
   const [erro, setErro] = useState('');
   const [filtro, setFiltro] = useState<Filtro>('pendente');
@@ -131,12 +135,26 @@ export function ConferenciaMes() {
   ];
   const pct = total ? Math.round((conferidas / total) * 100) : 0;
 
+  if (!janela.aberta && !admin)
+    return (
+      <div className="mx-auto flex max-w-[520px] flex-col items-center gap-3 rounded-xl border border-line bg-white p-8 text-center">
+        <h1 className="text-xl font-bold">Conferência de frotas e valores</h1>
+        <p className="text-[14px] text-ink-2">
+          A conferência abre no <b>dia {janela.abre}</b> e fica aberta até o <b>dia {janela.fecha}</b> do mês seguinte.
+        </p>
+        <p className="text-[13px] text-ink-3">Até lá, as mudanças de frota e valor entram pelas Movimentações.</p>
+      </div>
+    );
+
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold">Conferência de frotas e valores</h1>
-          <p className="text-[13px] text-ink-3">Confira cada frota do mês: marque ✓ se está certa ou corrija o que estiver errado.</p>
+          <p className="text-[13px] text-ink-3">
+            Confira cada frota do mês: marque ✓ se está certa ou corrija o que estiver errado.
+            {!confere && pode('conferencia', 2) && ref !== janela.referencia && ' Este mês é só para consulta.'}
+          </p>
         </div>
         <div className="flex items-center gap-1 rounded-xl border border-line bg-white p-1">
           <button type="button" className="btn btn-sm h-10 w-10 justify-center" aria-label="Mês anterior" onClick={() => setRef(mudarMes(ref, -1))}>

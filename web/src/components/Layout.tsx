@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
-import { hojeIso } from '../lib/calendario';
+import { hojeIso, janelaConferencia } from '../lib/calendario';
 import { useEstado } from '../state';
 import { temAviso } from '../lib/pareamento';
 import { EMPRESA, REMETENTE } from '../lib/email';
@@ -35,11 +35,11 @@ export const usaCentralFinanceiro = (pode: (a: Aba, n?: 1 | 2) => boolean, aprov
 /** O financeiro vê o menu na ordem do trabalho dele: financeiro e clientes primeiro; operação e frota começam fechadas. */
 const ORDEM_FINANCEIRO: Grupo[] = ['financeiro', 'clientes', 'inicio', 'operacao', 'frota', 'administracao'];
 
-export type ItemMenu = { aba: Aba; rotulo: string; rota: string; grupo: Grupo; badge: number; alerta: boolean };
+export type ItemMenu = { aba: Aba; rotulo: string; rota: string; grupo: Grupo; badge: number; alerta: boolean; /** aba desativada agora (ex.: conferência fora do fim do mês) */ fechado?: string };
 
 /** Monta o menu do usuário: só as abas que o perfil dele vê, nos 6 grupos. */
 export function useMenu(): ItemMenu[] {
-  const { lote, clientes, envios, pendentesParaMim, solicitacoes, aguardandoAprovacao, propostas, movimentacoes, pode, aprova, usuario } = useEstado();
+  const { lote, clientes, envios, pendentesParaMim, solicitacoes, aguardandoAprovacao, propostas, movimentacoes, pode, aprova, usuario, config } = useEstado();
   const avisosLote = lote ? lote.itens.filter((i) => temAviso(i, clientes)).length : 0;
   const devolvidos = envios.filter((e) => e.status === 'devolvido').length;
   const meusPendentes = propostas.filter((p) => p.status === 'pendente').length + movimentacoes.filter((m) => m.status === 'pendente').length;
@@ -71,6 +71,11 @@ export function useMenu(): ItemMenu[] {
     // os formulários das OS: quem abre e encerra OS monta os modelos
     if (a.id === 'ordens' && pode('ordens', 2) && pode('manutencao', 2)) itens.push({ aba: 'ordens', rotulo: 'Modelos de OS', rota: '/modelos-os', grupo: a.grupo, badge: 0, alerta: false });
   }
+  // conferência: só abre no fim do mês (o administrador entra sempre)
+  const janela = janelaConferencia(config);
+  if (!janela.aberta && usuario?.perfil !== 'admin')
+    for (const i of itens) if (i.rota === '/conferencia') i.fechado = `abre dia ${janela.abre}`;
+
   // financeiro: o que é do dia a dia dela fica junto, no grupo Financeiro
   if (usuario?.perfil === 'financeiro') {
     const ordem = ['/financeiro', '/aprovacoes', '/envio', '/calendario', '/historico', '/movimentacoes', '/conferencia', '/externos', '/configuracoes'];
@@ -132,6 +137,16 @@ function Menu({ itens }: { itens: ItemMenu[] }) {
               <ul className="mb-2 flex flex-col gap-0.5">
                 {doGrupo.map((i) => (
                   <li key={i.rota}>
+                    {i.fechado ? (
+                      <span
+                        aria-disabled="true"
+                        title="A conferência só abre no fim do mês"
+                        className="flex min-h-[40px] cursor-not-allowed items-center gap-2 rounded-lg py-1.5 pl-9 pr-2.5 text-[14px] font-medium text-ink-3/70"
+                      >
+                        <span className="flex-1">{i.rotulo}</span>
+                        <span className="text-[11px]">{i.fechado}</span>
+                      </span>
+                    ) : (
                     <NavLink
                       to={i.rota}
                       className={({ isActive }) =>
@@ -143,6 +158,7 @@ function Menu({ itens }: { itens: ItemMenu[] }) {
                       <span className="flex-1">{i.rotulo}</span>
                       <Selo n={i.badge} alerta={i.alerta} />
                     </NavLink>
+                    )}
                   </li>
                 ))}
               </ul>

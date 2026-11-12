@@ -150,3 +150,25 @@ describe('reajuste de valor', () => {
     expect((await a('POST', '/api/movimentacoes', { ...base, tipo: 'venda', frota: '53', data: '2026-11-15' })).statusCode).toBe(409);
   });
 });
+
+describe('modalidade e janela da conferência', () => {
+  it('locação grava contrato/esporádico na frota do cliente', async () => {
+    const r = await como('angelise')('POST', '/api/movimentacoes', {
+      tipo: 'locacao', frota: '90', data: '2026-11-12', clienteId, valor: 100000, modalidade: 'esporadico',
+      frete: '', gas: 0, contrato: '', prazoPagamento: '', emails: [], contatoNome: '', contatoTelefone: '', descricao: '', observacoes: '',
+    });
+    expect(r.statusCode).toBe(201);
+    const l = (await como('angelise')('GET', '/api/clientes')).json();
+    const c = (l.clientes ?? l).find((x: { id: string }) => x.id === clienteId);
+    expect(c.frotas.find((f: { numero: string }) => f.numero === '90').modalidade).toBe('esporadico');
+    expect((await como('angelise')('POST', '/api/movimentacoes', { tipo: 'locacao', frota: '91', data: '2026-11-12', clienteId, modalidade: 'x' })).statusCode).toBe(400);
+  });
+  it('janela: do dia 25 até o dia 5 do mês seguinte', async () => {
+    const { janelaConferencia } = await import('./app.js');
+    expect(janelaConferencia('2026-11-12', 25, 5)).toEqual({ aberta: false, referencia: '2026-11' });
+    expect(janelaConferencia('2026-11-25', 25, 5)).toEqual({ aberta: true, referencia: '2026-11' });
+    expect(janelaConferencia('2026-12-03', 25, 5)).toEqual({ aberta: true, referencia: '2026-11' });
+    expect(janelaConferencia('2027-01-05', 25, 5)).toEqual({ aberta: true, referencia: '2026-12' });
+    expect(janelaConferencia('2027-01-06', 25, 5).aberta).toBe(false);
+  });
+});

@@ -11,6 +11,8 @@ export type Frota = {
   contrato?: string;
   gas?: number;
   frete?: '' | 'lucminas' | 'cliente';
+  /** locação por contrato ou esporádica */
+  modalidade?: '' | 'contrato' | 'esporadico';
 };
 
 export type Cliente = {
@@ -201,6 +203,8 @@ export type DadosMov = {
   renovaAte?: string | null;
   /** devolução/troca/venda: valor de locação que a frota tinha antes */
   valorAnterior?: number | null;
+  /** locação: por contrato ou esporádica */
+  modalidade?: '' | 'contrato' | 'esporadico';
   /** venda e compra: nota fiscal */
   nf?: string;
   /** compra: identificação da máquina que entra */
@@ -240,7 +244,7 @@ export type Proposta = {
 export type ItemLog = { id: number; quando: string; usuario: string; area: string; acao: string; clienteId: string; clienteNome: string; antes: unknown; depois: unknown };
 export type ConfigEmail = Record<'email.remetente' | 'email.assunto' | 'email.corpo' | 'email.corpoSemBoleto', string> &
   /** regras da manutenção (JSON), editadas em Configurações */
-  Partial<Record<'manutencao.tipos' | 'manutencao.perifericos' | 'os.relatorioCliente', string>>;
+  Partial<Record<'manutencao.tipos' | 'manutencao.perifericos' | 'os.relatorioCliente' | 'conferencia.abreDia' | 'conferencia.fechaDia', string>>;
 
 export type TipoVisita = { sigla: string; nome: string; dias?: number; horas?: number };
 export type PerifericoId = 'motorPartida' | 'filtroAr' | 'correia' | 'oleoTransmissao' | 'oleoHidraulico';

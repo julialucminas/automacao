@@ -107,7 +107,7 @@ export function Frotas() {
       <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
         <div>
           <div className="eyebrow">Locação</div>
-          <h1 className="mt-1 text-[26px] font-bold">Frotas e clientes</h1>
+          <h1 className="mt-1 text-[26px] font-bold">Relação das locações</h1>
           <p className="text-[13px] text-ink-3">Cada frota e o cliente com quem está. Para mudar, edite o cliente (as frotas ficam no cadastro dele).</p>
         </div>
         <div className="flex flex-wrap items-center gap-2.5">
@@ -242,6 +242,7 @@ export function Frotas() {
                   >
                     <span className="flex items-center gap-1.5 font-mono font-semibold">
                       {l.frota.numero}
+                      <SeloModalidade m={l.frota.modalidade} />
                       {ofi && <SeloOficina />}
                       {l.duplicada && <Chip tom="bad">2 clientes</Chip>}
                     </span>
@@ -315,6 +316,7 @@ export function Frotas() {
                       title={l.frota.descricao}
                     >
                       <b className="font-mono">{l.frota.numero}</b>
+                      <SeloModalidade m={l.frota.modalidade} />
                       {naOficina.has(l.frota.numero) && <SeloOficina />}
                       {veValorFrota && <span className="text-ink-2">{l.frota.valor ? formatarReais(l.frota.valor) : 'sem valor'}</span>}
                     </span>
@@ -505,5 +507,15 @@ function RelatorioPdf({ aberto, fechar }: { aberto: boolean; fechar: () => void 
         </button>
       </div>
     </Modal>
+  );
+}
+
+/** Etiqueta da locação: contrato ou esporádica. */
+export function SeloModalidade({ m }: { m?: Frota['modalidade'] }) {
+  if (!m) return null;
+  return m === 'contrato' ? (
+    <span className="rounded-full bg-info-soft px-1.5 py-px font-sans text-[10.5px] font-bold uppercase tracking-wide text-info">Contrato</span>
+  ) : (
+    <span className="rounded-full bg-[#EDE9FE] px-1.5 py-px font-sans text-[10.5px] font-bold uppercase tracking-wide text-[#6D28D9]">Esporádico</span>
   );
 }

@@ -26,7 +26,7 @@ export type Rascunho = {
   prazoPagamento: string;
   semBoleto: boolean;
   /** frotas com o valor como texto do campo, para permitir digitar à vontade; extra = dados da locação (vêm das movimentações) */
-  frotas: { numero: string; valor: string; descricao: string; extra?: Pick<Frota, 'inicio' | 'fim' | 'contrato' | 'gas' | 'frete'> }[];
+  frotas: { numero: string; valor: string; descricao: string; extra?: Pick<Frota, 'inicio' | 'fim' | 'contrato' | 'gas' | 'frete' | 'modalidade'> }[];
 };
 
 export const rascunhoVazio = (nome = ''): Rascunho => ({ nome, apelidos: '', cnpj: '', para: [], cc: [], observacoes: '', regra: 'dia', dia: '', inicio: '', periodo: '', contato: '', telefone: '', prazoPagamento: '', semBoleto: false, frotas: [] });
@@ -52,7 +52,7 @@ export const rascunhoDe = (c: Cliente): Rascunho => ({
     numero: f.numero,
     valor: f.valor ? reaisParaCampo(f.valor) : '',
     descricao: f.descricao,
-    extra: { inicio: f.inicio ?? null, fim: f.fim ?? null, contrato: f.contrato ?? '', gas: f.gas ?? 0, frete: f.frete ?? '' },
+    extra: { inicio: f.inicio ?? null, fim: f.fim ?? null, contrato: f.contrato ?? '', gas: f.gas ?? 0, frete: f.frete ?? '', modalidade: f.modalidade ?? '' },
   })),
 });
 
@@ -422,6 +422,18 @@ function Faturamento({ d, setD }: { d: Rascunho; setD: (r: Rascunho) => void }) 
                   className="input h-8 min-h-0 w-auto bg-white px-2 py-0 text-xs"
                 />
               </label>
+              <select
+                aria-label={`Contrato ou esporádico, frota ${f.numero || i + 1}`}
+                value={f.extra?.modalidade ?? ''}
+                onChange={(e) =>
+                  setD({ ...d, frotas: d.frotas.map((x, k) => (k === i ? { ...x, extra: { ...x.extra, modalidade: e.target.value as Frota['modalidade'] } } : x)) })
+                }
+                className="input h-8 min-h-0 w-auto bg-white px-2 py-0 text-xs"
+              >
+                <option value="">Contrato ou esporádico?</option>
+                <option value="contrato">Contrato</option>
+                <option value="esporadico">Esporádico</option>
+              </select>
               {(() => {
                 const r = resumoLocacao({ ...f.extra, inicio: null, fim: null });
                 return r ? <span>{r}</span> : null;

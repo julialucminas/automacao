@@ -125,3 +125,15 @@ export function dataFaturamentoNoMes(c: Parameters<typeof regraDoCliente>[0], re
   const { de, ate } = intervaloDoMes(a, m);
   return datasNoIntervalo(r, de, ate)[0] ?? null;
 }
+
+/** Conferência das frotas: aberta do dia "abre" até o fim do mês e do dia 1 ao "fecha" do mês seguinte (conferindo o mês anterior). */
+export function janelaConferencia(config: Record<string, string> | null | undefined, hoje = hojeIso()): { aberta: boolean; referencia: string; abre: number; fecha: number } {
+  const abre = Number(config?.['conferencia.abreDia']) || 25;
+  const fecha = Number(config?.['conferencia.fechaDia'] ?? 5);
+  const [a, m, d] = hoje.split('-').map(Number);
+  if (d >= abre) return { aberta: true, referencia: hoje.slice(0, 7), abre, fecha };
+  if (d <= fecha) return { aberta: true, referencia: m === 1 ? `${a - 1}-12` : `${a}-${String(m - 1).padStart(2, '0')}`, abre, fecha };
+  return { aberta: false, referencia: hoje.slice(0, 7), abre, fecha };
+}
+
+export const MODALIDADES = { contrato: 'Contrato', esporadico: 'Esporádico' } as const;

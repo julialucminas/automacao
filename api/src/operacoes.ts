@@ -36,6 +36,8 @@ export type DadosMov = {
   renovaAte?: string | null;
   /** valor que a frota tinha no cliente antes de aplicar (devolução, troca e venda de máquina locada) */
   valorAnterior?: number | null;
+  /** locação: por contrato ou esporádica */
+  modalidade?: '' | 'contrato' | 'esporadico';
   /** venda e compra: nota fiscal */
   nf?: string;
   /** compra: identificação da máquina que entra na frota */
@@ -119,6 +121,9 @@ export const CONFIG_PADRAO: Record<string, string> = {
   ]),
   // relatório da OS por e-mail ao cliente: desligado até a empresa decidir ligar (Configurações)
   'os.relatorioCliente': 'nao',
+  // conferência das frotas: abre no dia X do mês e fica aberta até o dia Y do mês seguinte
+  'conferencia.abreDia': '25',
+  'conferencia.fechaDia': '5',
   'manutencao.perifericos': JSON.stringify([
     { id: 'motorPartida', nome: 'Motor de partida', dias: 120 },
     { id: 'filtroAr', nome: 'Filtro de ar', dias: 90 },
@@ -272,6 +277,7 @@ export function operacoes(db: Banco, repo: Repositorio, fichas?: Fichas) {
         contrato: d.contrato,
         gas: d.gas,
         frete: d.frete,
+        ...(d.modalidade ? { modalidade: d.modalidade } : {}),
       };
       const atual = repo.buscarCliente(cliente.id);
       const jaTem = new Set([...atual.para, ...atual.cc]);
@@ -382,6 +388,7 @@ export function operacoes(db: Banco, repo: Repositorio, fichas?: Fichas) {
           observacoes: n.observacoes,
           ...(n.tipo === 'reajuste' ? { itens: n.itens ?? [], percentual: n.percentual ?? null, renovaAte: n.renovaAte ?? null } : {}),
           ...(n.tipo === 'venda' || n.tipo === 'compra' ? { nf: n.nf ?? '' } : {}),
+          ...(n.tipo === 'locacao' && n.modalidade ? { modalidade: n.modalidade } : {}),
           ...(n.tipo === 'compra' && n.maquina ? { maquina: n.maquina } : {}),
         };
         let clienteId = n.clienteId ?? null;

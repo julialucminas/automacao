@@ -134,6 +134,13 @@ locada nem vendida de novo) e `compra` (cria a ficha com descrição, marca, mod
 e compraData/compraValor/compraNf/fornecedor; recusa número de frota que já existe). Venda de máquina locada conta
 como −valor da locação na receita mensal; o valor da venda e o da compra aparecem à parte no resumo do mês.
 
+## Contrato/esporádico, janela da conferência, Relação das locações (nov/2026)
+Frota no cliente tem `modalidade` ('contrato' | 'esporadico'): escolhida na locação (obrigatória) ou no cadastro do
+cliente; etiqueta na Relação das locações (`/frotas`, antes "Relação de frotas"). Conferência só abre do dia
+`conferencia.abreDia` (25) até o dia `conferencia.fechaDia` (5) do mês seguinte, conferindo o mês da janela
+(`janelaConferencia` em app.ts e lib/calendario.ts); fora disso a aba fica desativada no menu e o servidor recusa
+marcar (409). O administrador entra sempre. Dias editáveis em Configurações.
+
 ## Navegação
 Menu lateral com 6 grupos (Início, Operação, Frota, Financeiro, Clientes, Administração), Painel do dia em
 `/inicio` (cartões conforme o perfil) e busca no topo (`components/BuscaGeral.tsx`; as telas leem `?busca=`).

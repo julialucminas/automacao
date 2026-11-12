@@ -392,6 +392,7 @@ function FormMov({ tipo, fechar }: { tipo: TipoMov; fechar: () => void }) {
     if (m.tipo === 'troca' && !m.frotaNova?.trim()) return setErro('Informe a frota nova.');
     if (!m.data) return setErro('Informe a data.');
     if (m.tipo !== 'devolucao' && !m.clienteId && !m.clienteNome?.trim()) return setErro('Informe o cliente.');
+    if (m.tipo === 'locacao' && !m.modalidade) return setErro('Diga se a locação é por contrato ou esporádica.');
     const valor = valorTxt.trim() ? lerReais(valorTxt) : null;
     if (valorTxt.trim() && valor === null) return setErro(`Não entendi o valor "${valorTxt}". Use, por exemplo, 3.350,00`);
     const emails = [
@@ -542,6 +543,22 @@ function FormMov({ tipo, fechar }: { tipo: TipoMov; fechar: () => void }) {
               <input id="mov-contrato" className="input" value={m.contrato} onChange={(e) => mudar({ contrato: e.target.value })} placeholder="12 meses" />
             </div>
           </div>
+          <fieldset className="flex flex-col gap-1.5">
+            <legend className="label mb-1.5">Locação por</legend>
+            <div className="grid grid-cols-2 gap-2">
+              {(
+                [
+                  ['contrato', 'Contrato'],
+                  ['esporadico', 'Esporádica'],
+                ] as const
+              ).map(([v, r]) => (
+                <label key={v} className={`flex min-h-[44px] cursor-pointer items-center gap-2 rounded-[10px] border px-3 text-[14px] ${m.modalidade === v ? 'border-ink bg-white font-semibold' : 'border-line-strong bg-white/60'}`}>
+                  <input type="radio" name="modalidade" checked={m.modalidade === v} onChange={() => mudar({ modalidade: v })} className="h-[18px] w-[18px] accent-ink" />
+                  {r}
+                </label>
+              ))}
+            </div>
+          </fieldset>
           <div className="flex flex-col gap-1.5">
             <label htmlFor="mov-fim" className="label">
               Término previsto <span className="font-normal text-ink-3">(aparece no Calendário)</span>

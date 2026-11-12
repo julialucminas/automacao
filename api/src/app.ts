@@ -109,6 +109,7 @@ function lerFrotas(v: unknown): Frota[] | undefined {
     if (o.contrato !== undefined) f.contrato = texto(o.contrato, 'contrato', 60);
     if (o.gas !== undefined) f.gas = lerInteiro(o.gas, 'vasilhames de gás', 0, 50);
     if (o.frete !== undefined) f.frete = lerFrete(o.frete);
+    if (o.modalidade !== undefined) f.modalidade = lerModalidade(o.modalidade);
     return f;
   });
 }
@@ -118,6 +119,20 @@ function lerInteiro(v: unknown, campo: string, min: number, max: number): number
   const n = Number(v);
   if (!Number.isInteger(n) || n < min || n > max) throw new Invalido(`Quantidade de ${campo} inválida.`);
   return n;
+}
+
+function lerModalidade(v: unknown): '' | 'contrato' | 'esporadico' {
+  if (v === undefined || v === null || v === '') return '';
+  if (v === 'contrato' || v === 'esporadico') return v;
+  throw new Invalido('Escolha contrato ou esporádico.');
+}
+
+/** Conferência: aberta do dia "abre" até o fim do mês e do dia 1 ao "fecha" do mês seguinte (conferindo o mês anterior). */
+export function janelaConferencia(hojeIso: string, abre: number, fecha: number): { aberta: boolean; referencia: string } {
+  const [a, m, d] = hojeIso.split('-').map(Number);
+  if (d >= abre) return { aberta: true, referencia: hojeIso.slice(0, 7) };
+  if (d <= fecha) return { aberta: true, referencia: m === 1 ? `${a - 1}-12` : `${a}-${String(m - 1).padStart(2, '0')}` };
+  return { aberta: false, referencia: hojeIso.slice(0, 7) };
 }
 
 function lerFrete(v: unknown): '' | 'lucminas' | 'cliente' {
@@ -347,6 +362,7 @@ export function criarApp(db: Banco, opcoes: { cookieSeguro: boolean; logger?: bo
       contatoTelefone: texto(b.contatoTelefone, 'telefone', 40),
       descricao: texto(b.descricao, 'descrição', 200),
       observacoes: texto(b.observacoes, 'observações', 2000),
+      ...(tipo === 'locacao' ? { modalidade: lerModalidade(b.modalidade) } : {}),
     };
   };
 
@@ -467,6 +483,8 @@ export function criarApp(db: Banco, opcoes: { cookieSeguro: boolean; logger?: bo
     const valores: Record<string, string> = {};
     for (const k of Object.keys(CONFIG_PADRAO)) if (b[k] !== undefined) valores[k] = texto(b[k], k, 5000) || CONFIG_PADRAO[k];
     if (valores['os.relatorioCliente'] && !['sim', 'nao'].includes(valores['os.relatorioCliente'])) throw new Invalido('Opção inválida.');
+    for (const k of ['conferencia.abreDia', 'conferencia.fechaDia'])
+      if (valores[k] && !(/^\d{1,2}$/.test(valores[k]) && Number(valores[k]) >= (k.endsWith('fechaDia') ? 0 : 1) && Number(valores[k]) <= 28)) throw new Invalido('Dia da conferência inválido (use de 1 a 28).');
     if (valores['manutencao.tipos']) valores['manutencao.tipos'] = validarTipos(valores['manutencao.tipos']);
     if (valores['manutencao.perifericos']) valores['manutencao.perifericos'] = validarPerifericos(valores['manutencao.perifericos']);
     return ops.salvarConfig(valores, req.usuario.id);
@@ -502,12 +520,23 @@ export function criarApp(db: Banco, opcoes: { cookieSeguro: boolean; logger?: bo
     return { clienteId: clienteId as string, frota };
   };
   app.get<{ Params: { ref: string } }>('/api/conferencia/:ref', { preHandler: exigirLogin }, async (req) => ops.listarConferencia(lerRef(req.params.ref)));
+  /** fora da janela (ou outro mês), só o administrador mexe na conferência */
+  const conferirJanela = (req: FastifyRequest, ref: string) => {
+    if (req.usuario.perfil === 'admin') return;
+    const cfg = ops.lerConfig();
+    const hoje = new Date(Date.now() - 3 * 3600_000).toISOString().slice(0, 10); // horário de Brasília
+    const j = janelaConferencia(hoje, Number(cfg['conferencia.abreDia']) || 25, Number(cfg['conferencia.fechaDia']) || 5);
+    if (!j.aberta) throw new Conflito(`A conferência abre no dia ${cfg['conferencia.abreDia']}.`);
+    if (ref !== j.referencia) throw new Conflito(`Agora a conferência é de ${j.referencia.split('-').reverse().join('/')}.`);
+  };
   app.post<{ Params: { ref: string } }>('/api/conferencia/:ref', { preHandler: exigir(2, 'conferencia') }, async (req) => {
+    conferirJanela(req, lerRef(req.params.ref));
     const b = (req.body ?? {}) as Record<string, unknown>;
     const status = b.status === 'alterado' ? 'alterado' : b.status === 'ok' ? 'ok' : invalido('Situação inválida.');
     return ops.marcarConferencia({ referencia: lerRef(req.params.ref), ...lerItemConf(b), status: status as 'ok' | 'alterado', observacao: texto(b.observacao, 'observação', 500) }, req.usuario.id);
   });
   app.post<{ Params: { ref: string } }>('/api/conferencia/:ref/desmarcar', { preHandler: exigir(2, 'conferencia') }, async (req) => {
+    conferirJanela(req, lerRef(req.params.ref));
     const i = lerItemConf((req.body ?? {}) as Record<string, unknown>);
     ops.desmarcarConferencia(lerRef(req.params.ref), i.clienteId, i.frota, req.usuario.id);
     return { ok: true };

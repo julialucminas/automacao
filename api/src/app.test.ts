@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { abrirBanco, repositorio } from './db.js';
 import { criarApp } from './app.js';
 import { gerarHash } from './senha.js';
@@ -268,6 +268,12 @@ describe('operações (Júnior) e aprovação', () => {
   it('conferência do mês: Júnior marca, desmarca, aponta correção; registro só para o financeiro', async () => {
     const jr = await comoJunior();
     const c = (await req('POST', '/api/clientes', { nome: 'Gerdau', para: ['g@g.com'], frotas: [{ numero: '12', valor: 250000, descricao: '' }, { numero: '13', valor: 0, descricao: '' }] })).json();
+    // fora da janela (dia 12) não marca; dentro (dia 27) marca o mês corrente
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-12T15:00:00Z'));
+    expect((await jr('POST', '/api/conferencia/2026-10', { clienteId: c.id, frota: '12', status: 'ok' })).statusCode).toBe(409);
+    vi.setSystemTime(new Date('2026-10-27T15:00:00Z'));
+    expect((await jr('POST', '/api/conferencia/2026-09', { clienteId: c.id, frota: '12', status: 'ok' })).statusCode).toBe(409);
     expect((await jr('POST', '/api/conferencia/2026-10', { clienteId: c.id, frota: '12', status: 'ok' })).json()).toMatchObject({ status: 'ok', valor: 250000, usuario: 'Júnior' });
     expect((await jr('POST', '/api/conferencia/2026-10', { clienteId: c.id, frota: '13', status: 'alterado', observacao: 'valor é 1.800' })).statusCode).toBe(200);
     expect((await jr('POST', '/api/conferencia/2026-10', { clienteId: c.id, frota: '99', status: 'ok' })).statusCode).toBe(404);
@@ -275,6 +281,7 @@ describe('operações (Júnior) e aprovação', () => {
     expect((await jr('GET', '/api/conferencia/2026-10')).json()).toHaveLength(2);
     expect((await jr('GET', '/api/conferencia/2026-11')).json()).toHaveLength(0);
     await jr('POST', '/api/conferencia/2026-10/desmarcar', { clienteId: c.id, frota: '12' });
+    vi.useRealTimers();
     expect((await req('GET', '/api/conferencia/2026-10')).json().map((x: { frota: string }) => x.frota)).toEqual(['13']);
     expect((await jr('GET', '/api/registro')).statusCode).toBe(403);
     const log = (await req('GET', '/api/registro')).json();

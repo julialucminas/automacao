@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { RegrasManutencao } from '../components/RegrasManutencao';
+import { ConfigConferencia, RegrasManutencao } from '../components/RegrasManutencao';
 import { useEstado } from '../state';
 import type { ConfigEmail } from '../types';
 import { MODELO_PADRAO, preencher, REMETENTE, referenciaAtual, referenciaPorExtenso, VARIAVEIS } from '../lib/email';
@@ -136,6 +136,7 @@ export function Configuracoes() {
         </section>
       </div>
       <RegrasManutencao />
+      <ConfigConferencia />
     </div>
   );
 }

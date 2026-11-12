@@ -177,3 +177,48 @@ export function RegrasManutencao() {
     </section>
   );
 }
+
+/** Configurações → Conferência: em que dias do mês a aba fica aberta. */
+export function ConfigConferencia() {
+  const { config, salvarConfig, avisar, pode } = useEstado();
+  const edita = pode('configuracoes', 2);
+  const [abre, setAbre] = useState(config?.['conferencia.abreDia'] ?? '25');
+  const [fecha, setFecha] = useState(config?.['conferencia.fechaDia'] ?? '5');
+  useEffect(() => {
+    setAbre(config?.['conferencia.abreDia'] ?? '25');
+    setFecha(config?.['conferencia.fechaDia'] ?? '5');
+  }, [config]);
+  const mudou = abre !== (config?.['conferencia.abreDia'] ?? '25') || fecha !== (config?.['conferencia.fechaDia'] ?? '5');
+  return (
+    <section className="flex flex-col gap-3 rounded-xl border border-line bg-white p-5">
+      <div>
+        <h2 className="text-lg font-bold">Conferência de frotas</h2>
+        <p className="text-[13px] text-ink-3">A aba fica desativada no resto do mês. O administrador entra sempre.</p>
+      </div>
+      <div className="flex flex-wrap items-center gap-2 text-[14px]">
+        Abre no dia
+        <input aria-label="Dia em que a conferência abre" className="input h-9 w-[64px] text-center" inputMode="numeric" disabled={!edita} value={abre} onChange={(e) => setAbre(e.target.value.replace(/\D/g, '').slice(0, 2))} />
+        e fica aberta até o dia
+        <input aria-label="Dia em que a conferência fecha" className="input h-9 w-[64px] text-center" inputMode="numeric" disabled={!edita} value={fecha} onChange={(e) => setFecha(e.target.value.replace(/\D/g, '').slice(0, 2))} />
+        do mês seguinte.
+        {edita && (
+          <button
+            type="button"
+            className="btn-primary btn-sm ml-auto"
+            disabled={!mudou}
+            onClick={async () => {
+              try {
+                await salvarConfig({ 'conferencia.abreDia': abre, 'conferencia.fechaDia': fecha || '0' });
+                avisar(`A conferência agora abre no dia ${abre}.`);
+              } catch (e) {
+                avisar(e instanceof Error ? e.message : 'Não foi possível salvar.', 'bad');
+              }
+            }}
+          >
+            Salvar
+          </button>
+        )}
+      </div>
+    </section>
+  );
+}
