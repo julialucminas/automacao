@@ -2,10 +2,10 @@ import { useEffect, useMemo, useState } from 'react';
 import { useBuscaDaUrl } from '../lib/buscaDaUrl';
 import { Link, useNavigate } from 'react-router-dom';
 import { useEstado } from '../state';
-import type { Cliente, Frota, Movimentacao } from '../types';
+import type { Cliente, Frota } from '../types';
 import { BalaoUrgente, SeloHelbert } from '../components/Balao';
 import { BotaoOk } from '../components/BotaoOk';
-import { chaveObs, urgentesEmAberto } from '../lib/avisos';
+import { urgenciasEmAberto, type Urgencia } from '../lib/avisos';
 import { formatarReais, lerReais, reaisParaCampo } from '../lib/dinheiro';
 import { dataBr, dataCurta, descreverRegra, hojeIso, proximasDatas, regraDoCliente } from '../lib/calendario';
 import { chaveEmpresa } from '../lib/normalizar';
@@ -40,9 +40,9 @@ export function Frotas() {
   }, []);
   // observação urgente em aberto por frota (balãozinho)
   const urgentes = useMemo(() => {
-    const m = new Map<string, Movimentacao[]>();
-    for (const x of urgentesEmAberto(movimentacoes, avisosOk))
-      for (const f of [...x.frota.split(', '), x.frotaNova ?? ''].filter(Boolean)) m.set(f, [...(m.get(f) ?? []), x]);
+    const m = new Map<string, Urgencia[]>();
+    for (const u of urgenciasEmAberto(movimentacoes, avisosOk))
+      for (const f of [...u.m.frota.split(', '), u.m.frotaNova ?? ''].filter(Boolean)) m.set(f, [...(m.get(f) ?? []), u]);
     return m;
   }, [movimentacoes, avisosOk]);
   const editaFrotas = pode('frotas', 2);
@@ -338,7 +338,7 @@ export function Frotas() {
                         <SeloModalidade m={f.modalidade} />
                         <SeloHelbert ativo={helbert.has(f.numero) ? 'sim' : ''} />
                         {ofi && <SeloOficina />}
-                        {urgentes.get(f.numero)?.map((m) => <BalaoUrgente key={m.id} texto={m.dados.observacoes} />)}
+                        {urgentes.get(f.numero)?.map((u) => <BalaoUrgente key={u.chave} texto={u.texto} />)}
                         {l.duplicada && <Chip tom="bad">2 clientes</Chip>}
                       </span>
                     </td>
@@ -403,7 +403,7 @@ export function Frotas() {
                       <b className="font-mono">{l.frota.numero}</b>
                       <SeloModalidade m={l.frota.modalidade} />
                       <SeloHelbert ativo={helbert.has(l.frota.numero) ? 'sim' : ''} />
-                      {urgentes.get(l.frota.numero)?.map((m) => <BalaoUrgente key={m.id} texto={m.dados.observacoes} />)}
+                      {urgentes.get(l.frota.numero)?.map((u) => <BalaoUrgente key={u.chave} texto={u.texto} />)}
                       {naOficina.has(l.frota.numero) && <SeloOficina />}
                       {veValorFrota && <span className="text-ink-2">{l.frota.valor ? formatarReais(l.frota.valor) : 'sem valor'}</span>}
                       {l.frota.fim && <span className={`text-xs ${terminando(l.frota) ? 'font-semibold text-warn-strong' : 'text-ink-3'}`}>até {dataCurta(l.frota.fim)}</span>}
@@ -487,7 +487,7 @@ function DetalheLocacao({
   urgentes,
   ehHelbert,
 }: {
-  urgentes: Movimentacao[];
+  urgentes: Urgencia[];
   ehHelbert: boolean;
   frota: string;
   linha: Linha | null;
@@ -515,18 +515,18 @@ function DetalheLocacao({
           <SeloHelbert ativo={ehHelbert ? 'sim' : ''} />
           {oficina && <SeloOficina />}
         </div>
-        {urgentes.map((m) => (
-          <div key={m.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-bad/30 bg-bad-soft px-3 py-2.5 text-[13.5px]">
+        {urgentes.map((u) => (
+          <div key={u.chave} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-bad/30 bg-bad-soft px-3 py-2.5 text-[13.5px]">
             <span className="flex items-start gap-2">
-              <BalaoUrgente texto={m.dados.observacoes} />
+              <BalaoUrgente texto={u.texto} />
               <span>
-                {m.dados.observacoes}
+                {u.texto}
                 <span className="block text-xs text-ink-3">
-                  {m.criadaPorNome} · {dataBr(m.dados.data)}
+                  {u.por} · {dataBr(u.em.slice(0, 10))}
                 </span>
               </span>
             </span>
-            <BotaoOk chave={chaveObs(m)} rotulo="Ok, resolvido" />
+            <BotaoOk chave={u.chave} rotulo="Ok, resolvido" />
           </div>
         ))}
         {oficina && (

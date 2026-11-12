@@ -44,11 +44,14 @@ export type DadosMov = {
   modalidade?: '' | 'contrato' | 'esporadico';
   /** venda e compra: nota fiscal */
   nf?: string;
+  /** observações acrescentadas depois de lançada (cada uma pode ser urgente) */
+  notas?: NotaMov[];
   /** venda e compra: arquivo da NF-e (PDF/DANFE ou XML), guardado em <pastaDados>/nfe/<id da movimentação>.<ext> */
   nfArquivo?: NfArquivo | null;
   /** compra: identificação da máquina que entra na frota */
   maquina?: { marca: string; modelo: string; serie: string; ano: number | null; capacidade: number | null; combustivel: string };
 };
+export type NotaMov = { id: string; texto: string; urgente: boolean; em: string; porNome: string };
 export type NfArquivo = { ext: 'pdf' | 'xml'; nome: string; tamanho: number; em: string; porNome: string };
 export type NovaMov = { tipo: TipoMov; frota: string; frotaNova?: string; clienteId?: string | null; clienteNome?: string } & DadosMov;
 
@@ -433,6 +436,18 @@ export function operacoes(db: Banco, repo: Repositorio, fichas?: Fichas) {
             ? `reajuste de ${clienteNome} (${(dados.itens ?? []).map((i) => `FT${i.frota} ${brl(i.antes)} → ${brl(i.novo)}`).join(', ')})`
             : `${NOMES_TIPO[n.tipo]} ${n.frota}${n.frotaNova ? ` → ${n.frotaNova}` : ''}${n.valor ? ` · ${brl(n.valor)}` : ''}`;
         repo.registrarLog(clienteId ?? '', usuarioId, aprovarJa ? `registrou ${resumo}` : `registrou ${resumo} (aguardando aprovação)`, null, dados, 'movimentacao');
+        return buscarMov(id);
+      })();
+    },
+
+    /** mais uma observação numa movimentação já lançada (pode ser urgente: balãozinho até alguém dar ok) */
+    adicionarNota(id: string, texto: string, urgente: boolean, usuarioId: number, porNome: string): Movimentacao {
+      return db.transaction(() => {
+        const m = buscarMov(id);
+        const nota: NotaMov = { id: randomUUID().slice(0, 8), texto, urgente, em: agora(), porNome };
+        const dados: DadosMov = { ...m.dados, notas: [...(m.dados.notas ?? []), nota] };
+        db.prepare('UPDATE movimentacoes SET dados = ? WHERE id = ?').run(JSON.stringify(dados), id);
+        repo.registrarLog(m.clienteId ?? '', usuarioId, `${urgente ? 'observação URGENTE' : 'observação'} na ${NOMES_TIPO[m.tipo]} ${m.frota}: ${texto}`, null, null, 'movimentacao');
         return buscarMov(id);
       })();
     },

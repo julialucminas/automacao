@@ -203,3 +203,9 @@ Colocar na oficina uma frota que está num cliente registra na hora uma devoluç
 a frota sai do cliente, o contrato da ficha é limpo e aparece nas novas movimentações. A tabela `oficina` guarda
 `cliente_id`/`cliente_nome` (migração 24) e, ao tirar da oficina, o sistema oferece "Volta para <cliente>", que abre
 uma nova locação já com o cliente e o valor de antes. Máquinas que já estavam na oficina antes disso não foram mexidas.
+
+## Observações depois de lançada (nov/2026)
+`dados.notas` na movimentação: `{id, texto, urgente, em, porNome}`; `POST /api/movimentacoes/:id/notas` (movimentações
+ou aprovações nível 2). Nota urgente tem o próprio ok: chave `obs:<movId>:<notaId>`. `urgenciasDe`/`urgenciasEmAberto`
+(web/src/lib/avisos.ts) juntam a observação do lançamento e as notas; usadas na linha do tempo, na Relação das
+locações e na Central do financeiro. A mensagem para o grupo inclui as notas.

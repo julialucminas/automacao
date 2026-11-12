@@ -10,7 +10,7 @@ import { copiarTexto, efeitoNaReceita, fimSugerido, movVazia, NOMES_TIPO, proxim
 import { dataHora } from '../lib/email';
 import { Chip, Gaveta, type Tom } from '../components/ui';
 import { BotaoOk } from '../components/BotaoOk';
-import { chaveContrato, chaveObs } from '../lib/avisos';
+import { chaveContrato, chaveNota, chaveObs, urgenciasDe } from '../lib/avisos';
 import { BalaoUrgente } from '../components/Balao';
 import { IcBusca, IcMais } from '../components/Icones';
 import { EscolherNfe, lerBase64, lerXmlNfe, NfeAnexo, problemaNfe } from '../components/NfeAnexo';
@@ -332,11 +332,16 @@ export function Movimentacoes() {
                       <td className="whitespace-nowrap px-2 py-2.5 font-bold">
                         {m.tipo === 'reajuste' ? `FT${m.frota.split(', ').join(', FT')}` : `FT${m.frota}`}
                         {m.tipo === 'troca' && m.frotaNova && <span className="font-normal text-ink-2"> → FT{m.frotaNova}</span>}
-                        {m.dados.obsUrgente && m.dados.observacoes && (
-                          <span className="ml-1.5 align-middle">
-                            <BalaoUrgente texto={m.dados.observacoes} apagado={avisosOk.has(chaveObs(m))} />
-                          </span>
-                        )}
+                        {(() => {
+                          const us = urgenciasDe(m);
+                          if (!us.length) return null;
+                          const aberta = us.find((u) => !avisosOk.has(u.chave));
+                          return (
+                            <span className="ml-1.5 align-middle">
+                              <BalaoUrgente texto={(aberta ?? us[us.length - 1]).texto} apagado={!aberta} />
+                            </span>
+                          );
+                        })()}
                       </td>
                       <td className="px-2 py-2.5">{m.clienteNome || '—'}</td>
                       {veValores && (
@@ -1167,6 +1172,90 @@ function FormReajuste({ clienteInicial, frotaInicial, fechar }: { clienteInicial
   );
 }
 
+/** Observações acrescentadas depois de lançada; cada uma pode ser urgente (balãozinho até alguém dar ok). */
+function NotasMov({ m }: { m: Movimentacao }) {
+  const { pode, avisosOk, recarregarOperacoes, avisar } = useEstado();
+  const escreve = pode('movimentacoes', 2) || pode('aprovacoes', 2);
+  const notas = m.dados.notas ?? [];
+  const [abrindo, setAbrindo] = useState(false);
+  const [texto, setTexto] = useState('');
+  const [urgente, setUrgente] = useState(false);
+  const [salvando, setSalvando] = useState(false);
+  if (!notas.length && !escreve) return null;
+
+  const salvar = async () => {
+    if (!texto.trim()) return;
+    setSalvando(true);
+    try {
+      await api.adicionarNotaMov(m.id, texto.trim(), urgente);
+      await recarregarOperacoes();
+      setTexto('');
+      setUrgente(false);
+      setAbrindo(false);
+      avisar(urgente ? 'Observação urgente adicionada.' : 'Observação adicionada.');
+    } catch (e) {
+      avisar(e instanceof Error ? e.message : 'Não foi possível salvar.', 'bad');
+    } finally {
+      setSalvando(false);
+    }
+  };
+
+  return (
+    <section aria-label="Observações" className="mt-3 flex flex-col gap-2">
+      {notas.length > 0 && (
+        <>
+          <h4 className="text-[12px] font-bold uppercase tracking-wide text-ink-3">Observações depois do lançamento</h4>
+          <ul className="flex flex-col gap-1.5">
+            {notas.map((n) => {
+              const chave = chaveNota(m, n);
+              const ok = avisosOk.has(chave);
+              return (
+                <li
+                  key={n.id}
+                  className={`flex flex-wrap items-start justify-between gap-2 rounded-xl px-3 py-2 text-[13.5px] ${n.urgente ? 'border border-bad/30 bg-bad-soft' : 'bg-[#F8F7F3]'}`}
+                >
+                  <span className="flex min-w-0 items-start gap-2">
+                    {n.urgente && <BalaoUrgente texto={n.texto} apagado={ok} />}
+                    <span className="min-w-0">
+                      <span className="whitespace-pre-wrap break-words">{n.texto}</span>
+                      <span className="block text-xs text-ink-3">
+                        {n.porNome} · {dataHora(n.em)}
+                      </span>
+                    </span>
+                  </span>
+                  {n.urgente && <BotaoOk chave={chave} rotulo="Ok, resolvido" />}
+                </li>
+              );
+            })}
+          </ul>
+        </>
+      )}
+      {escreve &&
+        (abrindo ? (
+          <div className="flex flex-col gap-2 rounded-xl border border-line p-3">
+            <label className="flex flex-col gap-1.5">
+              <span className="label">Nova observação</span>
+              <textarea rows={2} autoFocus className="input resize-y py-2 text-[13.5px]" value={texto} onChange={(e) => setTexto(e.target.value)} maxLength={2000} />
+            </label>
+            <CaixaUrgente marcado={urgente} mudar={setUrgente} />
+            <div className="flex justify-end gap-2">
+              <button type="button" className="btn-secondary btn-sm" onClick={() => setAbrindo(false)}>
+                Cancelar
+              </button>
+              <button type="button" className="btn-primary btn-sm" disabled={!texto.trim() || salvando} onClick={() => void salvar()}>
+                {salvando ? 'Salvando…' : 'Salvar observação'}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button type="button" className="btn-secondary btn-sm self-start" onClick={() => setAbrindo(true)}>
+            + Adicionar observação
+          </button>
+        ))}
+    </section>
+  );
+}
+
 /** "Marcar como urgente" na observação: aparece um balãozinho até alguém dar ok. */
 function CaixaUrgente({ marcado, mudar }: { marcado: boolean; mudar: (v: boolean) => void }) {
   return (
@@ -1259,6 +1348,7 @@ export function CartaoMov({ m, children, semBorda }: { m: Movimentacao; children
           <BotaoOk chave={chaveObs(m)} rotulo="Ok, resolvido" />
         </div>
       )}
+      <NotasMov m={m} />
       <NfeAnexo m={m} />
       <p className="mt-2.5 text-xs text-ink-3">
         Registrada por {m.criadaPorNome || '—'} em {dataHora(m.criadaEm)}

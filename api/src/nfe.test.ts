@@ -70,3 +70,24 @@ describe('NF-e na compra e venda', () => {
     expect((await a('POST', '/api/movimentacoes/../../x/nfe', { arquivo: PDF })).statusCode).toBeGreaterThanOrEqual(400);
   });
 });
+
+describe('observações depois de lançada', () => {
+  it('acrescenta observação (normal ou urgente), guarda quem e quando; técnico não pode', async () => {
+    const a = como('angelise');
+    const loc = (await a('POST', '/api/movimentacoes', { tipo: 'locacao', frota: '50', data: '2026-11-12', clienteNome: 'TESTE', observacoes: 'original' })).json();
+    expect((await a('POST', `/api/movimentacoes/${loc.id}/notas`, { texto: '  ' })).statusCode).toBe(400);
+    let r = await a('POST', `/api/movimentacoes/${loc.id}/notas`, { texto: 'cliente pediu nota fiscal separada' });
+    r = await a('POST', `/api/movimentacoes/${loc.id}/notas`, { texto: 'faltou o gás', urgente: true });
+    expect(r.statusCode).toBe(200);
+    expect(r.json().dados.observacoes).toBe('original');
+    expect(r.json().dados.notas).toMatchObject([
+      { texto: 'cliente pediu nota fiscal separada', urgente: false, porNome: 'Angelise' },
+      { texto: 'faltou o gás', urgente: true, porNome: 'Angelise' },
+    ]);
+    // ok na nota urgente
+    const nota = r.json().dados.notas[1];
+    expect((await a('POST', '/api/avisos-ok', { chave: `obs:${loc.id}:${nota.id}` })).statusCode).toBeLessThan(300);
+    expect((await como('tecnico')('POST', `/api/movimentacoes/${loc.id}/notas`, { texto: 'x' })).statusCode).toBe(403);
+    expect((await a('POST', '/api/movimentacoes/nao-existe/notas', { texto: 'x' })).statusCode).toBe(404);
+  });
+});

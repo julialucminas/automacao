@@ -107,6 +107,7 @@ export const httpApi: Api = {
   desfazerOk: (chave) => chamar('POST', '/api/avisos-ok/desfazer', { chave }).then(() => undefined),
   registrarMovimentacao: (m) => chamar('POST', '/api/movimentacoes', m),
   anexarNfe: (id, arquivo, nome) => chamar('POST', `/api/movimentacoes/${id}/nfe`, { arquivo, nome }),
+  adicionarNotaMov: (id, texto, urgente) => chamar('POST', `/api/movimentacoes/${id}/notas`, { texto, urgente }),
   fotosMensais: () => chamar('GET', '/api/fotos-mensais'),
   tirarNfe: (id) => chamar('DELETE', `/api/movimentacoes/${id}/nfe`),
   decidirMovimentacao: (id, aprovar, motivo) => chamar('POST', `/api/movimentacoes/${id}/${aprovar ? 'aprovar' : 'recusar'}`, { motivo: motivo ?? '' }),

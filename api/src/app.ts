@@ -473,6 +473,14 @@ export function criarApp(db: Banco, opcoes: { cookieSeguro: boolean; logger?: bo
   app.post('/api/movimentacoes', { preHandler: exigir(2, 'movimentacoes') }, async (req, reply) =>
     reply.code(201).send(ops.registrarMovimentacao(lerMov(req.body), req.usuario.id, aprova(req))),
   );
+  // ---------- observações acrescentadas depois de lançada ----------
+  app.post<{ Params: { id: string } }>('/api/movimentacoes/:id/notas', { preHandler: exigir(2, 'movimentacoes', 'aprovacoes') }, async (req) => {
+    const b = (req.body ?? {}) as Record<string, unknown>;
+    const t = texto(b.texto, 'observação', 2000);
+    if (!t) throw new Invalido('Escreva a observação.');
+    return ops.adicionarNota(req.params.id, t, b.urgente === true, req.usuario.id, req.usuario.nome);
+  });
+
   // ---------- NF-e anexada na compra/venda (PDF do DANFE ou XML) ----------
   const pastaNfe = juntarCaminho(opcoes.pastaDados ?? '/dados', 'nfe');
   const arquivoNfe = (id: string, ext: string) => {
