@@ -7,7 +7,7 @@ import { dataBr, datasNoIntervalo, descreverRegra, gradeDoMes, hojeIso, interval
 import { formatarReais } from '../lib/dinheiro';
 import { chaveEmpresa } from '../lib/normalizar';
 import { Cartao, Chip, Modal, type Tom } from '../components/ui';
-import { IcBusca, IcCheck, IcNota } from '../components/Icones';
+import { IcBusca, IcCheck } from '../components/Icones';
 
 type Status = 'faturado' | 'atrasado' | 'hoje' | 'a_faturar';
 type Item = { cliente: Cliente; data: string; status: Status; marca?: Faturamento };
@@ -32,7 +32,7 @@ const totalFrotas = (c: Cliente) => c.frotas.reduce((s, f) => s + f.valor, 0);
 const somarDias = (iso: string, n: number) => new Date(Date.parse(iso + 'T00:00:00Z') + n * 86400_000).toISOString().slice(0, 10);
 
 export function Calendario() {
-  const { clientes, avisar, solicitacoes, pode } = useEstado();
+  const { clientes, avisar, pode } = useEstado();
   /** faturas aparecem para quem vê o Envio do mês; os outros veem só as locações */
   const ehFinanceiro = pode('envio');
   const marcaFaturado = pode('envio', 2);
@@ -146,12 +146,6 @@ export function Calendario() {
     { id: 'faturado', rotulo: 'Faturados', n: conta('faturado') },
     { id: 'atrasado', rotulo: 'Atrasados', n: conta('atrasado') },
   ];
-
-  const solsDoMes = solicitacoes.filter((x) => x.data >= de && x.data <= ate && (!q || chaveEmpresa(`${x.titulo} ${x.clienteNome ?? ''}`).includes(q)));
-  const solsPorDia = new Map<string, typeof solsDoMes>();
-  for (const x of solsDoMes) solsPorDia.set(x.data, [...(solsPorDia.get(x.data) ?? []), x]);
-  const chipSol = (x: (typeof solsDoMes)[number]) =>
-    x.status === 'concluida' ? 'border-line bg-line-soft text-ink-3 line-through' : x.data < hoje ? 'border-bad/30 bg-bad-soft text-bad-strong' : 'border-info/30 bg-info-soft text-info';
 
   const porDia = new Map<string, Item[]>();
   if (verFaturas) for (const i of visiveis) porDia.set(i.data, [...(porDia.get(i.data) ?? []), i]);
@@ -333,21 +327,6 @@ export function Calendario() {
                                 <span className="truncate">· {x.cliente.nome}</span>
                               </button>
                             ))}
-                            {(solsPorDia.get(dia) ?? []).map((x) => (
-                              <button
-                                key={x.id}
-                                type="button"
-                                onClick={() => navegar(`/solicitacoes?id=${x.id}`)}
-                                title={`Solicitação: ${x.titulo}${x.clienteNome ? ` – ${x.clienteNome}` : ''} (para ${x.paraNome})`}
-                                className={`flex w-full items-center gap-1 truncate rounded-md border border-dashed px-1.5 py-1 text-left text-[11.5px] font-medium ${chipSol(x)}`}
-                              >
-                                <IcNota tamanho={11} className="shrink-0" />
-                                <span className="truncate">
-                                  {x.titulo}
-                                  {x.clienteNome ? ` · ${x.clienteNome}` : ''}
-                                </span>
-                              </button>
-                            ))}
                           </div>
                         </>
                       )}
@@ -360,17 +339,6 @@ export function Calendario() {
         </section>
       ) : (
         <section aria-label="Lista de faturas do mês" className="card overflow-hidden">
-          {solsDoMes.length > 0 && (
-            <div className="border-b border-line bg-info-soft/50 px-4 py-2.5 text-[13px]">
-              <div className="mb-1 text-xs font-semibold text-info">Solicitações no mês</div>
-              {solsDoMes.map((x) => (
-                <Link key={x.id} to={`/solicitacoes?id=${x.id}`} className={`mr-2 mt-1 inline-flex items-center gap-1 rounded-md border border-dashed px-2 py-1 text-xs ${chipSol(x)}`}>
-                  {x.data.slice(8, 10)}/{x.data.slice(5, 7)} · {x.titulo}
-                  {x.clienteNome ? ` · ${x.clienteNome}` : ''}
-                </Link>
-              ))}
-            </div>
-          )}
           {fins.length > 0 && (
             <div className="border-b border-line">
               {fins.map((x) => (
