@@ -12,7 +12,6 @@ import { efeitoNaReceita, NOMES_TIPO } from '../lib/movimentacao';
 import { contratosVencendo, STATUS_MOV, TOM_TIPO } from './Movimentacoes';
 import { Chip, type Tom } from '../components/ui';
 import { BotaoOk } from '../components/BotaoOk';
-import { ConcluirSolicitacao } from '../components/ConcluirSolicitacao';
 import { CaixaEntrada } from '../components/CaixaEntrada';
 import { chaveContrato, chaveEnvio, emailsComProblema, urgenciasEmAberto } from '../lib/avisos';
 import { IcAlerta, IcCheck, IcDinheiro, IcEmail, IcEmpilhadeira, IcEnviar, IcNota, IcPredio, IcPrancheta } from '../components/Icones';
@@ -21,7 +20,7 @@ const somarDias = (iso: string, n: number) => paraIso(new Date(paraData(iso).get
 const sinal = (c: number) => `${c > 0 ? '+' : c < 0 ? '−' : ''}${formatarReais(Math.abs(c))}`;
 
 /** ok: chave do "ok" (a pendência some das notificações, o registro fica) */
-type Pendencia = { chave: string; tom: Tom; rotulo: string; texto: ReactNode; link: string; acao: string; ok?: string; solicitacao?: string };
+type Pendencia = { chave: string; tom: Tom; rotulo: string; texto: ReactNode; link: string; acao: string; ok?: string };
 
 /**
  * Central do financeiro: a primeira tela da Angelise.
@@ -29,7 +28,7 @@ type Pendencia = { chave: string; tom: Tom; rotulo: string; texto: ReactNode; li
  * depois os números do mês, o acesso rápido e o que mudou nas máquinas.
  */
 export function CentralFinanceiro() {
-  const { config, usuario, clientes, envios, movimentacoes, propostas, pendentesParaMim, solicitacoes, pode, veValores, avisosOk, novasMov, marcarMovVistas } = useEstado();
+  const { config, usuario, clientes, envios, movimentacoes, propostas, pode, veValores, avisosOk, novasMov, marcarMovVistas } = useEstado();
   const hoje = hojeIso();
   const ref = referenciaAtual();
   const janela = janelaConferencia(config);
@@ -88,7 +87,7 @@ export function CentralFinanceiro() {
   // serviços externos
   const aCobrar = externos.filter((s) => s.etapa === 'concluido');
   const aOrcar = externos.filter((s) => s.etapa === 'pedido' || s.etapa === 'orcamento');
-  const naoLidas = solicitacoes.filter((s) => s.naoLidas > 0 && s.status === 'aberta' && !pendentesParaMim.some((p) => p.id === s.id));
+
 
   // tudo o que está esperando por ela, na ordem do que pesa mais
   const pend: Pendencia[] = [];
@@ -155,37 +154,6 @@ export function CentralFinanceiro() {
     });
   if (comProblema.length > 5)
     pend.push({ chave: 'mail-mais', tom: 'bad', rotulo: 'E-mails', texto: <>e mais {comProblema.length - 5} e-mails com problema</>, link: '/historico', acao: 'Ver' });
-  for (const s of pendentesParaMim.slice(0, 5))
-    pend.push({
-      chave: `sol-${s.id}`,
-      tom: 'info',
-      rotulo: 'Solicitação',
-      texto: (
-        <>
-          {s.titulo}
-          {s.clienteNome && <span className="text-ink-3"> · {s.clienteNome}</span>}
-          <span className="text-ink-3"> · de {s.criadaPorNome}</span>
-        </>
-      ),
-      link: `/solicitacoes?id=${s.id}`,
-      acao: 'Abrir',
-      solicitacao: s.id,
-    });
-  if (pendentesParaMim.length > 5)
-    pend.push({ chave: 'sol-mais', tom: 'info', rotulo: 'Solicitação', texto: <>e mais {pendentesParaMim.length - 5} solicitações para você</>, link: '/solicitacoes', acao: 'Ver' });
-  if (naoLidas.length)
-    pend.push({
-      chave: 'msg',
-      tom: 'info',
-      rotulo: 'Mensagens',
-      texto: (
-        <>
-          Mensagem nova em <b>{naoLidas.length}</b> solicitaç{naoLidas.length > 1 ? 'ões' : 'ão'}: {naoLidas.slice(0, 3).map((s) => s.titulo).join(', ')}
-        </>
-      ),
-      link: naoLidas.length === 1 ? `/solicitacoes?id=${naoLidas[0].id}` : '/solicitacoes',
-      acao: 'Ler',
-    });
   for (const v of vencendo.slice(0, 5))
     pend.push({
       chave: `reaj-${v.frota}`,
@@ -376,7 +344,6 @@ export function CentralFinanceiro() {
                     <span className="shrink-0 text-[13px] font-semibold text-info">{p.acao} →</span>
                   </Link>
                   {p.ok && <BotaoOk chave={p.ok} rotulo="Ok" />}
-                  {p.solicitacao && <ConcluirSolicitacao id={p.solicitacao} />}
                 </li>
               ))}
             </ul>

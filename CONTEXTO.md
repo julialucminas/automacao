@@ -320,3 +320,10 @@ do financeiro: cartão "E-mails na caixa das faturas" com "Ok, vi"; os novos som
 `listarSolicitacoes` devolve todas (o admin vê em "Todas"), mas `nao_lidas` agora só conta se o usuário é quem pediu ou
 o destinatário. O número do menu, o aviso do topo e a Central contam só não lidas de solicitação **aberta**; os links
 abrem direto a conversa (ou `/solicitacoes?caixa=todas`).
+
+## Solicitações viraram "Avisos" (13/nov)
+A pedido da Júlia, ficou simples: `components/AvisosWidget.tsx` (botão 🔔 Avisos no canto inferior direito, em todas as
+telas menos o app do dono). Novo aviso = para quem + texto (o título é o começo do texto; data = hoje, sem cliente). Quem
+recebe vê um cartão no canto; abre como chat; "✓ Concluir" tira do canto. A página /solicitacoes virou só "Histórico de
+avisos" (logo depois do Histórico de envios no menu), com busca e "Reabrir". Saíram: faixa amarela do topo, itens na
+Central e no Painel do dia, contadores no menu, caixas/filtros/datas/cliente. A API e as tabelas continuam as mesmas.

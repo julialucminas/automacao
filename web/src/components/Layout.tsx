@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
+import { AvisosWidget } from './AvisosWidget';
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
-import { hojeIso, janelaConferencia } from '../lib/calendario';
+import { janelaConferencia } from '../lib/calendario';
 import { useEstado } from '../state';
 import { emailsComProblema } from '../lib/avisos';
 import { temAviso } from '../lib/pareamento';
@@ -40,20 +41,19 @@ export type ItemMenu = { aba: Aba; rotulo: string; rota: string; grupo: Grupo; b
 
 /** Monta o menu do usuário: só as abas que o perfil dele vê, nos 6 grupos. */
 export function useMenu(): ItemMenu[] {
-  const { emailsNovos, lote, clientes, envios, pendentesParaMim, solicitacoes, aguardandoAprovacao, propostas, movimentacoes, pode, aprova, usuario, config, novasMov, avisosOk, veValores, alertasContratos } = useEstado();
+  const { emailsNovos, lote, clientes, envios, aguardandoAprovacao, propostas, movimentacoes, pode, aprova, usuario, config, novasMov, avisosOk, veValores, alertasContratos } = useEstado();
   const avisosLote = lote ? lote.itens.filter((i) => temAviso(i, clientes)).length : 0;
   // e-mails com problema que ninguém deu ok
   const devolvidos = emailsComProblema(envios, avisosOk).length;
   // financeiro (e quem vê valores): movimentações que ainda não viu
   const novas = aprova || veValores ? novasMov.length : 0;
   const meusPendentes = propostas.filter((p) => p.status === 'pendente').length + movimentacoes.filter((m) => m.status === 'pendente').length;
-  const badgeSolicitacoes = new Set([...pendentesParaMim.map((s) => s.id), ...solicitacoes.filter((s) => s.naoLidas > 0 && s.status === 'aberta').map((s) => s.id)]).size;
   // quem não aprova acompanha as próprias alterações em "Minhas alterações"
   const propoe = pode('movimentacoes', 2) || pode('conferencia', 2) || pode('frotas', 2);
 
   const itens: ItemMenu[] = [];
   if (usaCentralFinanceiro(pode, aprova))
-    itens.push({ aba: 'envio', rotulo: 'Central do financeiro', rota: '/financeiro', grupo: 'financeiro', badge: aguardandoAprovacao + pendentesParaMim.length + devolvidos + novas + emailsNovos.length, alerta: true });
+    itens.push({ aba: 'envio', rotulo: 'Central do financeiro', rota: '/financeiro', grupo: 'financeiro', badge: aguardandoAprovacao + devolvidos + novas + emailsNovos.length, alerta: true });
   for (const a of ABAS) {
     if (a.id === 'aprovacoes' && !aprova) {
       if (propoe) itens.push({ aba: a.id, rotulo: 'Minhas alterações', rota: a.rota, grupo: 'inicio', badge: meusPendentes, alerta: false });
@@ -63,7 +63,6 @@ export function useMenu(): ItemMenu[] {
     if (!pode(a.id, a.id === 'envio' ? 2 : 1)) continue;
     const badge: Partial<Record<Aba, [number, boolean]>> = {
       envio: [avisosLote, true],
-      solicitacoes: [badgeSolicitacoes, true],
       aprovacoes: [aguardandoAprovacao, true],
       historico: [devolvidos, true],
       movimentacoes: [novas, true],
@@ -78,6 +77,14 @@ export function useMenu(): ItemMenu[] {
     // os formulários das OS: quem abre e encerra OS monta os modelos
     if (a.id === 'ordens' && pode('ordens', 2) && pode('manutencao', 2)) itens.push({ aba: 'ordens', rotulo: 'Modelos de OS', rota: '/modelos-os', grupo: a.grupo, badge: 0, alerta: false });
   }
+  // "Histórico de avisos" fica logo depois do Histórico de envios (para quem vê os dois)
+  const iHist = itens.findIndex((i) => i.rota === '/historico');
+  const iAv = itens.findIndex((i) => i.rota === '/solicitacoes');
+  if (iHist >= 0 && iAv >= 0) {
+    const [av] = itens.splice(iAv, 1);
+    av.grupo = itens[itens.findIndex((i) => i.rota === '/historico')].grupo;
+    itens.splice(itens.findIndex((i) => i.rota === '/historico') + 1, 0, av);
+  }
   // conferência: só abre no fim do mês (o administrador entra sempre)
   const janela = janelaConferencia(config);
   if (!janela.aberta && usuario?.perfil !== 'admin')
@@ -85,7 +92,7 @@ export function useMenu(): ItemMenu[] {
 
   // financeiro: o que é do dia a dia dela fica junto, no grupo Financeiro
   if (usuario?.perfil === 'financeiro') {
-    const ordem = ['/financeiro', '/aprovacoes', '/envio', '/calendario', '/historico', '/movimentacoes', '/conferencia', '/externos', '/configuracoes'];
+    const ordem = ['/financeiro', '/aprovacoes', '/envio', '/calendario', '/historico', '/solicitacoes', '/movimentacoes', '/conferencia', '/externos', '/configuracoes'];
     for (const i of itens) if (ordem.includes(i.rota)) i.grupo = 'financeiro';
     const pos = (i: ItemMenu) => (i.grupo === 'financeiro' ? ordem.indexOf(i.rota) + 1 || 99 : 0);
     itens.sort((x, y) => pos(x) - pos(y));
@@ -178,8 +185,7 @@ function Menu({ itens }: { itens: ItemMenu[] }) {
 }
 
 export function Layout() {
-  const { usuario, sair, aviso, fecharAviso, pendentesParaMim, naoLidas, solicitacoes, envioAtivo, pode } = useEstado();
-  const primeiraNaoLida = solicitacoes.find((s) => s.naoLidas > 0 && s.status === 'aberta');
+  const { usuario, sair, aviso, fecharAviso, envioAtivo, pode } = useEstado();
   const local = useLocation();
   const itens = useMenu();
   const [trocandoSenha, setTrocandoSenha] = useState(false);
@@ -279,36 +285,6 @@ export function Layout() {
                 </button>
               </div>
             )}
-            {pendentesParaMim.length > 0 && !local.pathname.startsWith('/solicitacoes') && !local.pathname.startsWith('/inicio') && (
-              <div role="status" className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border-2 border-brand bg-brand-soft px-4 py-3">
-                <div className="text-[14px]">
-                  <b>
-                    {comoChamar ? `${comoChamar}, você` : 'Você'} tem {pendentesParaMim.length} solicitaç
-                    {pendentesParaMim.length > 1 ? 'ões' : 'ão'} para hoje
-                    {pendentesParaMim.some((s) => s.data < hojeIso()) ? ' (com atraso)' : ''}:
-                  </b>{' '}
-                  {pendentesParaMim
-                    .slice(0, 3)
-                    .map((s) => `${s.titulo}${s.clienteNome ? ` – ${s.clienteNome}` : ''}`)
-                    .join(' · ')}
-                  {pendentesParaMim.length > 3 && ` e mais ${pendentesParaMim.length - 3}`}
-                </div>
-                <Link to={`/solicitacoes?id=${pendentesParaMim[0].id}`} className="btn-primary btn-sm">
-                  Ver agora
-                </Link>
-              </div>
-            )}
-            {naoLidas > 0 && pendentesParaMim.length === 0 && !local.pathname.startsWith('/solicitacoes') && !local.pathname.startsWith('/inicio') && (
-              <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-white px-4 py-2.5 text-[13px]">
-                <span>
-                  Mensagem nova em {naoLidas} solicitaç
-                  {naoLidas > 1 ? 'ões' : 'ão'}.
-                </span>
-                <Link to={naoLidas === 1 && primeiraNaoLida ? `/solicitacoes?id=${primeiraNaoLida.id}` : '/solicitacoes?caixa=todas'} className="btn-secondary btn-sm">
-                  Abrir
-                </Link>
-              </div>
-            )}
             {aviso && (
               <div
                 role="status"
@@ -324,6 +300,7 @@ export function Layout() {
           </div>
         </main>
       </div>
+      <AvisosWidget />
       <TrocarSenha aberto={trocandoSenha} fechar={() => setTrocandoSenha(false)} />
     </div>
   );

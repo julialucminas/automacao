@@ -16,7 +16,7 @@ const numeroDeFrota = (q: string) =>
     .trim();
 
 /**
- * Busca do topo: cliente, frota, solicitação ou fatura enviada, de qualquer tela.
+ * Busca do topo: cliente, frota, aviso ou fatura enviada, de qualquer tela.
  * Só procura no que o perfil da pessoa pode ver.
  */
 /** fichas dos equipamentos: carregadas quando a pessoa começa a buscar (máquinas paradas também aparecem) */
@@ -150,7 +150,7 @@ export function BuscaGeral() {
           aria-controls="busca-resultados"
           aria-activedescendant={resultados[ativo] ? `busca-${ativo}` : undefined}
           className="h-10 w-full rounded-lg border border-white/15 bg-white/10 pl-9 pr-3 text-[14px] text-white placeholder:text-white/50 focus:border-brand focus:bg-white/15 focus:outline-none"
-          placeholder="Buscar cliente, frota, solicitação…"
+          placeholder="Buscar cliente, frota, aviso…"
           value={q}
           onChange={(e) => {
             setQ(e.target.value);

@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { ConcluirSolicitacao } from '../components/ConcluirSolicitacao';
 import { Link } from 'react-router-dom';
 import { useEstado } from '../state';
 import { emailsComProblema } from '../lib/avisos';
@@ -44,7 +43,7 @@ function Numero({ n, rotulo, tom = 'ink' }: { n: number | string; rotulo: string
 
 /** Primeira tela de todo mundo: cada um vê só o que é dele. */
 export function Inicio() {
-  const { usuario, clientes, envios, oficina, movimentacoes, propostas, pendentesParaMim, aprova, pode, veValores, config, avisosOk } = useEstado();
+  const { usuario, clientes, envios, oficina, movimentacoes, propostas, aprova, pode, veValores, config, avisosOk } = useEstado();
   const hoje = hojeIso();
   const ref = referenciaAtual();
   const nome = usuario?.chamar?.trim() || usuario?.nome.trim().split(/\s+/)[0] || '';
@@ -141,32 +140,6 @@ export function Inicio() {
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {pode('solicitacoes') && (
-          <Cartao titulo="Solicitações para você" link="/solicitacoes" destaque={pendentesParaMim.length > 0}>
-            {pendentesParaMim.length === 0 ? (
-              <p className="text-[13px] text-ink-3">Nada pendente para hoje.</p>
-            ) : (
-              <ul className="flex flex-col gap-1.5 text-[14px]">
-                {pendentesParaMim.slice(0, 5).map((s) => (
-                  <li key={s.id} className="flex flex-wrap items-center gap-2">
-                    <Link to={`/solicitacoes?id=${s.id}`} className="flex min-w-0 flex-1 items-baseline justify-between gap-2 hover:underline">
-                      <span className="truncate font-semibold">
-                        {s.titulo}
-                        {s.clienteNome && <span className="font-normal text-ink-3"> · {s.clienteNome}</span>}
-                      </span>
-                      <span className={`shrink-0 text-xs ${s.data < hoje ? 'font-bold text-bad' : 'text-ink-3'}`}>
-                        {s.data < hoje ? `atrasada (${dataCurta(s.data)})` : 'hoje'}
-                      </span>
-                    </Link>
-                    <ConcluirSolicitacao id={s.id} />
-                  </li>
-                ))}
-                {pendentesParaMim.length > 5 && <li className="text-xs text-ink-3">e mais {pendentesParaMim.length - 5}</li>}
-              </ul>
-            )}
-          </Cartao>
-        )}
-
         {aprova ? (
           <Cartao titulo="Aprovações" link="/aprovacoes" destaque={pendentes > 0}>
             <Numero n={pendentes} rotulo={pendentes === 1 ? 'alteração esperando você aprovar' : 'alterações esperando você aprovar'} tom={pendentes ? 'warn' : 'ok'} />

@@ -41,7 +41,6 @@ export type DefAba = { id: Aba; rotulo: string; grupo: Grupo; rota: string; ve: 
 export const ABAS: DefAba[] = [
   { id: 'inicio', rotulo: 'Painel do dia', grupo: 'inicio', rota: '/inicio', ve: 'vê o resumo', edita: 'vê o resumo' },
   { id: 'appDono', rotulo: 'App do dono', grupo: 'inicio', rota: '/app', ve: 'resumo e busca no celular', edita: 'resumo e busca no celular' },
-  { id: 'solicitacoes', rotulo: 'Solicitações', grupo: 'inicio', rota: '/solicitacoes', ve: 'lê as conversas', edita: 'abre e responde solicitações' },
   { id: 'manutencao', rotulo: 'Painel de manutenção', grupo: 'operacao', rota: '/manutencao', ve: 'vê o painel e as pendências', edita: 'registra visita e pendências' },
   { id: 'ordens', rotulo: 'Ordens de serviço', grupo: 'operacao', rota: '/ordens', ve: 'vê as OS e os relatórios', edita: 'abre e executa OS (técnico: só as dele)' },
   { id: 'externos', rotulo: 'Serviços externos', grupo: 'operacao', rota: '/externos', ve: 'acompanha as etapas', edita: 'cadastra e muda a etapa' },
@@ -52,6 +51,7 @@ export const ABAS: DefAba[] = [
   { id: 'contratos', rotulo: 'Contratos', grupo: 'frota', rota: '/contratos', ve: 'vê contratos, vencimentos e reajustes', edita: 'cadastra e renova contratos' },
   { id: 'envio', rotulo: 'Envio do mês', grupo: 'financeiro', rota: '/envio', ve: 'vê as faturas no Calendário (sem a tela de envio)', edita: 'envia faturas e marca faturado' },
   { id: 'historico', rotulo: 'Histórico de envios', grupo: 'financeiro', rota: '/historico', ve: 'vê o que foi enviado', edita: 'reenvia e confere a caixa de entrada' },
+  { id: 'solicitacoes', rotulo: 'Histórico de avisos', grupo: 'inicio', rota: '/solicitacoes', ve: 'vê os avisos', edita: 'manda, responde e conclui avisos (🔔 no canto da tela)' },
   { id: 'configuracoes', rotulo: 'Configurações', grupo: 'financeiro', rota: '/configuracoes', ve: 'vê o texto do e-mail', edita: 'muda o texto do e-mail' },
   { id: 'clientes', rotulo: 'Cadastro de clientes', grupo: 'clientes', rota: '/clientes', ve: 'só consulta o cadastro', edita: 'altera o cadastro direto' },
   { id: 'aprovacoes', rotulo: 'Aprovações', grupo: 'administracao', rota: '/aprovacoes', ve: 'vê o que está pendente', edita: 'aprova e recusa' },
