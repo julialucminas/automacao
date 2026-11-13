@@ -6,7 +6,7 @@ import type { Cliente, Equipamento, Faturamento, Frota } from '../types';
 import { cuidaDoFaturamento, LancarFatura } from '../components/LancarFatura';
 import { ROTULO_FATURA, resumirFaturas, situacaoFaturas, type EstadoFatura, type SituacaoFatura } from '../lib/faturado';
 import { BalaoUrgente, SeloHelbert } from '../components/Balao';
-import { AvisoEEtiquetas, ChipsEtiquetas, SeloDevolucao } from '../components/AvisoDevolucao';
+import { AdicionaisDaLocacao, AvisoEEtiquetas, ChipAdicionais, ChipsEtiquetas, SeloDevolucao } from '../components/AvisoDevolucao';
 import { avisoDevolucao, etiquetasEmUso } from '../lib/etiquetas';
 import { BotaoOk } from '../components/BotaoOk';
 import { urgenciasEmAberto, type Urgencia } from '../lib/avisos';
@@ -412,6 +412,7 @@ export function Frotas() {
                         <SeloHelbert ativo={helbert.has(f.numero) ? 'sim' : ''} />
                         <SeloDevolucao ficha={fichas.get(f.numero)} />
                         <ChipsEtiquetas ficha={fichas.get(f.numero)} />
+                        <ChipAdicionais ficha={fichas.get(f.numero)} />
                         {ofi && <SeloOficina />}
                         {urgentes.get(f.numero)?.map((u) => <BalaoUrgente key={u.chave} texto={u.texto} />)}
                         {l.duplicada && <Chip tom="bad">2 clientes</Chip>}
@@ -610,6 +611,7 @@ function DetalheLocacao({
           <SeloHelbert ativo={ehHelbert ? 'sim' : ''} />
           {oficina && <SeloOficina />}
         </div>
+        {c && <AdicionaisDaLocacao frota={frota} ficha={ficha} salvo={fichaSalva} />}
         {c && <AvisoEEtiquetas frota={frota} ficha={ficha} emUso={emUso} salvo={fichaSalva} />}
         {urgentes.map((u) => (
           <div key={u.chave} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-bad/30 bg-bad-soft px-3 py-2.5 text-[13.5px]">

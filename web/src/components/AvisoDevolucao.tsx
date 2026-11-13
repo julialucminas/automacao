@@ -189,3 +189,82 @@ export function AvisoEEtiquetas({ frota, ficha, emUso = [], locada = true, salvo
     </section>
   );
 }
+
+/** Chip "+ adicionais" na lista (passa o mouse para ver quais). */
+export function ChipAdicionais({ ficha }: { ficha: Equipamento | null | undefined }) {
+  if (!ficha?.adicionais) return null;
+  return (
+    <span title={`Adicionais: ${ficha.adicionais}`} className="inline-flex max-w-[220px] truncate whitespace-nowrap rounded-full bg-info-soft px-2 py-0.5 font-sans text-[11px] font-semibold text-info">
+      + {ficha.adicionais}
+    </span>
+  );
+}
+
+/** Adicionais da locação (prolongador, bateria, carregador…), vistos e editados na gaveta da locação. */
+export function AdicionaisDaLocacao({ frota, ficha, salvo }: { frota: string; ficha: Equipamento | null | undefined; salvo: (e: Equipamento) => void }) {
+  const { pode, avisar } = useEstado();
+  const edita = pode('frotas', 2);
+  const [editando, setEditando] = useState(false);
+  const [v, setV] = useState('');
+  const [salvando, setSalvando] = useState(false);
+  const atual = ficha?.adicionais ?? '';
+  const SUG = ['Prolongador de garfo', 'Bateria', 'Carregador', 'Bateria reserva', 'Posicionador de garfo'];
+  const lista = v.split(/\s*,\s*/).filter(Boolean);
+  const tem = (x: string) => lista.some((y) => y.toLowerCase() === x.toLowerCase());
+  const salvar = async () => {
+    setSalvando(true);
+    try {
+      salvo(await api.salvarEquipamento(frota, { adicionais: v.trim() || null }));
+      avisar('Adicionais salvos.');
+      setEditando(false);
+    } catch (e) {
+      avisar(e instanceof Error ? e.message : 'Não foi possível salvar.', 'bad');
+    } finally {
+      setSalvando(false);
+    }
+  };
+  return (
+    <section aria-label="Adicionais" className="flex flex-col gap-1.5 rounded-xl border border-line bg-white px-3.5 py-3">
+      <div className="flex items-center justify-between gap-2">
+        <div className="text-[12px] font-bold uppercase tracking-wide text-ink-3">Adicionais</div>
+        {edita && !editando && (
+          <button type="button" className="text-[12.5px] font-semibold text-info underline" onClick={() => {
+              setV(atual);
+              setEditando(true);
+            }}>
+            {atual ? 'Editar' : '+ Pôr adicionais'}
+          </button>
+        )}
+      </div>
+      {!editando ? (
+        <div className="text-[13.5px]">{atual ? <b>{atual}</b> : <span className="text-ink-3">Nenhum (prolongador de garfo, bateria, carregador…)</span>}</div>
+      ) : (
+        <>
+          <input aria-label="Adicionais" autoFocus className="input" value={v} onChange={(e) => setV(e.target.value)} placeholder="Ex.: prolongador de garfo 1,80 m, carregador" />
+          <div className="flex flex-wrap gap-1.5">
+            {SUG.map((x) => (
+              <button
+                key={x}
+                type="button"
+                aria-pressed={tem(x)}
+                onClick={() => setV((tem(x) ? lista.filter((y) => y.toLowerCase() !== x.toLowerCase()) : [...lista, x]).join(', '))}
+                className={`rounded-full border px-2.5 py-1 text-[12px] font-semibold ${tem(x) ? 'border-ink bg-ink text-white' : 'border-line-strong bg-white text-ink-2'}`}
+              >
+                {tem(x) ? '✓ ' : '+ '}
+                {x}
+              </button>
+            ))}
+          </div>
+          <div className="flex justify-end gap-2">
+            <button type="button" className="btn-secondary btn-sm" onClick={() => setEditando(false)}>
+              Cancelar
+            </button>
+            <button type="button" className="btn-primary btn-sm" disabled={salvando} onClick={() => void salvar()}>
+              {salvando ? 'Salvando…' : 'Salvar'}
+            </button>
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
