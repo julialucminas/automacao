@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api';
 import { useEstado } from '../state';
-import type { Cliente, Equipamento } from '../types';
+import type { ArquivoContrato, Cliente, Equipamento } from '../types';
+import { lerBase64 } from '../components/NfeAnexo';
 import { dataBr, hojeIso } from '../lib/calendario';
 import { formatarReais } from '../lib/dinheiro';
 import { chaveEmpresa } from '../lib/normalizar';
@@ -10,7 +11,7 @@ import { DIAS_AVISO, montarContratos, sugestaoRenovacao, type Contrato, type Sta
 import { Chip, Modal, type Tom } from '../components/ui';
 import { IcBusca } from '../components/Icones';
 
-type Filtro = 'todos' | StatusContrato | 'reajuste' | 'sem';
+type Filtro = 'todos' | StatusContrato | 'reajuste' | 'sem' | 'assinar';
 const STATUS: Record<StatusContrato, { rotulo: string; tom: Tom }> = {
   vencido: { rotulo: 'Vencido', tom: 'bad' },
   vencendo: { rotulo: `Vence em até ${DIAS_AVISO} dias`, tom: 'warn' },
@@ -18,7 +19,7 @@ const STATUS: Record<StatusContrato, { rotulo: string; tom: Tom }> = {
 };
 
 /** Rascunho do editor: contrato existente (editar/renovar) ou novo para um cliente. */
-type Edicao = { cliente: Cliente; frotas: string[]; antes: string[]; numero: string; inicio: string; vencimento: string; obs: string; renovacao: boolean };
+type Edicao = { cliente: Cliente; frotas: string[]; antes: string[]; numero: string; inicio: string; vencimento: string; obs: string; renovacao: boolean; assinado: boolean; assinadoEm: string };
 
 export function Contratos() {
   const { clientes, movimentacoes, pode, veValores } = useEstado();
@@ -26,7 +27,8 @@ export function Contratos() {
   // valor da locação: quem vê valores ou confere frotas (o servidor manda 0 para os outros)
   const veValor = veValores || pode('conferencia');
   const [fichas, setFichas] = useState<Equipamento[]>([]);
-  const recarregar = () => api.listarEquipamentos().then(setFichas, () => undefined);
+  const [arquivos, setArquivos] = useState<ArquivoContrato[]>([]);
+  const recarregar = () => Promise.all([api.listarEquipamentos().then(setFichas, () => undefined), api.listarArquivosContrato().then(setArquivos, () => undefined)]);
   useEffect(() => {
     void recarregar();
   }, []);
@@ -40,8 +42,10 @@ export function Contratos() {
   const achou = (c: Cliente, maquinas: { numero: string }[], numero = '') =>
     !q || chaveEmpresa(c.nome).includes(q) || chaveEmpresa(numero).includes(q) || maquinas.some((m) => chaveEmpresa(m.numero).includes(q));
   const conta = (f: Filtro) =>
-    f === 'todos' ? contratos.length : f === 'reajuste' ? contratos.filter((c) => c.reajusteAtrasado).length : f === 'sem' ? semContrato.reduce((s, x) => s + x.maquinas.length, 0) : contratos.filter((c) => c.status === f).length;
-  const lista = contratos.filter((c) => (filtro === 'todos' || filtro === c.status || (filtro === 'reajuste' && c.reajusteAtrasado)) && achou(c.cliente, c.maquinas, c.numero));
+    f === 'todos' ? contratos.length : f === 'assinar' ? contratos.filter((c) => !c.assinado).length : f === 'reajuste' ? contratos.filter((c) => c.reajusteAtrasado).length : f === 'sem' ? semContrato.reduce((s, x) => s + x.maquinas.length, 0) : contratos.filter((c) => c.status === f).length;
+  const lista = contratos.filter(
+    (c) => (filtro === 'todos' || filtro === c.status || (filtro === 'reajuste' && c.reajusteAtrasado) || (filtro === 'assinar' && !c.assinado)) && achou(c.cliente, c.maquinas, c.numero),
+  );
   const soma = (l: Contrato[]) => l.reduce((s, c) => s + c.valor, 0);
   const porStatus = (s: StatusContrato) => contratos.filter((c) => c.status === s);
 
@@ -55,8 +59,11 @@ export function Contratos() {
       vencimento: renovacao ? sugestaoRenovacao(c.vencimento, hoje) : c.vencimento,
       obs: c.obs,
       renovacao,
+      assinado: renovacao ? false : c.assinado,
+      assinadoEm: renovacao ? '' : (c.assinadoEm ?? ''),
     });
-  const novo = (cliente: Cliente, frotas: string[]) => setEdicao({ cliente, frotas, antes: [], numero: '', inicio: '', vencimento: '', obs: '', renovacao: false });
+  const novo = (cliente: Cliente, frotas: string[]) =>
+    setEdicao({ cliente, frotas, antes: [], numero: '', inicio: '', vencimento: '', obs: '', renovacao: false, assinado: false, assinadoEm: '' });
 
   const cartao = (rot: string, n: number, valor: number | null, f: Filtro, cor = 'text-ink') => (
     <button
@@ -86,11 +93,12 @@ export function Contratos() {
         </label>
       </div>
 
-      <section aria-label="Resumo dos contratos" className="grid grid-cols-2 gap-3 md:grid-cols-5">
+      <section aria-label="Resumo dos contratos" className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
         {cartao('Vencidos', porStatus('vencido').length, soma(porStatus('vencido')), 'vencido', porStatus('vencido').length ? 'text-bad' : 'text-ink-3')}
         {cartao(`Vencem em ${DIAS_AVISO} dias`, porStatus('vencendo').length, soma(porStatus('vencendo')), 'vencendo', porStatus('vencendo').length ? 'text-warn-strong' : 'text-ink-3')}
         {cartao('Vigentes', porStatus('vigente').length, soma(porStatus('vigente')), 'vigente', 'text-ok')}
         {cartao('Reajuste atrasado', conta('reajuste'), soma(contratos.filter((c) => c.reajusteAtrasado)), 'reajuste', conta('reajuste') ? 'text-warn-strong' : 'text-ink-3')}
+        {cartao('Falta assinatura', conta('assinar'), soma(contratos.filter((c) => !c.assinado)), 'assinar', conta('assinar') ? 'text-bad' : 'text-ink-3')}
         {cartao('Máquinas sem contrato', conta('sem'), semContrato.reduce((s, x) => s + x.valor, 0), 'sem', conta('sem') ? 'text-warn-strong' : 'text-ink-3')}
       </section>
 
@@ -105,6 +113,11 @@ export function Contratos() {
                     {c.numero ? <span className="rounded-md bg-line-soft px-2 py-0.5 font-mono text-[12.5px]">Contrato {c.numero}</span> : <span className="text-[12.5px] text-ink-3">sem número</span>}
                     <Chip tom={STATUS[c.status].tom}>{STATUS[c.status].rotulo}</Chip>
                     {c.reajusteAtrasado && <Chip tom="warn">Reajuste atrasado</Chip>}
+                    {c.assinado ? (
+                      <Chip tom="ok">✓ Assinado{c.assinadoEm ? ` em ${dataBr(c.assinadoEm)}` : ''}</Chip>
+                    ) : (
+                      <Chip tom="bad">{c.assinaturaParcial ? 'Assinatura incompleta' : 'Falta assinar'}</Chip>
+                    )}
                   </div>
                   <div className="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 text-[13px] text-ink-2">
                     <span>Início: {c.inicio ? dataBr(c.inicio) : <span className="text-ink-3">—</span>}</span>
@@ -135,6 +148,7 @@ export function Contratos() {
               </div>
               {c.datasDiferentes && <p className="mt-2 text-[12.5px] text-warn-strong">As máquinas deste contrato estão com vencimentos diferentes nas fichas. Use Editar para acertar.</p>}
               {c.obs && <p className="mt-2 text-[13px] text-ink-2">{c.obs}</p>}
+              <ArquivosDoContrato c={c} arquivos={arquivos} edita={edita} anexado={() => void recarregar()} />
               {edita && (
                 <div className="mt-3 flex flex-wrap gap-2">
                   <button type="button" className="btn-primary btn-sm" onClick={() => editar(c, true)}>
@@ -215,6 +229,7 @@ function EditorContrato({ e, fechar, salvo, veValor }: { e: Edicao; fechar: () =
         vencimento: d.vencimento,
         obs: d.obs.trim(),
         renovacao: d.renovacao,
+        ...(d.renovacao ? {} : { assinado: d.assinado, assinadoEm: d.assinado ? d.assinadoEm || null : null }),
       });
       avisar(d.renovacao ? `Contrato de ${d.cliente.nome} renovado até ${dataBr(d.vencimento)}.` : `Contrato de ${d.cliente.nome} salvo.`);
       salvo();
@@ -266,6 +281,22 @@ function EditorContrato({ e, fechar, salvo, veValor }: { e: Edicao; fechar: () =
         </span>
         <input className="input" value={d.obs} onChange={(ev) => setD({ ...d, obs: ev.target.value })} placeholder="Ex.: reajuste pelo IPCA em janeiro" />
       </label>
+      {d.renovacao ? (
+        <p className="rounded-[10px] bg-warn-soft px-3 py-2 text-[12.5px] text-warn-strong">O contrato renovado volta para “falta assinar”. Quando assinarem, anexe o arquivo ou marque como assinado.</p>
+      ) : (
+        <div className="flex flex-wrap items-center gap-3">
+          <label className="flex cursor-pointer items-center gap-2 text-[14px] font-semibold">
+            <input type="checkbox" className="h-4 w-4 accent-ink" checked={d.assinado} onChange={(ev) => setD({ ...d, assinado: ev.target.checked })} />
+            Contrato assinado
+          </label>
+          {d.assinado && (
+            <label className="flex items-center gap-2 text-[13px] text-ink-2">
+              em
+              <input type="date" className="input h-9 w-auto" value={d.assinadoEm} onChange={(ev) => setD({ ...d, assinadoEm: ev.target.value })} />
+            </label>
+          )}
+        </div>
+      )}
       <p className="text-[12.5px] text-ink-3">O início é a base do reajuste anual. Valores mudam pelo reajuste, em Movimentações.</p>
       {erro && (
         <div role="alert" className="rounded-[10px] bg-bad-soft px-3 py-2.5 text-[13px] text-bad-strong">
@@ -281,5 +312,93 @@ function EditorContrato({ e, fechar, salvo, veValor }: { e: Edicao; fechar: () =
         </button>
       </div>
     </Modal>
+  );
+}
+
+/** Contrato assinado: abrir o atual, anexar/trocar e ver os anteriores (renovações). */
+function ArquivosDoContrato({ c, arquivos, edita, anexado }: { c: Contrato; arquivos: ArquivoContrato[]; edita: boolean; anexado: () => void }) {
+  const { avisar } = useEstado();
+  const ref = useRef<HTMLInputElement>(null);
+  const [enviando, setEnviando] = useState(false);
+  const [verAntigos, setVerAntigos] = useState(false);
+  const frotas = c.maquinas.map((m) => m.numero);
+  const atual = arquivos.find((a) => a.id === c.arquivoId) ?? null;
+  const antigos = arquivos.filter((a) => a.clienteId === c.cliente.id && a.id !== c.arquivoId && a.frotas.some((f) => frotas.includes(f)));
+  const enviar = async (arq: File) => {
+    if (!/\.(pdf|jpe?g|png)$/i.test(arq.name)) return avisar('O contrato precisa ser PDF, JPG ou PNG.', 'bad');
+    if (arq.size > 10 * 1024 * 1024) return avisar('Arquivo grande demais (máximo 10 MB).', 'bad');
+    setEnviando(true);
+    try {
+      await api.anexarContrato({ clienteId: c.cliente.id, frotas, arquivo: await lerBase64(arq), nome: arq.name });
+      avisar(`Contrato assinado de ${c.cliente.nome} anexado.`);
+      anexado();
+    } catch (e) {
+      avisar(e instanceof Error ? e.message : 'Não foi possível anexar.', 'bad');
+    } finally {
+      setEnviando(false);
+    }
+  };
+  const link = (a: ArquivoContrato) => (
+    <a href={`/api/contratos/arquivos/${a.id}`} target="_blank" rel="noopener" className="font-semibold text-info underline underline-offset-2">
+      {a.nome}
+    </a>
+  );
+  if (!atual && !antigos.length && !edita) return null;
+  return (
+    <div className="mt-2.5 flex flex-col gap-1.5 rounded-[10px] bg-[#F8F7F3] px-3 py-2 text-[13px]">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="font-semibold text-ink-2">Contrato assinado:</span>
+        {atual ? (
+          <span className="min-w-0 truncate">
+            {link(atual)}
+            <span className="text-ink-3">
+              {' '}
+              · anexado em {dataBr(atual.enviadoEm.slice(0, 10))}
+              {atual.por ? ` por ${atual.por}` : ''}
+            </span>
+          </span>
+        ) : (
+          <span className="text-ink-3">nenhum arquivo</span>
+        )}
+        {edita && (
+          <>
+            <input
+              ref={ref}
+              type="file"
+              accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
+              className="hidden"
+              aria-label="Arquivo do contrato assinado"
+              onChange={(e) => {
+                const a = e.target.files?.[0];
+                e.target.value = '';
+                if (a) void enviar(a);
+              }}
+            />
+            <button type="button" className="btn-secondary h-8 px-3 text-[12.5px]" disabled={enviando} onClick={() => ref.current?.click()}>
+              {enviando ? 'Enviando…' : atual ? 'Trocar arquivo' : 'Anexar contrato assinado'}
+            </button>
+          </>
+        )}
+        {antigos.length > 0 && (
+          <button type="button" className="text-[12.5px] font-semibold text-ink-3 underline" onClick={() => setVerAntigos(!verAntigos)}>
+            {verAntigos ? 'esconder anteriores' : `anteriores (${antigos.length})`}
+          </button>
+        )}
+      </div>
+      {verAntigos && (
+        <ul className="flex flex-col gap-1 pl-1">
+          {antigos.map((a) => (
+            <li key={a.id}>
+              {link(a)}
+              <span className="text-ink-3">
+                {' '}
+                · {a.numero ? `contrato ${a.numero} · ` : ''}
+                {a.vencimento ? `vencimento ${dataBr(a.vencimento)} · ` : ''}anexado em {dataBr(a.enviadoEm.slice(0, 10))}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }

@@ -181,7 +181,7 @@ export type Fichas = {
   /** grava só os campos informados; null apaga o campo */
   salvar(frota: string, d: Record<string, ValorFicha>, usuarioId: number): void;
 };
-const CONTRATO_VAZIO = { contratoNumero: null, contratoInicio: null, contratoValor: null, contratoReajuste: null, contratoVencimento: null, contratoObs: null };
+const CONTRATO_VAZIO = { contratoNumero: null, contratoInicio: null, contratoAssinado: null, contratoAssinadoEm: null, contratoArquivo: null, contratoValor: null, contratoReajuste: null, contratoVencimento: null, contratoObs: null };
 const CAMPOS_CONTRATO = Object.keys(CONTRATO_VAZIO);
 
 export function operacoes(db: Banco, repo: Repositorio, fichas?: Fichas) {

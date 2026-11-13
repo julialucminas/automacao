@@ -443,6 +443,20 @@ const MIGRACOES = [
    UPDATE perfis SET permissoes = json_set(permissoes, '$.aprovacoes', 2),
      descricao = 'Movimentações, conferência e frotas. O que registra entra direto no cadastro.'
    WHERE id = 'operacoes';`,
+  // 26: arquivos dos contratos assinados (o atual de cada máquina fica na ficha; os antigos continuam aqui)
+  `CREATE TABLE contratos_arquivos (
+     id TEXT PRIMARY KEY,
+     cliente_id TEXT NOT NULL,
+     frotas TEXT NOT NULL,
+     numero TEXT NOT NULL DEFAULT '',
+     vencimento TEXT,
+     nome TEXT NOT NULL,
+     ext TEXT NOT NULL,
+     tamanho INTEGER NOT NULL,
+     enviado_em TEXT NOT NULL,
+     usuario_id INTEGER
+   );
+   CREATE INDEX contratos_arquivos_cliente ON contratos_arquivos (cliente_id);`,
 ];
 
 export function abrirBanco(caminho: string) {

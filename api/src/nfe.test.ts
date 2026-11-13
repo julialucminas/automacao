@@ -124,5 +124,22 @@ describe('contratos', () => {
     const log = (await a('GET', '/api/registro')).json().map((l: { acao: string }) => l.acao);
     expect(log).toContain('renovou o contrato C-12 de METAL até 09/01/2028: FT10 (saíram FT11)');
     expect((await como('tecnico')('POST', '/api/contratos', { clienteId: c.id, frotas: ['10'], vencimento: '2028-01-09' })).statusCode).toBe(403);
+
+    // assinatura: marcar à mão, anexar o assinado (já marca), renovar volta para "falta assinar"
+    await a('POST', '/api/contratos', { clienteId: c.id, frotas: ['10'], numero: 'C-12', vencimento: '2028-01-09', assinado: true, assinadoEm: '2026-11-10' });
+    expect(await ficha('10')).toMatchObject({ contratoAssinado: 'sim', contratoAssinadoEm: '2026-11-10' });
+    expect((await a('POST', '/api/contratos/arquivos', { clienteId: c.id, frotas: ['10'], arquivo: b64('texto'), nome: 'c.txt' })).statusCode).toBe(400);
+    const arq = await a('POST', '/api/contratos/arquivos', { clienteId: c.id, frotas: ['10'], arquivo: PDF, nome: 'Contrato C-12 assinado.pdf' });
+    expect(arq.statusCode).toBe(201);
+    expect(arq.json()).toMatchObject({ numero: 'C-12', vencimento: '2028-01-09', frotas: ['10'], por: 'Angelise' });
+    expect((await ficha('10')).contratoArquivo).toBe(arq.json().id);
+    const abre = await a('GET', `/api/contratos/arquivos/${arq.json().id}`);
+    expect(abre.headers['content-type']).toBe('application/pdf');
+    expect((await a('GET', '/api/contratos/arquivos')).json()).toHaveLength(1);
+    await a('POST', '/api/contratos', { clienteId: c.id, frotas: ['10'], numero: 'C-12', inicio: '2028-01-09', vencimento: '2029-01-09', renovacao: true });
+    const f10 = await ficha('10');
+    expect([f10.contratoAssinado ?? null, f10.contratoArquivo ?? null]).toEqual([null, null]);
+    // o arquivo antigo continua guardado
+    expect((await a('GET', `/api/contratos/arquivos/${arq.json().id}`)).statusCode).toBe(200);
   });
 });

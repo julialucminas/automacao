@@ -339,6 +339,11 @@ export type DadosEquipamento = {
   contratoNumero?: string | null;
   /** início do contrato (base do reajuste anual) */
   contratoInicio?: string | null;
+  /** 'sim' quando o contrato está assinado */
+  contratoAssinado?: string | null;
+  contratoAssinadoEm?: string | null;
+  /** id do arquivo do contrato assinado */
+  contratoArquivo?: string | null;
   contratoVencimento?: string | null;
   contratoValor?: number | null;
   contratoReajuste?: number | null;
@@ -474,3 +479,6 @@ export type DadosExterno = Partial<Pick<ServicoExterno, 'clienteId' | 'clienteNo
 
 /** Foto do negócio no fim de cada mês (o mês corrente é regravado até virar). Valores em centavos. */
 export type FotoMensal = { mes: string; receita: number; receitaContrato: number; locadas: number; frota: number; clientes: number; atualizadaEm: string };
+
+/** Arquivo de contrato assinado (PDF ou foto). O atual de cada máquina está na ficha; os antigos ficam guardados. */
+export type ArquivoContrato = { id: string; clienteId: string; frotas: string[]; numero: string; vencimento: string | null; nome: string; ext: string; tamanho: number; enviadoEm: string; por: string };

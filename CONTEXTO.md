@@ -233,3 +233,8 @@ Contrato = máquinas do mesmo cliente com o mesmo `contratoNumero` (sem número:
 reajuste aprovado). `POST /api/contratos` grava número/início/vencimento/obs nas fichas marcadas e limpa as de `tirar`.
 Situação: vencido, vence em até 60 dias, vigente; reajuste atrasado = mais de 12 meses desde a base. Valores = valor da
 locação de cada frota no cliente (Júnior vê porque confere frotas).
+Assinatura (13/nov): ficha ganhou `contratoAssinado` ('sim'), `contratoAssinadoEm` e `contratoArquivo` (limpos junto
+com o resto do contrato na locação/devolução). `POST /api/contratos` aceita `assinado`/`assinadoEm`; renovação volta
+para "falta assinar" e solta o arquivo. Arquivos em `<pastaDados>/contratos/<id>.<pdf|jpg|png>` + tabela
+`contratos_arquivos` (migração 26), que guarda também os de períodos anteriores. Rotas GET/POST `/api/contratos/arquivos`
+e GET `/api/contratos/arquivos/:id`. Anexar já marca como assinado. Filtro/cartão "Falta assinatura" na aba.

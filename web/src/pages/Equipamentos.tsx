@@ -309,6 +309,23 @@ export function Ficha({
             {linha.locacao && linha.locacao.valor > 0 && <Item rotulo="Valor mensal">{formatarReais(linha.locacao.valor)}</Item>}
             <Item rotulo="Nº do contrato">{f.contratoNumero}</Item>
             <Item rotulo="Início do contrato">{f.contratoInicio ? dataBr(f.contratoInicio) : null}</Item>
+            <Item rotulo="Assinatura">
+              {f.contratoAssinado === 'sim' ? (
+                <>
+                  Assinado{f.contratoAssinadoEm ? ` em ${dataBr(f.contratoAssinadoEm)}` : ''}
+                  {f.contratoArquivo && (
+                    <>
+                      {' · '}
+                      <a href={`/api/contratos/arquivos/${f.contratoArquivo}`} target="_blank" rel="noopener" className="font-semibold text-info underline">
+                        abrir
+                      </a>
+                    </>
+                  )}
+                </>
+              ) : f.contratoVencimento ? (
+                <span className="font-semibold text-bad">Falta assinar</span>
+              ) : null}
+            </Item>
             <Item rotulo="Vencimento do contrato">
               {f.contratoVencimento ? <span className={linha.contratoVencido ? 'font-bold text-bad' : ''}>{dataBr(f.contratoVencimento)}</span> : null}
             </Item>

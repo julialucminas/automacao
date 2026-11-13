@@ -21,6 +21,7 @@ import type {
   Faturamento,
   ItemLog,
   FotoMensal,
+  ArquivoContrato,
   Movimentacao,
   NovaMovimentacao,
   NovaSolicitacao,
@@ -94,7 +95,10 @@ export interface Api {
   anexarNfe(id: string, arquivo: string, nome: string): Promise<Movimentacao>;
   tirarNfe(id: string): Promise<Movimentacao>;
   /** contrato do cliente: grava número, início, vencimento e obs nas fichas das máquinas marcadas */
-  salvarContrato(d: { clienteId: string; frotas: string[]; tirar: string[]; numero: string; inicio: string | null; vencimento: string; obs: string; renovacao?: boolean }): Promise<{ ok: boolean }>;
+  salvarContrato(d: { clienteId: string; frotas: string[]; tirar: string[]; numero: string; inicio: string | null; vencimento: string; obs: string; renovacao?: boolean; assinado?: boolean; assinadoEm?: string | null }): Promise<{ ok: boolean }>;
+  listarArquivosContrato(): Promise<ArquivoContrato[]>;
+  /** anexa o contrato assinado (PDF/JPG/PNG em base64) às máquinas; já marca como assinado */
+  anexarContrato(d: { clienteId: string; frotas: string[]; arquivo: string; nome: string }): Promise<ArquivoContrato>;
   /** fatura enviada por fora do sistema: fica no histórico e conta como faturada */
   lancarFaturaManual(d: { clienteId: string; referencia: string; data: string; numero: string; observacao: string }): Promise<Envio>;
   /** mais uma observação numa movimentação já lançada */

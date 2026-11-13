@@ -56,6 +56,11 @@ export const CAMPOS_EQUIPAMENTO = {
   /** início do contrato (base do reajuste anual) */
   contratoInicio: 'data',
   contratoVencimento: 'data',
+  /** contrato assinado: 'sim' ou vazio, e quando */
+  contratoAssinado: 'texto',
+  contratoAssinadoEm: 'data',
+  /** id do arquivo do contrato assinado (tabela contratos_arquivos) */
+  contratoArquivo: 'texto',
   contratoValor: 'centavos',
   contratoReajuste: 'centavos',
   contratoObs: 'texto',

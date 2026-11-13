@@ -107,6 +107,8 @@ export const httpApi: Api = {
   desfazerOk: (chave) => chamar('POST', '/api/avisos-ok/desfazer', { chave }).then(() => undefined),
   registrarMovimentacao: (m) => chamar('POST', '/api/movimentacoes', m),
   anexarNfe: (id, arquivo, nome) => chamar('POST', `/api/movimentacoes/${id}/nfe`, { arquivo, nome }),
+  listarArquivosContrato: () => chamar('GET', '/api/contratos/arquivos'),
+  anexarContrato: (d) => chamar('POST', '/api/contratos/arquivos', d),
   salvarContrato: (d) => chamar('POST', '/api/contratos', d),
   lancarFaturaManual: (d) => chamar('POST', '/api/envios/manual', d),
   adicionarNotaMov: (id, texto, urgente) => chamar('POST', `/api/movimentacoes/${id}/notas`, { texto, urgente }),

@@ -5,6 +5,7 @@ import { CONFIG_PADRAO, Conflito2, operacoes, type NfArquivo, type NovaMov, type
 import { monitorCaixa } from './monitor.js';
 import { agendarCopias, listarCopias } from './backup.js';
 import { fotos as tabelaFotos } from './fotos.js';
+import { randomUUID } from 'node:crypto';
 import { createReadStream, existsSync, mkdirSync, unlinkSync, writeFileSync } from 'node:fs';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -186,6 +187,9 @@ function limitador(max: number, janelaMs: number) {
     return l.length <= max;
   };
 }
+
+/** hoje no horário de Brasília (AAAA-MM-DD) */
+const hojeBr = () => new Date(Date.now() - 3 * 3_600_000).toISOString().slice(0, 10);
 
 export function criarApp(db: Banco, opcoes: { cookieSeguro: boolean; logger?: boolean; pastaDados?: string; carteiro?: Carteiro; monitorar?: boolean; esperaCopiaMs?: number }) {
   const repo = repositorio(db);
@@ -490,9 +494,16 @@ export function criarApp(db: Banco, opcoes: { cookieSeguro: boolean; logger?: bo
     if (inicio && inicio > vencimento) throw new Invalido('O início do contrato está depois do vencimento.');
     const obs = texto(b.obs, 'observação', 300);
     const renovacao = b.renovacao === true;
+    // assinatura: renovação começa de novo como "falta assinar"; na edição, só muda se vier no pedido
+    const assinatura: Record<string, string | null> = renovacao
+      ? { contratoAssinado: null, contratoAssinadoEm: null, contratoArquivo: null }
+      : typeof b.assinado === 'boolean'
+        ? { contratoAssinado: b.assinado ? 'sim' : null, contratoAssinadoEm: b.assinado ? (lerDataIso(b.assinadoEm, 'Data da assinatura') ?? hojeBr()) : null }
+        : {};
     db.transaction(() => {
-      for (const f of frotas) equip.salvar(f, { contratoNumero: numero || null, contratoInicio: inicio, contratoVencimento: vencimento, contratoObs: obs || null }, req.usuario.id);
-      for (const f of tirar) if (equip.buscar(f)) equip.salvar(f, { contratoNumero: null, contratoInicio: null, contratoVencimento: null, contratoObs: null }, req.usuario.id);
+      for (const f of frotas) equip.salvar(f, { contratoNumero: numero || null, contratoInicio: inicio, contratoVencimento: vencimento, contratoObs: obs || null, ...assinatura }, req.usuario.id);
+      for (const f of tirar)
+        if (equip.buscar(f)) equip.salvar(f, { contratoNumero: null, contratoInicio: null, contratoVencimento: null, contratoObs: null, contratoAssinado: null, contratoAssinadoEm: null, contratoArquivo: null }, req.usuario.id);
       repo.registrarLog(
         cliente.id,
         req.usuario.id,
@@ -503,6 +514,84 @@ export function criarApp(db: Banco, opcoes: { cookieSeguro: boolean; logger?: bo
       );
     })();
     return { ok: true };
+  });
+
+  // ---------- contrato assinado (PDF ou foto), guardado em <pastaDados>/contratos/<id>.<ext> ----------
+  const pastaContratos = juntarCaminho(opcoes.pastaDados ?? '/dados', 'contratos');
+  type ArquivoContrato = { id: string; clienteId: string; frotas: string[]; numero: string; vencimento: string | null; nome: string; ext: string; tamanho: number; enviadoEm: string; por: string };
+  const lerArquivoContrato = (r: Record<string, unknown>): ArquivoContrato => ({
+    id: r.id as string,
+    clienteId: r.cliente_id as string,
+    frotas: JSON.parse(r.frotas as string) as string[],
+    numero: r.numero as string,
+    vencimento: (r.vencimento as string) ?? null,
+    nome: r.nome as string,
+    ext: r.ext as string,
+    tamanho: r.tamanho as number,
+    enviadoEm: r.enviado_em as string,
+    por: (r.por as string) ?? '',
+  });
+  const SEL_ARQ = "SELECT a.*, COALESCE(u.nome, '') AS por FROM contratos_arquivos a LEFT JOIN usuarios u ON u.id = a.usuario_id";
+  app.get('/api/contratos/arquivos', { preHandler: exigir(1, 'contratos') }, async () =>
+    (db.prepare(`${SEL_ARQ} ORDER BY a.enviado_em DESC`).all() as Record<string, unknown>[]).map(lerArquivoContrato),
+  );
+  app.post('/api/contratos/arquivos', { preHandler: exigir(2, 'contratos'), bodyLimit: 14 * 1024 * 1024 }, async (req, reply) => {
+    const b = (req.body ?? {}) as Record<string, unknown>;
+    const cliente = repo.buscarCliente(typeof b.clienteId === 'string' ? b.clienteId : '');
+    const frotas = Array.isArray(b.frotas) ? [...new Set(b.frotas.filter((x): x is string => typeof x === 'string'))] : [];
+    if (!frotas.length) throw new Invalido('Diga de quais máquinas é o contrato.');
+    const fora = frotas.filter((f) => !cliente.frotas.some((x) => x.numero === f));
+    if (fora.length) throw new Invalido(`FT${fora.join(', FT')} não ${fora.length > 1 ? 'estão' : 'está'} com ${cliente.nome}.`);
+    const buf = Buffer.from(typeof b.arquivo === 'string' ? b.arquivo.replace(/^data:[^;]*;base64,/, '') : '', 'base64');
+    if (!buf.length) throw new Invalido('Escolha o arquivo do contrato.');
+    if (buf.length > 10 * 1024 * 1024) throw new Invalido('Arquivo grande demais (máximo 10 MB).');
+    const cab = buf.subarray(0, 8);
+    const ext = cab.subarray(0, 5).toString('latin1') === '%PDF-' ? 'pdf' : cab[0] === 0xff && cab[1] === 0xd8 ? 'jpg' : cab.subarray(1, 4).toString('latin1') === 'PNG' ? 'png' : null;
+    if (!ext) throw new Invalido('O contrato precisa ser PDF, JPG ou PNG.');
+    const nome = (typeof b.nome === 'string' ? b.nome : '').replace(/[\\/\r\n]/g, '').slice(0, 120) || `contrato.${ext}`;
+    const id = randomUUID();
+    const ficha = equip.buscar(frotas[0]);
+    mkdirSync(pastaContratos, { recursive: true });
+    const caminho = juntarCaminho(pastaContratos, `${id}.${ext}`);
+    writeFileSync(caminho, buf);
+    try {
+      db.transaction(() => {
+        db.prepare('INSERT INTO contratos_arquivos (id, cliente_id, frotas, numero, vencimento, nome, ext, tamanho, enviado_em, usuario_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(
+          id,
+          cliente.id,
+          JSON.stringify(frotas),
+          (ficha?.contratoNumero as string) ?? '',
+          (ficha?.contratoVencimento as string) ?? null,
+          nome,
+          ext,
+          buf.length,
+          new Date().toISOString(),
+          req.usuario.id,
+        );
+        // anexar o assinado já marca como assinado (se ainda não estava)
+        for (const f of frotas) {
+          const fi = equip.buscar(f);
+          equip.salvar(f, { contratoArquivo: id, ...(fi?.contratoAssinado ? {} : { contratoAssinado: 'sim', contratoAssinadoEm: hojeBr() }) }, req.usuario.id);
+        }
+        repo.registrarLog(cliente.id, req.usuario.id, `anexou o contrato assinado de ${cliente.nome} (FT${frotas.join(', FT')}): ${nome}`, null, null, 'cliente');
+      })();
+    } catch (e) {
+      unlinkSync(caminho);
+      throw e;
+    }
+    return reply.code(201).send(lerArquivoContrato(db.prepare(`${SEL_ARQ} WHERE a.id = ?`).get(id) as Record<string, unknown>));
+  });
+  app.get<{ Params: { id: string } }>('/api/contratos/arquivos/:id', { preHandler: exigir(1, 'contratos') }, async (req, reply) => {
+    const r = db.prepare(`${SEL_ARQ} WHERE a.id = ?`).get(req.params.id) as Record<string, unknown> | undefined;
+    if (!r) throw new NaoEncontrado('Arquivo não encontrado.');
+    const a = lerArquivoContrato(r);
+    const caminho = juntarCaminho(pastaContratos, `${a.id}.${a.ext}`);
+    if (!existsSync(caminho)) throw new NaoEncontrado('O arquivo do contrato não foi encontrado.');
+    reply
+      .header('Content-Type', a.ext === 'pdf' ? 'application/pdf' : a.ext === 'png' ? 'image/png' : 'image/jpeg')
+      .header('Content-Disposition', `inline; filename*=UTF-8''${encodeURIComponent(a.nome)}`)
+      .header('Cache-Control', 'private, no-store');
+    return reply.send(createReadStream(caminho));
   });
 
   // ---------- observações acrescentadas depois de lançada ----------

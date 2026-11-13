@@ -26,6 +26,13 @@ export type Contrato = {
   ultimoReajuste: string | null;
   proximoReajuste: string | null;
   reajusteAtrasado: boolean;
+  /** todas as máquinas do contrato marcadas como assinadas */
+  assinado: boolean;
+  /** só parte das máquinas está marcada */
+  assinaturaParcial: boolean;
+  assinadoEm: string | null;
+  /** arquivo do contrato assinado (o mais recente entre as máquinas) */
+  arquivoId: string | null;
 };
 export type SemContrato = { cliente: Cliente; maquinas: Frota[]; valor: number };
 
@@ -80,6 +87,10 @@ export function montarContratos(clientes: Cliente[], fichas: Equipamento[], movs
         ultimoReajuste,
         proximoReajuste,
         reajusteAtrasado: !!proximoReajuste && proximoReajuste < hoje,
+        assinado: fs.every((x) => x.contratoAssinado === 'sim'),
+        assinaturaParcial: fs.some((x) => x.contratoAssinado === 'sim') && !fs.every((x) => x.contratoAssinado === 'sim'),
+        assinadoEm: fs.map((x) => x.contratoAssinadoEm).filter((x): x is string => !!x).sort().pop() ?? null,
+        arquivoId: fs.find((x) => x.contratoArquivo)?.contratoArquivo ?? null,
       });
     }
     if (sem.length) semContrato.push({ cliente: c, maquinas: sem, valor: sem.reduce((s, m) => s + m.valor, 0) });
