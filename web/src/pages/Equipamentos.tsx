@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
 import { api } from '../api';
 import { useEstado } from '../state';
 import { SeloHelbert } from '../components/Balao';
@@ -13,8 +13,8 @@ import { chaveEmpresa, semAcento } from '../lib/normalizar';
 import { dataBr, hojeIso } from '../lib/calendario';
 import { formatarReais, lerReais, reaisParaCampo } from '../lib/dinheiro';
 import { useBuscaDaUrl } from '../lib/buscaDaUrl';
-import { Chip, Gaveta } from '../components/ui';
-import { IcBusca, IcUpload } from '../components/Icones';
+import { Chip, Gaveta, Modal } from '../components/ui';
+import { IcBusca, IcMais, IcUpload } from '../components/Icones';
 import { ImportarQuadro } from '../components/ImportarQuadro';
 
 const num = (n: number | null | undefined, casas = 0) => (n == null ? '—' : n.toLocaleString('pt-BR', { maximumFractionDigits: casas }));
@@ -29,6 +29,7 @@ export function Equipamentos() {
   const [filtro, setFiltro] = useState<Situacao | 'todas'>('todas');
   const [aberta, setAberta] = useState<string | null>(null);
   const [importando, setImportando] = useState(false);
+  const [nova, setNova] = useState(false);
 
   const recarregar = useCallback(async () => {
     try {
@@ -81,6 +82,11 @@ export function Equipamentos() {
           {edita && (
             <button type="button" className="btn-secondary" onClick={() => setImportando(true)}>
               <IcUpload tamanho={16} /> Importar planilha
+            </button>
+          )}
+          {edita && (
+            <button type="button" className="btn-primary" onClick={() => setNova(true)}>
+              <IcMais tamanho={16} /> Nova máquina
             </button>
           )}
         </div>
@@ -179,7 +185,126 @@ export function Equipamentos() {
         salvo={(e) => setFichas((l) => (l ? [...l.filter((x) => x.frota !== e.frota), e] : [e]))}
       />
       <ImportarQuadro aberto={importando} fechar={() => setImportando(false)} terminou={() => void recarregar()} />
+      <NovaMaquina
+        aberto={nova}
+        fechar={() => setNova(false)}
+        existe={(f) => linhas.some((l) => l.frota === f && !!(l.ficha?.marca || l.ficha?.modelo || l.ficha?.serie || l.ficha?.descricao))}
+        criada={(e) => {
+          setNova(false);
+          setFichas((l) => (l ? [...l.filter((x) => x.frota !== e.frota), e] : [e]));
+          setAberta(e.frota);
+        }}
+      />
     </div>
+  );
+}
+
+/** Cadastra uma máquina que já é da frota (sem registrar compra): só a ficha. O resto completa na ficha. */
+function NovaMaquina({ aberto, fechar, existe, criada }: { aberto: boolean; fechar: () => void; existe: (frota: string) => boolean; criada: (e: Equipamento) => void }) {
+  const { avisar } = useEstado();
+  const vazio = { frota: '', marca: '', modelo: '', serie: '', ano: '', combustivel: '', capacidade: '', descricao: '', adicionais: '' };
+  const [d, setD] = useState(vazio);
+  const [erro, setErro] = useState('');
+  const [salvando, setSalvando] = useState(false);
+  const campo = (k: keyof typeof vazio) => ({ value: d[k], onChange: (e: { target: { value: string } }) => setD({ ...d, [k]: e.target.value }) });
+  const frota = d.frota.trim().toUpperCase().replace(/^(FROTA|FT)[\s-]*/, '');
+
+  const salvar = async (e: FormEvent) => {
+    e.preventDefault();
+    setErro('');
+    if (!frota) return setErro('Informe o número da frota.');
+    if (existe(frota)) return setErro(`A FT${frota} já tem ficha. Abra ela na lista e use “Editar ficha” para completar.`);
+    if (d.ano.trim() && !/^\d{4}$/.test(d.ano.trim())) return setErro('Ano inválido (ex.: 2018).');
+    setSalvando(true);
+    try {
+      // só o que foi preenchido: se a máquina já tinha algo na ficha (horímetro, contrato…), nada se perde
+      const cheio: DadosEquipamento = {
+        marca: d.marca.trim(),
+        modelo: d.modelo.trim(),
+        serie: d.serie.trim(),
+        ano: d.ano.trim() ? Number(d.ano) : null,
+        combustivel: d.combustivel,
+        capacidade: d.capacidade.trim() ? Number(d.capacidade.replace(/\D/g, '')) || null : null,
+        descricao: d.descricao.trim(),
+        adicionais: d.adicionais.trim(),
+      };
+      const dados = Object.fromEntries(Object.entries(cheio).filter(([, v]) => v !== null && v !== '')) as DadosEquipamento;
+      if (!Object.keys(dados).length) return setErro('Preencha pelo menos marca, modelo ou descrição.');
+      const eq = await api.salvarEquipamento(frota, dados);
+      setD(vazio);
+      avisar(`FT${frota} cadastrada. Complete o resto na ficha (Editar).`);
+      criada(eq);
+    } catch (err) {
+      setErro(err instanceof Error ? err.message : 'Não foi possível cadastrar.');
+    } finally {
+      setSalvando(false);
+    }
+  };
+
+  return (
+    <Modal aberto={aberto} fechar={fechar} titulo="Nova máquina na frota">
+      <form onSubmit={salvar} className="flex flex-col gap-3.5">
+        <p className="text-[13px] text-ink-3">Para máquina que já é de vocês e ainda não tem ficha (inclusive as que aparecem como “sem ficha” na lista). Não registra compra nem mexe no faturamento. Se foi comprada agora, use “Compra” em Movimentações.</p>
+        <div className="grid grid-cols-2 gap-3">
+          <label className="label flex flex-col gap-1.5">
+            Nº da frota
+            <input className="input uppercase" autoFocus placeholder="FT90" {...campo('frota')} />
+          </label>
+          <label className="label flex flex-col gap-1.5">
+            Tipo
+            <select className="input" {...campo('combustivel')}>
+              <option value="">—</option>
+              {Object.entries(COMBUSTIVEIS).map(([k, v]) => (
+                <option key={k} value={k}>
+                  {v}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="label flex flex-col gap-1.5">
+            Marca
+            <input className="input" placeholder="YALE" {...campo('marca')} />
+          </label>
+          <label className="label flex flex-col gap-1.5">
+            Modelo
+            <input className="input" placeholder="GLP050VX" {...campo('modelo')} />
+          </label>
+          <label className="label flex flex-col gap-1.5">
+            Nº de série
+            <input className="input" {...campo('serie')} />
+          </label>
+          <label className="label flex flex-col gap-1.5">
+            Ano
+            <input className="input" inputMode="numeric" placeholder="2018" {...campo('ano')} />
+          </label>
+          <label className="label flex flex-col gap-1.5">
+            Capacidade (kg)
+            <input className="input" inputMode="numeric" placeholder="2500" {...campo('capacidade')} />
+          </label>
+          <label className="label flex flex-col gap-1.5">
+            Descrição
+            <input className="input" placeholder="Empilhadeira 2,5t a gás" {...campo('descricao')} />
+          </label>
+        </div>
+        <label className="label flex flex-col gap-1.5">
+          Adicionais <span className="font-normal text-ink-3">(prolongador de garfo, bateria, carregador…)</span>
+          <input className="input" {...campo('adicionais')} />
+        </label>
+        {erro && (
+          <div role="alert" className="rounded-[10px] bg-bad-soft px-3 py-2.5 text-[13px] text-bad-strong">
+            {erro}
+          </div>
+        )}
+        <div className="flex justify-end gap-2.5">
+          <button type="button" className="btn-secondary" onClick={fechar}>
+            Cancelar
+          </button>
+          <button type="submit" className="btn-primary" disabled={salvando}>
+            {salvando ? 'Salvando…' : 'Cadastrar e abrir a ficha'}
+          </button>
+        </div>
+      </form>
+    </Modal>
   );
 }
 

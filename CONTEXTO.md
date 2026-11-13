@@ -293,6 +293,11 @@ que o `PATCH /api/solicitacoes/:id` grava como mensagem (`nota`). O estado troca
 (`alterarSolicitacao` em state.tsx) e as solicitações são conferidas a cada 15 s com a janela aberta (antes, 60 s —
 quem pediu demorava a ver como concluída). Busca por assunto/cliente/pessoa e "concluída por X em …" na lista.
 
+## Nova máquina sem compra (13/nov)
+Em Equipamentos, "+ Nova máquina" cria só a ficha (PUT /api/equipamentos/:frota) com identificação e adicionais, sem
+movimentação. Serve também para completar quem está "sem ficha": manda só os campos preenchidos, então não apaga
+horímetro/contrato que já estavam lá. Bloqueia se a frota já tem marca, modelo, série ou descrição na ficha.
+
 ## Adicionais da locação (13/nov)
 `dados.adicionais` na locação, troca e devolução (prolongador de garfo, bateria, carregador…; sugestões em botões) e
 campo `adicionais` na ficha. A locação grava na ficha; a troca passa para a frota nova; a devolução tira da ficha
