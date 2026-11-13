@@ -52,6 +52,7 @@ import type {
   Visita,
   ModeloOS,
   AvisoOk,
+  EmailRecebido,
   DadosExterno,
   EtapaExterno,
   ServicoExterno,
@@ -226,6 +227,9 @@ export interface Api {
   situacaoEnvio(): Promise<SituacaoEnvio>;
   /** olha a caixa de entrada agora (devoluções e confirmações de leitura) */
   verificarCaixa(): Promise<{ lidas: number; atualizados: number; ultimaVerificacao: string | null }>;
+  /** e-mails que chegaram na caixa das faturas */
+  caixaEntrada(): Promise<{ emails: EmailRecebido[]; ultimaVerificacao: string | null }>;
+  okEmails(ids: string[], desfazer?: boolean): Promise<{ alterados: number }>;
 }
 
 export const MODO_DEMO = import.meta.env.VITE_API !== 'http';

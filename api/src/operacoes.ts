@@ -198,7 +198,7 @@ export type Fichas = {
   /** grava só os campos informados; null apaga o campo */
   salvar(frota: string, d: Record<string, ValorFicha>, usuarioId: number): void;
 };
-const CONTRATO_VAZIO = { contratoNumero: null, contratoInicio: null, contratoAssinado: null, contratoAssinadoEm: null, contratoArquivo: null, contratoValor: null, contratoReajuste: null, contratoVencimento: null, contratoObs: null, adicionais: null };
+const CONTRATO_VAZIO = { contratoNumero: null, contratoInicio: null, contratoAssinado: null, contratoAssinadoEm: null, contratoArquivo: null, contratoValor: null, contratoReajuste: null, contratoVencimento: null, contratoObs: null, adicionais: null, devolucaoAvisada: null, devolucaoAvisadaEm: null, devolucaoPrevista: null, devolucaoObs: null };
 const CAMPOS_CONTRATO = Object.keys(CONTRATO_VAZIO);
 
 export function operacoes(db: Banco, repo: Repositorio, fichas?: Fichas) {
@@ -392,6 +392,8 @@ export function operacoes(db: Banco, repo: Repositorio, fichas?: Fichas) {
     const velha = ficha(m.frota);
     const contrato: Record<string, ValorFicha> = Object.fromEntries(CAMPOS_CONTRATO.map((k) => [k, velha?.[k] ?? null]));
     if (d.valor != null) contrato.contratoValor = d.valor;
+    // aviso de devolução era da máquina que saiu: não passa para a nova
+    for (const k of ['devolucaoAvisada', 'devolucaoAvisadaEm', 'devolucaoPrevista', 'devolucaoObs']) contrato[k] = null;
     // adicionais informados na troca valem para a máquina que entrou (senão, seguem os da que saiu)
     if (d.adicionais) contrato.adicionais = d.adicionais;
     if (velha || d.valor != null || d.adicionais) gravarFicha(m.frotaNova, contrato);

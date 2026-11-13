@@ -4,9 +4,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { abrirBanco, repositorio } from './db.js';
 import { criarApp } from './app.js';
+import { monitorCaixa } from './monitor.js';
 import { gerarHash } from './senha.js';
 
 let app: ReturnType<typeof criarApp>;
+let banco: ReturnType<typeof abrirBanco>;
 let pasta = '';
 const cookies: Record<string, string> = {};
 const como = (quem: string) => (method: 'GET' | 'POST' | 'DELETE', url: string, payload?: unknown) =>
@@ -18,6 +20,7 @@ const XML = b64('<?xml version="1.0"?><nfeProc xmlns="http://www.portalfiscal.in
 beforeEach(async () => {
   pasta = mkdtempSync(join(tmpdir(), 'nfe-'));
   const db = abrirBanco(':memory:');
+  banco = db;
   const repo = repositorio(db);
   const h = await gerarHash('senha-teste-1');
   repo.criarUsuario('financeiro@lucminas.com.br', 'Angelise', h, '', 'financeiro');
@@ -257,5 +260,41 @@ describe('acompanhamento dos contratos', () => {
     expect(ac.registros.find((r: { tipo: string }) => r.tipo === 'pendencia')).toMatchObject({ resolucao: 'chegou pelo correio', resolvidaPor: 'Angelise' });
     expect(ac.registros.find((r: { tipo: string }) => r.tipo === 'contato')).toMatchObject({ canal: 'telefone', contato: 'Carla', por: 'Angelise', assunto: 'reajuste' });
     expect((await como('tecnico')('POST', '/api/contratos/registros', { clienteId: c.id, chave, texto: 'x' })).statusCode).toBe(403);
+  });
+});
+
+describe('caixa de entrada das faturas', () => {
+  it('guarda e-mails de gente, acha o cliente pelo endereço ou domínio e o financeiro dá ok', async () => {
+    const a = como('angelise');
+    const c = (await a('POST', '/api/clientes', { nome: 'Essenza', para: ['compras@essenza.com.br'], cc: [], apelidos: [], cnpj: '', observacoes: '' })).json();
+    const m = monitorCaixa(banco, repositorio(banco), () => null);
+    m.registrarRecebido({ uid: 10, validade: '7', deNome: 'Maria', deEmail: 'maria@essenza.com.br', assunto: 'Re: Fatura 123', quando: '2026-11-13T12:00:00.000Z', anexos: 1 });
+    m.registrarRecebido({ uid: 11, validade: '7', deNome: '', deEmail: 'alguem@gmail.com', assunto: 'Orçamento', quando: '2026-11-13T13:00:00.000Z', anexos: 0 });
+    m.registrarRecebido({ uid: 11, validade: '7', deNome: '', deEmail: 'alguem@gmail.com', assunto: 'Orçamento', quando: '2026-11-13T13:00:00.000Z', anexos: 0 }); // repetido: ignora
+    const l = (await a('GET', '/api/caixa-entrada')).json().emails;
+    expect(l).toHaveLength(2);
+    expect(l[1]).toMatchObject({ id: '7:10', clienteId: c.id, clienteNome: 'ESSENZA', anexos: 1, vistoEm: null });
+    expect(l[0].clienteId).toBeNull();
+    expect((await a('POST', '/api/caixa-entrada/ok', { ids: ['7:10'] })).json()).toEqual({ alterados: 1 });
+    const depois = (await a('GET', '/api/caixa-entrada')).json().emails.find((e: { id: string }) => e.id === '7:10');
+    expect(depois).toMatchObject({ vistoPorNome: 'Angelise' });
+    await a('POST', '/api/caixa-entrada/ok', { ids: ['7:10'], desfazer: true });
+    expect((await a('GET', '/api/caixa-entrada')).json().emails.find((e: { id: string }) => e.id === '7:10').vistoEm).toBeNull();
+    expect((await como('tecnico')('GET', '/api/caixa-entrada')).statusCode).toBe(403);
+  });
+});
+
+describe('aviso de devolução', () => {
+  it('fica na ficha e sai quando a devolução é registrada', async () => {
+    const a = como('angelise');
+    const c = (await a('POST', '/api/clientes', { nome: 'Fenix', para: ['a@f.com.br'], cc: [], apelidos: [], cnpj: '', observacoes: '' })).json();
+    await a('POST', '/api/movimentacoes', { tipo: 'locacao', frota: '61', clienteId: c.id, data: '2026-10-01', valor: 300000, modalidade: 'contrato' });
+    const put = await app.inject({ method: 'PUT', url: '/api/equipamentos/61', payload: { dados: { devolucaoAvisada: 'sim', devolucaoAvisadaEm: '2026-11-13', devolucaoPrevista: '2026-11-30', devolucaoObs: 'obra acabou', etiquetas: 'Negociando' } }, headers: { cookie: cookies.angelise } });
+    expect(put.json()).toMatchObject({ devolucaoAvisada: 'sim', devolucaoPrevista: '2026-11-30', etiquetas: 'Negociando' });
+    await a('POST', '/api/movimentacoes', { tipo: 'devolucao', frota: '61', data: '2026-11-30' });
+    const f = (await a('GET', '/api/equipamentos')).json().find((e: { frota: string }) => e.frota === '61');
+    expect(f.devolucaoAvisada ?? null).toBeNull();
+    expect(f.devolucaoPrevista ?? null).toBeNull();
+    expect(f.etiquetas).toBe('Negociando'); // etiqueta é da máquina: fica
   });
 });

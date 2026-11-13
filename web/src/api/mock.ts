@@ -842,6 +842,12 @@ export const mockApi: Api = {
   async situacaoEnvio() {
     return { configurado: false, conta: null };
   },
+  async caixaEntrada() {
+    return { emails: [], ultimaVerificacao: null };
+  },
+  async okEmails() {
+    return { alterados: 0 };
+  },
   async verificarCaixa() {
     await espera(500);
     return { lidas: 0, atualizados: 0, ultimaVerificacao: new Date().toISOString() };

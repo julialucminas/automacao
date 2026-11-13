@@ -230,6 +230,8 @@ export const httpApi: Api = {
   testarEnvio: async (pedido) => chamar('POST', '/api/envios/teste', await corpoEnvio(pedido), 180_000),
   situacaoEnvio: () => chamar('GET', '/api/envio/situacao'),
   verificarCaixa: () => chamar('POST', '/api/envios/verificar', undefined, 240_000),
+  caixaEntrada: () => chamar('GET', '/api/caixa-entrada'),
+  okEmails: (ids, desfazer) => chamar('POST', '/api/caixa-entrada/ok', { ids, desfazer: !!desfazer }),
   reenviar: (id) => chamar('POST', `/api/envios/${id}/reenviar`, undefined, 180_000),
   copiarEnviados: (id) => chamar('POST', `/api/envios/${id}/copiar`, undefined, 180_000),
 };

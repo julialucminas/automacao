@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { avisoDevolucao } from '../lib/etiquetas';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../api';
 import { useEstado } from '../state';
@@ -560,6 +561,32 @@ function Receita({ linhas, serie, hoje, ir }: { linhas: LinhaEquipamento[]; seri
         </ul>
         <VerMais total={cli.lista.length} mostrando={nCli} mais={() => setNCli(cli.lista.length)} />
       </Cartao>
+
+      {(() => {
+        const avisadas = linhas.filter((l) => l.cliente && avisoDevolucao(l.ficha)).sort((a, b) => (avisoDevolucao(a.ficha)!.prevista ?? '9').localeCompare(avisoDevolucao(b.ficha)!.prevista ?? '9'));
+        if (!avisadas.length) return null;
+        const total = avisadas.reduce((t, l) => t + (l.locacao?.valor ?? 0), 0);
+        return (
+          <Cartao titulo="Devoluções avisadas pelos clientes">
+            <Grande n={curto(total)} rotulo={`por mês deixam de entrar · ${plural(avisadas.length, 'máquina', 'máquinas')}`} tom="text-warn-strong" />
+            <ul className="flex flex-col divide-y divide-line-soft">
+              {avisadas.map((l) => {
+                const av = avisoDevolucao(l.ficha)!;
+                return (
+                  <li key={l.frota}>
+                    <Linha
+                      esq={`FT${l.frota} · ${l.cliente?.nome ?? ''}`}
+                      sub={`${av.prevista ? `sai ${dataBr(av.prevista)}` : 'sem data combinada'}${av.avisadaEm ? ` · avisou ${dataBr(av.avisadaEm)}` : ''}${av.obs ? ` · ${av.obs}` : ''}`}
+                      dir={reais(l.locacao?.valor ?? 0)}
+                      onClick={() => ir('buscar', { q: `frota ${l.frota}` })}
+                    />
+                  </li>
+                );
+              })}
+            </ul>
+          </Cartao>
+        );
+      })()}
 
       <Cartao titulo="Contratos: receita em risco">
         <div className="grid grid-cols-2 gap-2">

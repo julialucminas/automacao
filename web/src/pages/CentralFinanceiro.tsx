@@ -13,6 +13,7 @@ import { contratosVencendo, STATUS_MOV, TOM_TIPO } from './Movimentacoes';
 import { Chip, type Tom } from '../components/ui';
 import { BotaoOk } from '../components/BotaoOk';
 import { ConcluirSolicitacao } from '../components/ConcluirSolicitacao';
+import { CaixaEntrada } from '../components/CaixaEntrada';
 import { chaveContrato, chaveEnvio, emailsComProblema, urgenciasEmAberto } from '../lib/avisos';
 import { IcAlerta, IcCheck, IcDinheiro, IcEmail, IcEmpilhadeira, IcEnviar, IcNota, IcPredio, IcPrancheta } from '../components/Icones';
 
@@ -306,6 +307,7 @@ export function CentralFinanceiro() {
         />
       </section>
 
+      {(pode('envio') || pode('historico')) && <CaixaEntrada />}
       {cuidaDoFaturamento(usuario?.perfil) && <FaturamentoDoMes clientes={ativos} envios={envios} marcados={marcados} mes={ref} veValores={veValores} hoje={hoje} />}
 
       {novasMov.length > 0 && (

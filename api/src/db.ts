@@ -536,6 +536,21 @@ const MIGRACOES = [
      atualizado_em TEXT NOT NULL,
      usuario_id INTEGER
    );`,
+  // 32: e-mails que chegam na caixa das faturas (só o cabeçalho), para o financeiro ver e dar ok
+  `CREATE TABLE caixa_entrada (
+     uid INTEGER NOT NULL,
+     validade TEXT NOT NULL,
+     de_nome TEXT NOT NULL DEFAULT '',
+     de_email TEXT NOT NULL DEFAULT '',
+     assunto TEXT NOT NULL DEFAULT '',
+     recebido_em TEXT NOT NULL,
+     cliente_id TEXT,
+     anexos INTEGER NOT NULL DEFAULT 0,
+     visto_em TEXT,
+     visto_por INTEGER,
+     PRIMARY KEY (validade, uid)
+   );
+   CREATE INDEX caixa_entrada_recebido ON caixa_entrada (recebido_em);`,
 ];
 
 export function abrirBanco(caminho: string) {

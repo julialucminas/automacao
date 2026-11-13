@@ -243,6 +243,19 @@ export type Movimentacao = {
   vista: boolean;
 };
 /** "ok" dado numa pendência: some das notificações, o registro fica */
+/** e-mail de gente que chegou na caixa das faturas (só o cabeçalho) */
+export type EmailRecebido = {
+  id: string;
+  deNome: string;
+  deEmail: string;
+  assunto: string;
+  recebidoEm: string;
+  clienteId: string | null;
+  clienteNome: string | null;
+  anexos: number;
+  vistoEm: string | null;
+  vistoPorNome: string | null;
+};
 export type AvisoOk = { chave: string; feitoEm: string; feitoPor: string; obs: string };
 export type Proposta = {
   id: string;
@@ -321,6 +334,13 @@ export type DadosEquipamento = {
   acessorios?: string | null;
   /** adicionais com a máquina nesta locação (prolongador, bateria, carregador…) */
   adicionais?: string | null;
+  /** cliente avisou que vai devolver ('sim'), quando avisou, quando deve sair e o combinado */
+  devolucaoAvisada?: string | null;
+  devolucaoAvisadaEm?: string | null;
+  devolucaoPrevista?: string | null;
+  devolucaoObs?: string | null;
+  /** etiquetas livres, separadas por vírgula */
+  etiquetas?: string | null;
   situacao?: string | null;
   situacaoMotivo?: string | null;
   horimetro?: number | null;

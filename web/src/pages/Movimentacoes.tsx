@@ -14,6 +14,7 @@ import { chaveContrato, chaveNota, chaveObs, urgenciasDe } from '../lib/avisos';
 import { BalaoUrgente } from '../components/Balao';
 import { IcBusca, IcMais } from '../components/Icones';
 import { EntregaDaMov } from '../components/EntregaMaquina';
+import { avisoDevolucao } from '../lib/etiquetas';
 import { EscolherNfe, lerBase64, lerXmlNfe, NfeAnexo, problemaNfe } from '../components/NfeAnexo';
 
 export const STATUS_MOV: Record<Movimentacao['status'], { rotulo: string; tom: Tom }> = {
@@ -544,6 +545,17 @@ function FormMov({ tipo, frota, clienteId, fechar }: { tipo: TipoMov; frota?: st
           {m.tipo === 'locacao' && ' (sai de lá quando a locação for aprovada)'}
         </p>
       )}
+      {(() => {
+        const av = avisoDevolucao(fichas.find((f) => f.frota === numFrota));
+        if (!av) return null;
+        return (
+          <p className={`-mt-1 rounded-[10px] px-3 py-2 text-[13px] ${m.tipo === 'devolucao' ? 'bg-ok-soft text-ink-2' : 'bg-warn-soft text-warn-strong'}`}>
+            ↩ O cliente avisou{av.avisadaEm ? ` em ${dataBr(av.avisadaEm)}` : ''} que vai devolver{av.prevista ? ` (previsão ${dataBr(av.prevista)})` : ''}
+            {av.obs ? `: ${av.obs}` : '.'}
+            {m.tipo === 'devolucao' && ' Ao registrar, o aviso sai da ficha.'}
+          </p>
+        );
+      })()}
 
       <div className="flex flex-col gap-1.5">
         <label htmlFor="mov-cliente" className="label">

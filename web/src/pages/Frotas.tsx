@@ -2,10 +2,12 @@ import { useEffect, useMemo, useState } from 'react';
 import { useBuscaDaUrl } from '../lib/buscaDaUrl';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useEstado } from '../state';
-import type { Cliente, Faturamento, Frota } from '../types';
+import type { Cliente, Equipamento, Faturamento, Frota } from '../types';
 import { cuidaDoFaturamento, LancarFatura } from '../components/LancarFatura';
 import { ROTULO_FATURA, resumirFaturas, situacaoFaturas, type EstadoFatura, type SituacaoFatura } from '../lib/faturado';
 import { BalaoUrgente, SeloHelbert } from '../components/Balao';
+import { AvisoEEtiquetas, ChipsEtiquetas, SeloDevolucao } from '../components/AvisoDevolucao';
+import { avisoDevolucao, etiquetasEmUso } from '../lib/etiquetas';
 import { BotaoOk } from '../components/BotaoOk';
 import { urgenciasEmAberto, type Urgencia } from '../lib/avisos';
 import { formatarReais, lerReais, reaisParaCampo } from '../lib/dinheiro';
@@ -23,7 +25,7 @@ import { gerarPdfLocacoes, montarRelatorio, type ModeloRelatorio } from '../lib/
 type Linha = { frota: Frota; cliente: Cliente; proxima: string | null; duplicada: boolean };
 type Ordem = 'frota' | 'cliente' | 'valor' | 'proxima' | 'fim';
 type Visao = 'frotas' | 'clientes';
-type Filtro = 'todas' | 'contrato' | 'esporadico' | 'semEtiqueta' | 'oficina' | 'terminando';
+type Filtro = 'todas' | 'contrato' | 'esporadico' | 'semEtiqueta' | 'oficina' | 'terminando' | 'devolucao';
 type FiltroFat = 'todas' | EstadoFatura;
 
 /** Ordena "F-2" antes de "F-10" (números dentro do texto comparados como números). */
@@ -37,10 +39,13 @@ const freteTexto = (f: Frota) => (f.frete === 'lucminas' ? 'Lucminas' : f.frete 
 export function Frotas() {
   const { clientes, avisar, oficina, definirOficina, veValores: ehFinanceiro, pode, movimentacoes, avisosOk, recarregarClientes, recarregarOperacoes } = useEstado();
   // etiqueta Helbert vem da ficha da máquina
-  const [helbert, setHelbert] = useState<Set<string>>(new Set());
+  // fichas: etiqueta Helbert, aviso de devolução e etiquetas livres
+  const [fichas, setFichas] = useState<Map<string, Equipamento>>(new Map());
   useEffect(() => {
-    api.listarEquipamentos().then((l) => setHelbert(new Set(l.filter((e) => e.helbert === 'sim').map((e) => e.frota))), () => undefined);
+    api.listarEquipamentos().then((l) => setFichas(new Map(l.map((e) => [e.frota, e]))), () => undefined);
   }, []);
+  const helbert = useMemo(() => new Set([...fichas.values()].filter((e) => e.helbert === 'sim').map((e) => e.frota)), [fichas]);
+  const emUso = useMemo(() => etiquetasEmUso([...fichas.values()]), [fichas]);
   // observação urgente em aberto por frota (balãozinho)
   const urgentes = useMemo(() => {
     const m = new Map<string, Urgencia[]>();
@@ -113,7 +118,8 @@ export function Frotas() {
     (f === 'esporadico' && l.frota.modalidade === 'esporadico') ||
     (f === 'semEtiqueta' && !l.frota.modalidade) ||
     (f === 'oficina' && naOficina.has(l.frota.numero)) ||
-    (f === 'terminando' && terminando(l.frota));
+    (f === 'terminando' && terminando(l.frota)) ||
+    (f === 'devolucao' && !!avisoDevolucao(fichas.get(l.frota.numero)));
   const passaFiltro = (l: Linha) => combina(filtro, l) && (!veFaturas || filtroFat === 'todas' || estadoDe(l.cliente.id) === filtroFat);
   const filtradas = linhas
     .filter((l) => !q || chaveEmpresa(l.frota.numero).includes(q) || chaveEmpresa(l.cliente.nome).includes(q) || chaveEmpresa(l.frota.descricao).includes(q))
@@ -279,6 +285,7 @@ export function Frotas() {
               ['contrato', 'Contrato'],
               ['esporadico', 'Esporádico'],
               ['terminando', 'Terminando (30 dias)'],
+              ['devolucao', '↩ Devolução avisada'],
               ['oficina', 'Na oficina'],
               ['semEtiqueta', 'Sem etiqueta'],
             ] as const
@@ -403,6 +410,8 @@ export function Frotas() {
                         {f.numero}
                         <SeloModalidade m={f.modalidade} />
                         <SeloHelbert ativo={helbert.has(f.numero) ? 'sim' : ''} />
+                        <SeloDevolucao ficha={fichas.get(f.numero)} />
+                        <ChipsEtiquetas ficha={fichas.get(f.numero)} />
                         {ofi && <SeloOficina />}
                         {urgentes.get(f.numero)?.map((u) => <BalaoUrgente key={u.chave} texto={u.texto} />)}
                         {l.duplicada && <Chip tom="bad">2 clientes</Chip>}
@@ -479,6 +488,7 @@ export function Frotas() {
                       <b className="font-mono">{l.frota.numero}</b>
                       <SeloModalidade m={l.frota.modalidade} />
                       <SeloHelbert ativo={helbert.has(l.frota.numero) ? 'sim' : ''} />
+                      <SeloDevolucao ficha={fichas.get(l.frota.numero)} />
                       {urgentes.get(l.frota.numero)?.map((u) => <BalaoUrgente key={u.chave} texto={u.texto} />)}
                       {naOficina.has(l.frota.numero) && <SeloOficina />}
                       {veValorFrota && <span className="text-ink-2">{l.frota.valor ? formatarReais(l.frota.valor) : 'sem valor'}</span>}
@@ -499,6 +509,9 @@ export function Frotas() {
           oficina={naOficina.get(aberta) ?? null}
           urgentes={urgentes.get(aberta) ?? []}
           ehHelbert={helbert.has(aberta)}
+          ficha={fichas.get(aberta) ?? null}
+          emUso={emUso}
+          fichaSalva={(e) => setFichas((m) => new Map(m).set(e.frota, e))}
           veValor={veValorFrota}
           edita={editaFrotas}
           fechar={() => setAberta(null)}
@@ -562,9 +575,15 @@ function DetalheLocacao({
   colocarNaOficina,
   urgentes,
   ehHelbert,
+  ficha,
+  emUso,
+  fichaSalva,
 }: {
   urgentes: Urgencia[];
   ehHelbert: boolean;
+  ficha: Equipamento | null;
+  emUso: string[];
+  fichaSalva: (e: Equipamento) => void;
   frota: string;
   linha: Linha | null;
   oficina: FrotaOficina | null;
@@ -591,6 +610,7 @@ function DetalheLocacao({
           <SeloHelbert ativo={ehHelbert ? 'sim' : ''} />
           {oficina && <SeloOficina />}
         </div>
+        {c && <AvisoEEtiquetas frota={frota} ficha={ficha} emUso={emUso} salvo={fichaSalva} />}
         {urgentes.map((u) => (
           <div key={u.chave} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-bad/30 bg-bad-soft px-3 py-2.5 text-[13.5px]">
             <span className="flex items-start gap-2">

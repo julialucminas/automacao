@@ -155,6 +155,30 @@ export function monitorCaixa(db: Banco, repo: Repositorio, lerConta: () => Conta
     return mudou;
   }
 
+  /** cliente pelo e-mail de quem mandou: endereço cadastrado (para/cc) ou, se não achar, o mesmo domínio (sem os genéricos) */
+  const GENERICOS = /^(gmail|hotmail|outlook|live|yahoo|uol|bol|terra|icloud|msn|ig|globo|yahoo\.com)\./i;
+  function acharCliente(email: string): string | null {
+    const e = email.toLowerCase();
+    if (!e) return null;
+    const lista = repo.listarClientes().filter((c) => c.ativo);
+    const exato = lista.find((c) => [...c.para, ...c.cc].some((x) => x.toLowerCase() === e));
+    if (exato) return exato.id;
+    const dominio = e.split('@')[1] ?? '';
+    if (!dominio || GENERICOS.test(dominio)) return null;
+    const mesmos = lista.filter((c) => [...c.para, ...c.cc].some((x) => x.toLowerCase().endsWith('@' + dominio)));
+    return mesmos.length === 1 ? mesmos[0].id : null;
+  }
+  type Estrutura = { disposition?: string; dispositionParameters?: Record<string, string>; parameters?: Record<string, string>; childNodes?: Estrutura[] };
+  const contarAnexos = (n: Estrutura | undefined): number =>
+    !n ? 0 : (n.childNodes ?? []).reduce((t, c) => t + contarAnexos(c), /attachment/i.test(n.disposition ?? '') || n.dispositionParameters?.filename ? 1 : 0);
+
+  /** Guarda o cabeçalho de um e-mail de verdade (não automático) que chegou, para aparecer no financeiro. */
+  function registrarRecebido(r: { uid: number; validade: string; deNome: string; deEmail: string; assunto: string; quando: string; anexos: number }) {
+    db.prepare(
+      `INSERT OR IGNORE INTO caixa_entrada (uid, validade, de_nome, de_email, assunto, recebido_em, cliente_id, anexos) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(r.uid, r.validade, r.deNome.slice(0, 200), r.deEmail.slice(0, 200), r.assunto.slice(0, 500), r.quando, acharCliente(r.deEmail), r.anexos);
+  }
+
   let rodando = false;
 
   /** Lê as mensagens novas da caixa de entrada. */
@@ -196,11 +220,24 @@ export function monitorCaixa(db: Banco, repo: Repositorio, lerConta: () => Conta
                 // 1) cabeçalhos de todas de uma vez; 2) baixa só as que podem ser resposta automática
                 const candidatos: number[] = [];
                 if (uids.length) {
-                  for await (const m of c.fetch(uids.join(','), { envelope: true, size: true, uid: true }, { uid: true })) {
+                  for await (const m of c.fetch(uids.join(','), { envelope: true, size: true, uid: true, bodyStructure: true }, { uid: true })) {
                     const assunto = m.envelope?.subject ?? '';
                     const de = (m.envelope?.from ?? []).map((f) => `${f.name ?? ''} ${f.address ?? ''}`).join(' ');
                     const candidato = RE_REMETENTE_SISTEMA.test(de) || RE_ASSUNTO_DEVOLUCAO.test(assunto) || RE_ASSUNTO_LEITURA.test(assunto) || /lid[ao]:|read:|notifica/i.test(assunto);
                     if (candidato && (m.size ?? 0) <= 3_000_000) candidatos.push(m.uid);
+                    // e-mail de gente (resposta de cliente, pedido…): guarda para o financeiro ver
+                    const remetente = m.envelope?.from?.[0];
+                    const endereco = (remetente?.address ?? '').toLowerCase();
+                    if (!candidato && endereco && endereco !== conta.usuario.toLowerCase())
+                      registrarRecebido({
+                        uid: m.uid,
+                        validade,
+                        deNome: remetente?.name ?? '',
+                        deEmail: endereco,
+                        assunto,
+                        quando: (m.envelope?.date ? new Date(m.envelope.date) : new Date()).toISOString(),
+                        anexos: contarAnexos(m.bodyStructure as Estrutura | undefined),
+                      });
                   }
                 }
                 gravar(ESTADO_VALIDADE, validade);
@@ -238,6 +275,7 @@ export function monitorCaixa(db: Banco, repo: Repositorio, lerConta: () => Conta
 
   return {
     aplicar,
+    registrarRecebido,
     verificar,
     ultimaVerificacao: () => ler(ESTADO_ULTIMA) || null,
     /** Verifica agora e depois a cada `minutos`. */

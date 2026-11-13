@@ -66,6 +66,13 @@ export const CAMPOS_EQUIPAMENTO = {
   contratoObs: 'texto',
   /** adicionais que estão com a máquina nesta locação (prolongador de garfo, bateria, carregador…). Sai na devolução. */
   adicionais: 'texto',
+  /** o cliente avisou que vai devolver: 'sim' ou vazio, quando avisou, quando deve sair e o que foi combinado. Sai na devolução. */
+  devolucaoAvisada: 'texto',
+  devolucaoAvisadaEm: 'data',
+  devolucaoPrevista: 'data',
+  devolucaoObs: 'texto',
+  /** etiquetas livres da máquina, separadas por vírgula (ex.: "Negociando, Pagamento atrasado") */
+  etiquetas: 'texto',
   observacoes: 'texto',
   // periféricos: última troca (data e horímetro) e a próxima (por data ou por horímetro)
   ...periferico('motorPartida'),

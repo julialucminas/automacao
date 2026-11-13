@@ -16,6 +16,8 @@ import { useBuscaDaUrl } from '../lib/buscaDaUrl';
 import { Chip, Gaveta, Modal } from '../components/ui';
 import { IcBusca, IcMais, IcUpload } from '../components/Icones';
 import { ImportarQuadro } from '../components/ImportarQuadro';
+import { AvisoEEtiquetas, ChipsEtiquetas, SeloDevolucao } from '../components/AvisoDevolucao';
+import { avisoDevolucao, etiquetasEmUso, lerEtiquetas } from '../lib/etiquetas';
 
 const num = (n: number | null | undefined, casas = 0) => (n == null ? '—' : n.toLocaleString('pt-BR', { maximumFractionDigits: casas }));
 
@@ -30,6 +32,8 @@ export function Equipamentos() {
   const [aberta, setAberta] = useState<string | null>(null);
   const [importando, setImportando] = useState(false);
   const [nova, setNova] = useState(false);
+  /** '' | 'devolucao' | 'et:<etiqueta>' */
+  const [marca, setMarca] = useState('');
 
   const recarregar = useCallback(async () => {
     try {
@@ -50,8 +54,12 @@ export function Equipamentos() {
   }, [linhas]);
   const q = semAcento(busca).toUpperCase().trim();
   const qFrota = q.replace(/^(FROTA|FT)[\s-]*/, '');
+  const emUso = useMemo(() => etiquetasEmUso(fichas ?? []), [fichas]);
+  const nDevolucao = linhas.filter((l) => avisoDevolucao(l.ficha)).length;
   const lista = linhas.filter((l) => {
     if (filtro !== 'todas' && l.situacao !== filtro) return false;
+    if (marca === 'devolucao' && !avisoDevolucao(l.ficha)) return false;
+    if (marca.startsWith('et:') && !lerEtiquetas(l.ficha?.etiquetas).includes(marca.slice(3))) return false;
     if (!q) return true;
     if (l.frota === qFrota) return true;
     const alvo = semAcento(
@@ -110,6 +118,32 @@ export function Equipamentos() {
         })}
       </div>
 
+      {(nDevolucao > 0 || emUso.length > 0) && (
+        <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Avisos e etiquetas">
+          {nDevolucao > 0 && (
+            <button
+              type="button"
+              aria-pressed={marca === 'devolucao'}
+              onClick={() => setMarca(marca === 'devolucao' ? '' : 'devolucao')}
+              className={`min-h-[36px] rounded-full border px-3.5 text-[13px] font-semibold ${marca === 'devolucao' ? 'border-warn-strong bg-warn-strong text-white' : 'border-warn-line bg-warn-soft text-warn-strong'}`}
+            >
+              ↩ Devolução avisada · {nDevolucao}
+            </button>
+          )}
+          {emUso.map((e) => (
+            <button
+              key={e}
+              type="button"
+              aria-pressed={marca === `et:${e}`}
+              onClick={() => setMarca(marca === `et:${e}` ? '' : `et:${e}`)}
+              className={`min-h-[32px] rounded-full border px-3 text-[12.5px] font-semibold ${marca === `et:${e}` ? 'border-ink bg-ink text-white' : 'border-line-strong bg-white text-ink-2'}`}
+            >
+              🏷 {e} · {linhas.filter((l) => lerEtiquetas(l.ficha?.etiquetas).includes(e)).length}
+            </button>
+          ))}
+        </div>
+      )}
+
       {erro && <p className="rounded-xl bg-bad-soft p-4 text-bad-strong">{erro}</p>}
       {fichas && fichas.length === 0 && edita && (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border-2 border-brand bg-brand-soft px-4 py-3 text-[14px]">
@@ -155,6 +189,8 @@ export function Equipamentos() {
                     <span className="flex flex-wrap gap-1">
                       <Chip tom={SITUACOES[l.situacao].tom}>{SITUACOES[l.situacao].rotulo}</Chip>
                       {l.contratoVencido && <Chip tom="bad">contrato vencido</Chip>}
+                      <SeloDevolucao ficha={l.ficha} />
+                      <ChipsEtiquetas ficha={l.ficha} />
                     </span>
                   </td>
                   <td className="px-4 py-2.5">{l.cliente?.nome ?? <span className="text-ink-3">—</span>}</td>
@@ -182,6 +218,7 @@ export function Equipamentos() {
         fechar={() => setAberta(null)}
         edita={edita}
         veValores={veValores}
+        emUso={emUso}
         salvo={(e) => setFichas((l) => (l ? [...l.filter((x) => x.frota !== e.frota), e] : [e]))}
       />
       <ImportarQuadro aberto={importando} fechar={() => setImportando(false)} terminou={() => void recarregar()} />
@@ -341,7 +378,10 @@ export function Ficha({
   salvo,
   acoes,
   extra,
+  emUso = [],
 }: {
+  /** etiquetas já usadas na frota (sugestões) */
+  emUso?: string[];
   /** botões a mais no topo (ex.: Registrar visita, no painel) */
   acoes?: ReactNode;
   /** blocos a mais antes do histórico (ex.: pendências, no painel) */
@@ -371,6 +411,8 @@ export function Ficha({
           {linha.cliente && <Chip tom="neutro">{linha.cliente.nome}</Chip>}
           {linha.oficina?.observacao && <Chip tom="warn">{linha.oficina.observacao}</Chip>}
           {linha.contratoVencido && <Chip tom="bad">contrato vencido</Chip>}
+          <SeloDevolucao ficha={linha.ficha} />
+          <ChipsEtiquetas ficha={linha.ficha} />
         </span>
         <span className="flex flex-wrap gap-2">
           {!editando && acoes}
@@ -395,6 +437,9 @@ export function Ficha({
         />
       ) : (
         <>
+          {(linha.cliente || avisoDevolucao(linha.ficha) || lerEtiquetas(f.etiquetas).length > 0 || edita) && (
+            <AvisoEEtiquetas frota={linha.frota} ficha={linha.ficha} emUso={emUso} locada={!!linha.cliente} salvo={salvo} />
+          )}
           <Bloco titulo="Identificação">
             <Item rotulo="Marca">{f.marca}</Item>
             <Item rotulo="Modelo">{f.modelo}</Item>

@@ -2141,6 +2141,50 @@ export function criarApp(
     conta: envio.contaUsuario(),
     ultimaVerificacao: monitor.ultimaVerificacao(),
   }));
+  // ---------- caixa de entrada das faturas: e-mails de gente que chegaram (só o cabeçalho) ----------
+  type LinhaCaixa = { uid: number; validade: string; de_nome: string; de_email: string; assunto: string; recebido_em: string; cliente_id: string | null; cliente_nome: string | null; anexos: number; visto_em: string | null; visto_por_nome: string | null };
+  const emailRecebido = (r: LinhaCaixa) => ({
+    id: `${r.validade}:${r.uid}`,
+    deNome: r.de_nome,
+    deEmail: r.de_email,
+    assunto: r.assunto,
+    recebidoEm: r.recebido_em,
+    clienteId: r.cliente_id,
+    clienteNome: r.cliente_nome,
+    anexos: r.anexos,
+    vistoEm: r.visto_em,
+    vistoPorNome: r.visto_por_nome,
+  });
+  app.get('/api/caixa-entrada', { preHandler: exigir(1, 'envio', 'historico') }, async () => {
+    const desde = new Date(Date.now() - 45 * 86400_000).toISOString();
+    const linhas = db
+      .prepare(
+        `SELECT e.*, c.nome AS cliente_nome, u.nome AS visto_por_nome FROM caixa_entrada e
+         LEFT JOIN clientes c ON c.id = e.cliente_id LEFT JOIN usuarios u ON u.id = e.visto_por
+         WHERE e.visto_em IS NULL OR e.recebido_em >= ? ORDER BY e.recebido_em DESC LIMIT 300`,
+      )
+      .all(desde) as LinhaCaixa[];
+    return { emails: linhas.map(emailRecebido), ultimaVerificacao: monitor.ultimaVerificacao() };
+  });
+  /** dá ok (já viu/tratou) em um ou vários; `desfazer` volta para novo */
+  app.post('/api/caixa-entrada/ok', { preHandler: exigir(2, 'envio', 'historico') }, async (req) => {
+    const b = (req.body ?? {}) as { ids?: unknown; desfazer?: unknown };
+    if (!Array.isArray(b.ids) || !b.ids.length || b.ids.length > 300) throw new Invalido('Escolha os e-mails.');
+    const t = new Date().toISOString();
+    const upd = db.prepare(
+      b.desfazer === true ? 'UPDATE caixa_entrada SET visto_em = NULL, visto_por = NULL WHERE validade = ? AND uid = ?' : 'UPDATE caixa_entrada SET visto_em = ?, visto_por = ? WHERE validade = ? AND uid = ? AND visto_em IS NULL',
+    );
+    let n = 0;
+    db.transaction(() => {
+      for (const id of b.ids as unknown[]) {
+        const m = /^(.*):(\d+)$/.exec(String(id));
+        if (!m) continue;
+        n += (b.desfazer === true ? upd.run(m[1], Number(m[2])) : upd.run(t, req.usuario.id, m[1], Number(m[2]))).changes;
+      }
+    })();
+    return { alterados: n };
+  });
+
   // olha a caixa de entrada agora (devoluções e confirmações de leitura)
   app.post('/api/envios/verificar', { preHandler: exigir(2, 'historico', 'envio') }, async () => {
     const r = await monitor.verificar();

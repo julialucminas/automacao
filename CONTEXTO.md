@@ -302,3 +302,16 @@ horímetro/contrato que já estavam lá. Bloqueia se a frota já tem marca, mode
 `dados.adicionais` na locação, troca e devolução (prolongador de garfo, bateria, carregador…; sugestões em botões) e
 campo `adicionais` na ficha. A locação grava na ficha; a troca passa para a frota nova; a devolução tira da ficha
 (`adicionais` faz parte de CONTRATO_VAZIO). Aparece na mensagem do grupo e no detalhe da movimentação.
+
+## Devolução avisada e etiquetas (13/nov)
+Campos na ficha: `devolucaoAvisada` ('sim'), `devolucaoAvisadaEm`, `devolucaoPrevista`, `devolucaoObs` (fazem parte de
+CONTRATO_VAZIO: saem na devolução/locação/venda e não passam na troca) e `etiquetas` (texto, vírgulas; ficam com a
+máquina). `components/AvisoDevolucao.tsx`: SeloDevolucao, ChipsEtiquetas e AvisoEEtiquetas (na gaveta da Relação das
+locações e na ficha). Filtros "↩ Devolução avisada" na Relação e em Equipamentos (+ um por etiqueta), aviso no
+formulário de devolução e cartão "Devoluções avisadas" (receita que sai) no app do dono, aba Receita.
+
+## Caixa de entrada das faturas (13/nov)
+O monitor IMAP (a cada 5 min) agora também guarda o cabeçalho de e-mails de gente (não automáticos e não enviados por
+nós) em `caixa_entrada` (migração 32): remetente, assunto, data, nº de anexos e o cliente (e-mail cadastrado ou mesmo
+domínio, se só um cliente usa). `GET /api/caixa-entrada`, `POST /api/caixa-entrada/ok` ({ids, desfazer}). Na Central
+do financeiro: cartão "E-mails na caixa das faturas" com "Ok, vi"; os novos somam no número do menu. Não guarda o corpo.

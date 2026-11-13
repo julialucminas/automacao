@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { api } from './api';
-import type { Cliente, ClienteInput, ConfigEmail, Envio, FrotaOficina, ItemLote, Lote, Movimentacao, Proposta, Solicitacao, Usuario, AvisoOk } from './types';
+import type { EmailRecebido, Cliente, ClienteInput, ConfigEmail, Envio, FrotaOficina, ItemLote, Lote, Movimentacao, Proposta, Solicitacao, Usuario, AvisoOk } from './types';
 import { hojeIso } from './lib/calendario';
 import { encontrarCliente, statusDoItem } from './lib/pareamento';
 import { nivel, type Aba } from './lib/acesso';
@@ -57,6 +57,11 @@ type Estado = {
   envios: Envio[];
   recarregarEnvios(): Promise<void>;
 
+  /** e-mails que chegaram na caixa das faturas (para o financeiro) e os que ainda ninguém deu ok */
+  emailsCaixa: EmailRecebido[];
+  emailsNovos: EmailRecebido[];
+  recarregarCaixa(): Promise<void>;
+  okEmails(ids: string[], desfazer?: boolean): Promise<void>;
   solicitacoes: Solicitacao[];
   recarregarSolicitacoes(): Promise<void>;
   /** conclui/reabre/muda a data: atualiza na hora (lista, avisos e contadores) e confirma com o servidor */
@@ -139,6 +144,27 @@ export function EstadoProvider({ children }: { children: ReactNode }) {
     [recarregarSolicitacoes],
   );
 
+  const [emailsCaixa, setEmailsCaixa] = useState<EmailRecebido[]>([]);
+  const recarregarCaixa = useCallback(async () => {
+    const u = usuarioRef.current;
+    if (!u || !(nivel(u, 'envio') || nivel(u, 'historico'))) return;
+    try {
+      setEmailsCaixa((await api.caixaEntrada()).emails);
+    } catch {
+      /* tenta de novo no próximo ciclo */
+    }
+  }, []);
+  const okEmails = useCallback(
+    async (ids: string[], desfazer?: boolean) => {
+      const t = new Date().toISOString();
+      setEmailsCaixa((l) => l.map((e) => (ids.includes(e.id) ? { ...e, vistoEm: desfazer ? null : t, vistoPorNome: desfazer ? null : (usuarioRef.current?.nome ?? '') } : e)));
+      await api.okEmails(ids, desfazer);
+      void recarregarCaixa();
+    },
+    [recarregarCaixa],
+  );
+  const emailsNovos = useMemo(() => emailsCaixa.filter((e) => !e.vistoEm), [emailsCaixa]);
+
   const [alertasContratos, setAlertasContratos] = useState({ pendencias: 0, retornos: 0 });
   const recarregarAlertasContratos = useCallback(async () => {
     try {
@@ -167,6 +193,7 @@ export function EstadoProvider({ children }: { children: ReactNode }) {
     const tudo = () => {
       recarregarSolicitacoes();
       recarregarOperacoes();
+      void recarregarCaixa();
     };
     tudo();
     api.lerConfig().then(setConfig, () => undefined);
@@ -184,7 +211,7 @@ export function EstadoProvider({ children }: { children: ReactNode }) {
       clearInterval(ts);
       document.removeEventListener('visibilitychange', foco);
     };
-  }, [usuario, recarregarSolicitacoes, recarregarOperacoes]);
+  }, [usuario, recarregarSolicitacoes, recarregarOperacoes, recarregarCaixa]);
 
   useEffect(() => {
     api
@@ -329,6 +356,10 @@ export function EstadoProvider({ children }: { children: ReactNode }) {
       envios,
       recarregarEnvios,
 
+      emailsCaixa,
+      emailsNovos,
+      recarregarCaixa,
+      okEmails,
       solicitacoes,
       recarregarSolicitacoes,
       alterarSolicitacao,
@@ -384,6 +415,10 @@ export function EstadoProvider({ children }: { children: ReactNode }) {
       recarregarOperacoes,
       clientes,
       envios,
+      emailsCaixa,
+      emailsNovos,
+      recarregarCaixa,
+      okEmails,
       solicitacoes,
       recarregarSolicitacoes,
       alterarSolicitacao,

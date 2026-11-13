@@ -40,7 +40,7 @@ export type ItemMenu = { aba: Aba; rotulo: string; rota: string; grupo: Grupo; b
 
 /** Monta o menu do usuário: só as abas que o perfil dele vê, nos 6 grupos. */
 export function useMenu(): ItemMenu[] {
-  const { lote, clientes, envios, pendentesParaMim, solicitacoes, aguardandoAprovacao, propostas, movimentacoes, pode, aprova, usuario, config, novasMov, avisosOk, veValores, alertasContratos } = useEstado();
+  const { emailsNovos, lote, clientes, envios, pendentesParaMim, solicitacoes, aguardandoAprovacao, propostas, movimentacoes, pode, aprova, usuario, config, novasMov, avisosOk, veValores, alertasContratos } = useEstado();
   const avisosLote = lote ? lote.itens.filter((i) => temAviso(i, clientes)).length : 0;
   // e-mails com problema que ninguém deu ok
   const devolvidos = emailsComProblema(envios, avisosOk).length;
@@ -53,7 +53,7 @@ export function useMenu(): ItemMenu[] {
 
   const itens: ItemMenu[] = [];
   if (usaCentralFinanceiro(pode, aprova))
-    itens.push({ aba: 'envio', rotulo: 'Central do financeiro', rota: '/financeiro', grupo: 'financeiro', badge: aguardandoAprovacao + pendentesParaMim.length + devolvidos + novas, alerta: true });
+    itens.push({ aba: 'envio', rotulo: 'Central do financeiro', rota: '/financeiro', grupo: 'financeiro', badge: aguardandoAprovacao + pendentesParaMim.length + devolvidos + novas + emailsNovos.length, alerta: true });
   for (const a of ABAS) {
     if (a.id === 'aprovacoes' && !aprova) {
       if (propoe) itens.push({ aba: a.id, rotulo: 'Minhas alterações', rota: a.rota, grupo: 'inicio', badge: meusPendentes, alerta: false });
