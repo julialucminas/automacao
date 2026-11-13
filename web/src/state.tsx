@@ -33,6 +33,9 @@ type Estado = {
   marcarMovVistas(ids?: string[]): Promise<void>;
   /** pendências com "ok" (e-mail devolvido, contrato vencendo…) */
   avisosOk: Map<string, AvisoOk>;
+  /** contratos: pendências abertas e retornos de contato que já chegaram (contador do menu) */
+  alertasContratos: { pendencias: number; retornos: number };
+  recarregarAlertasContratos(): Promise<void>;
   darOk(chave: string, obs?: string): Promise<void>;
   desfazerOk(chave: string): Promise<void>;
   propostas: Proposta[];
@@ -124,9 +127,19 @@ export function EstadoProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const [alertasContratos, setAlertasContratos] = useState({ pendencias: 0, retornos: 0 });
+  const recarregarAlertasContratos = useCallback(async () => {
+    try {
+      setAlertasContratos(await api.alertasContratos());
+    } catch {
+      /* sem acesso à aba Contratos ou sem conexão */
+    }
+  }, []);
+
   const recarregarOperacoes = useCallback(async () => {
     try {
       const [m, p, o, a] = await Promise.all([api.listarMovimentacoes(), api.listarPropostas(), api.listarOficina(), api.listarAvisosOk().catch(() => null)]);
+      void recarregarAlertasContratos();
       setMovimentacoes(m);
       if (a) setAvisos(a);
       setPropostas(p);
@@ -134,7 +147,7 @@ export function EstadoProvider({ children }: { children: ReactNode }) {
     } catch {
       /* tenta de novo no próximo ciclo */
     }
-  }, []);
+  }, [recarregarAlertasContratos]);
 
   // novidades a cada minuto (e quando a janela volta ao foco)
   useEffect(() => {
@@ -244,6 +257,8 @@ export function EstadoProvider({ children }: { children: ReactNode }) {
         await api.marcarMovVistas(ids);
       },
       avisosOk: new Map(avisos.map((a) => [a.chave, a])),
+      alertasContratos,
+      recarregarAlertasContratos,
       async darOk(chave, obs) {
         await api.darOk(chave, obs);
         setAvisos(await api.listarAvisosOk());
@@ -335,6 +350,8 @@ export function EstadoProvider({ children }: { children: ReactNode }) {
       fecharAviso: () => setAviso(null),
     }),
     [
+      alertasContratos,
+      recarregarAlertasContratos,
       usuario,
       carregando,
       erroInicial,

@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../api';
 import { useEstado } from '../state';
-import type { ArquivoContrato, Cliente, EnvioContrato, Equipamento, IntegracaoAutentique, TipoDocContrato } from '../types';
+import type { ArquivoContrato, Cliente, EnvioContrato, Equipamento, IntegracaoAutentique, RegistroContrato, TipoDocContrato } from '../types';
 import { ROTULO_DOC } from '../components/PastaCliente';
 import { HistoricoPrecos } from '../components/HistoricoPrecos';
+import { doContrato, ItemPendencia, PainelPendencias, PainelReajustes, PainelRenovacoes, TratativasContrato, type Acompanhamento } from '../components/AcompanhamentoContratos';
 import { AcompanharAssinatura, EnviarParaAssinar } from '../components/AssinaturaContrato';
 import { lerBase64 } from '../components/NfeAnexo';
 import { dataBr, hojeIso } from '../lib/calendario';
@@ -28,7 +29,11 @@ const STATUS: Record<StatusContrato, { rotulo: string; tom: Tom }> = {
 type Edicao = { chave?: string; cliente: Cliente; frotas: string[]; antes: string[]; numero: string; inicio: string; vencimento: string; obs: string; renovacao: boolean; assinado: boolean; assinadoEm: string };
 
 export function Contratos() {
-  const { clientes, movimentacoes, pode, veValores } = useEstado();
+  const { clientes, movimentacoes, pode, veValores, recarregarAlertasContratos } = useEstado();
+  const [params, setParams] = useSearchParams();
+  const aba = (['contratos', 'renovacoes', 'reajustes', 'pendencias'].includes(params.get('aba') ?? '') ? params.get('aba') : 'contratos') as 'contratos' | 'renovacoes' | 'reajustes' | 'pendencias';
+  const [acomp, setAcomp] = useState<Acompanhamento>({ registros: [], status: [] });
+  const [tratativas, setTratativas] = useState<{ c: Contrato; assunto: RegistroContrato['assunto'] } | null>(null);
   const edita = pode('contratos', 2);
   // valor da locação: quem vê valores ou confere frotas (o servidor manda 0 para os outros)
   const veValor = veValores || pode('conferencia');
@@ -43,7 +48,12 @@ export function Contratos() {
       api.listarArquivosContrato().then(setArquivos, () => undefined),
       api.listarEnviosContrato().then(setEnvios, () => undefined),
       api.lerAutentique().then(setAutentique, () => undefined),
+      api.acompanhamentoContratos().then(setAcomp, () => undefined),
     ]);
+  const mudouAcomp = () => {
+    void api.acompanhamentoContratos().then(setAcomp, () => undefined);
+    void recarregarAlertasContratos();
+  };
   // envio na Autentique de um contrato: o em aberto (ou o último recusado) com o mesmo cliente e alguma das máquinas
   const envioDe = (c: Contrato) => {
     const meus = envios.filter((e) => e.clienteId === c.cliente.id && e.frotas.some((f) => c.maquinas.some((m) => m.numero === f)));
@@ -122,6 +132,34 @@ export function Contratos() {
         </label>
       </div>
 
+      <nav aria-label="Áreas dos contratos" className="flex flex-wrap gap-1 border-b border-line">
+        {(
+          [
+            ['contratos', 'Contratos', contratos.length, false],
+            ['renovacoes', 'Renovações', contratos.filter((c) => c.diasParaVencer <= 120).length, false],
+            ['reajustes', 'Reajustes', contratos.filter((c) => c.reajusteAtrasado).length, false],
+            ['pendencias', 'Pendências', acomp.registros.filter((r) => r.tipo === 'pendencia' && !r.resolvidaEm).length, true],
+          ] as const
+        ).map(([id, rot, n, alerta]) => (
+          <button
+            key={id}
+            type="button"
+            aria-current={aba === id ? 'page' : undefined}
+            onClick={() => setParams(id === 'contratos' ? {} : { aba: id })}
+            className={`-mb-px flex items-center gap-2 border-b-2 px-3.5 py-2 text-[14px] font-semibold ${aba === id ? 'border-ink text-ink' : 'border-transparent text-ink-3 hover:text-ink'}`}
+          >
+            {rot}
+            {n > 0 && <span className={`rounded-full px-2 py-0.5 text-[11.5px] font-bold ${alerta ? 'bg-bad text-white' : 'bg-line-soft text-ink-2'}`}>{n}</span>}
+          </button>
+        ))}
+      </nav>
+
+      {aba === 'renovacoes' && <PainelRenovacoes contratos={contratos.filter((c) => achou(c.cliente, c.maquinas, c.numero))} a={acomp} abrir={(c) => setTratativas({ c, assunto: 'renovacao' })} mudou={mudouAcomp} />}
+      {aba === 'reajustes' && <PainelReajustes contratos={contratos.filter((c) => achou(c.cliente, c.maquinas, c.numero))} a={acomp} abrir={(c) => setTratativas({ c, assunto: 'reajuste' })} mudou={mudouAcomp} veValor={veValor} />}
+      {aba === 'pendencias' && <PainelPendencias contratos={contratos} a={acomp} abrir={(c) => setTratativas({ c, assunto: 'geral' })} mudou={mudouAcomp} />}
+
+      {aba === 'contratos' && (
+      <>
       <section aria-label="Resumo dos contratos" className="grid grid-cols-3 gap-2 xl:grid-cols-6">
         {cartao('Vencidos', porStatus('vencido').length, soma(porStatus('vencido')), 'vencido', porStatus('vencido').length ? 'text-bad' : 'text-ink-3')}
         {cartao(`Vencem em ${DIAS_AVISO} dias`, porStatus('vencendo').length, soma(porStatus('vencendo')), 'vencendo', porStatus('vencendo').length ? 'text-warn-strong' : 'text-ink-3')}
@@ -158,7 +196,14 @@ export function Contratos() {
                         <span className="flex min-w-0 items-center gap-2">
                           <span aria-hidden className={`text-ink-3 transition-transform ${aberto ? 'rotate-90' : ''}`}>›</span>
                           <span className="min-w-0">
-                            <b className="block truncate">{c.cliente.nome}</b>
+                            <b className="flex items-center gap-1.5 truncate">
+                              {c.cliente.nome}
+                              {doContrato(acomp, c.chave).pendencias.length > 0 && (
+                                <span className="rounded-full bg-bad px-1.5 py-0.5 text-[11px] font-bold text-white" title="Pendências abertas">
+                                  ⚠ {doContrato(acomp, c.chave).pendencias.length}
+                                </span>
+                              )}
+                            </b>
                             <span className="block truncate font-mono text-[12px] text-ink-3">{c.numero || 'sem número'}</span>
                           </span>
                         </span>
@@ -206,6 +251,13 @@ export function Contratos() {
                           )}
                           {c.datasDiferentes && <p className="mt-2 text-[12.5px] text-warn-strong">As máquinas deste contrato estão com vencimentos diferentes nas fichas. Use Editar para acertar.</p>}
                           {c.obs && <p className="mt-2 text-[13px] text-ink-2">{c.obs}</p>}
+                          {doContrato(acomp, c.chave).pendencias.length > 0 && (
+                            <div className="mt-2.5 flex flex-col gap-1.5">
+                              {doContrato(acomp, c.chave).pendencias.map((r) => (
+                                <ItemPendencia key={r.id} r={r} mudou={mudouAcomp} />
+                              ))}
+                            </div>
+                          )}
                           <ArquivosDoContrato c={c} arquivos={arquivos} edita={edita} anexado={() => void recarregar()} />
                           {veValor && (
                             <details className="mt-2.5 rounded-[10px] border border-line bg-white px-3 py-2">
@@ -236,6 +288,9 @@ export function Contratos() {
                               )}
                               <button type="button" className="btn-secondary btn-sm" onClick={() => editar(c, false)}>
                                 Editar
+                              </button>
+                              <button type="button" className="btn-secondary btn-sm" onClick={() => setTratativas({ c, assunto: 'geral' })}>
+                                Tratativas e pendências
                               </button>
                               {pode('movimentacoes', 2) && (
                                 <Link className="btn-secondary btn-sm" to={`/movimentacoes?nova=reajuste&cliente=${c.cliente.id}`}>
@@ -288,6 +343,10 @@ export function Contratos() {
         </p>
       )}
 
+      </>
+      )}
+
+      {tratativas && <TratativasContrato c={tratativas.c} a={acomp} inicial={tratativas.assunto} fechar={() => setTratativas(null)} mudou={mudouAcomp} />}
       {assinar && autentique && (
         <EnviarParaAssinar cliente={assinar.cliente} frotas={assinar.maquinas.map((m) => m.numero)} cfg={autentique} fechar={() => setAssinar(null)} enviado={() => void recarregar()} />
       )}

@@ -1189,6 +1189,163 @@ export function criarApp(
     return reply.send(createReadStream(caminho));
   });
 
+  // ---------- acompanhamento dos contratos: tratativas (contatos), pendências e etapas ----------
+  // o contrato é identificado pela "chave" que a tela monta (cliente + número, ou cliente + vencimento sem número)
+  const ASSUNTOS = ['renovacao', 'reajuste', 'geral'];
+  const TIPOS_REG = ['contato', 'pendencia', 'etapa'];
+  const ETAPAS_RENOVACAO = ['a_contatar', 'em_conversa', 'minuta_enviada', 'aguardando_assinatura', 'renovado', 'nao_renova'];
+  const ETAPAS_REAJUSTE = ['a_negociar', 'em_conversa', 'proposta_enviada', 'aceito', 'recusado', 'aplicado'];
+  const NOME_ETAPA: Record<string, string> = {
+    '': 'sem etapa',
+    a_contatar: 'a contatar',
+    em_conversa: 'em conversa',
+    minuta_enviada: 'minuta enviada',
+    aguardando_assinatura: 'aguardando assinatura',
+    renovado: 'renovado',
+    nao_renova: 'não vai renovar',
+    a_negociar: 'a negociar',
+    proposta_enviada: 'proposta enviada',
+    aceito: 'aceito (falta aplicar)',
+    recusado: 'recusado',
+    aplicado: 'aplicado',
+  };
+  const SEL_REG = `SELECT r.*, COALESCE(u.nome, '') AS por, COALESCE(v.nome, '') AS resolvida_por_nome FROM contrato_registros r
+    LEFT JOIN usuarios u ON u.id = r.usuario_id LEFT JOIN usuarios v ON v.id = r.resolvida_por`;
+  const lerReg = (r: Record<string, unknown>) => ({
+    id: r.id as string,
+    clienteId: r.cliente_id as string,
+    chave: r.chave as string,
+    assunto: r.assunto as string,
+    tipo: r.tipo as string,
+    texto: r.texto as string,
+    canal: r.canal as string,
+    contato: r.contato as string,
+    proximaData: (r.proxima_data as string) ?? null,
+    criadoEm: r.criado_em as string,
+    por: r.por as string,
+    resolvidaEm: (r.resolvida_em as string) ?? null,
+    resolvidaPor: (r.resolvida_por_nome as string) || null,
+    resolucao: r.resolucao as string,
+  });
+  const lerStatus = (r: Record<string, unknown>) => ({
+    chave: r.chave as string,
+    clienteId: r.cliente_id as string,
+    renovacao: r.renovacao as string,
+    reajuste: r.reajuste as string,
+    reajustePercentual: (r.reajuste_percentual as number) ?? null,
+    atualizadoEm: r.atualizado_em as string,
+  });
+  const chaveValida = (v: unknown) => {
+    const k = typeof v === 'string' ? v.trim() : '';
+    if (!k || k.length > 200) throw new Invalido('Contrato inválido.');
+    return k;
+  };
+  app.get('/api/contratos/acompanhamento', { preHandler: exigir(1, 'contratos') }, async () => ({
+    registros: (db.prepare(`${SEL_REG} ORDER BY r.criado_em DESC`).all() as Record<string, unknown>[]).map(lerReg),
+    status: (db.prepare('SELECT * FROM contrato_status').all() as Record<string, unknown>[]).map(lerStatus),
+  }));
+  /** para o contador do menu: pendências abertas e retornos marcados para hoje ou antes */
+  app.get('/api/contratos/alertas', { preHandler: exigir(1, 'contratos') }, async () => {
+    const pendencias = (db.prepare("SELECT COUNT(*) AS n FROM contrato_registros WHERE tipo = 'pendencia' AND resolvida_em IS NULL").get() as { n: number }).n;
+    // retorno vencido: o último contato de cada contrato/assunto com próxima data já chegada
+    const retornos = (
+      db
+        .prepare(
+          `SELECT COUNT(*) AS n FROM contrato_registros r WHERE r.tipo = 'contato' AND r.proxima_data IS NOT NULL AND r.proxima_data <= ?
+           AND r.criado_em = (SELECT MAX(x.criado_em) FROM contrato_registros x WHERE x.chave = r.chave AND x.assunto = r.assunto AND x.tipo = 'contato')`,
+        )
+        .get(hojeBr()) as { n: number }
+    ).n;
+    return { pendencias, retornos };
+  });
+  app.post('/api/contratos/registros', { preHandler: exigir(2, 'contratos') }, async (req, reply) => {
+    const b = (req.body ?? {}) as Record<string, unknown>;
+    const cliente = repo.buscarCliente(typeof b.clienteId === 'string' ? b.clienteId : '');
+    const chave = chaveValida(b.chave);
+    const assunto = ASSUNTOS.includes(b.assunto as string) ? (b.assunto as string) : 'geral';
+    const tipo = TIPOS_REG.includes(b.tipo as string) && b.tipo !== 'etapa' ? (b.tipo as string) : 'contato';
+    const t = texto(b.texto, tipo === 'pendencia' ? 'pendência' : 'o que foi conversado', 2000);
+    if (!t) throw new Invalido(tipo === 'pendencia' ? 'Escreva a pendência.' : 'Escreva o que foi conversado.');
+    const proxima = lerDataIso(b.proximaData, 'Próximo contato') ?? null;
+    const id = randomUUID();
+    db.prepare('INSERT INTO contrato_registros (id, cliente_id, chave, assunto, tipo, texto, canal, contato, proxima_data, criado_em, usuario_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(
+      id,
+      cliente.id,
+      chave,
+      assunto,
+      tipo,
+      t,
+      texto(b.canal, 'canal', 40),
+      texto(b.contato, 'com quem', 120),
+      proxima,
+      new Date().toISOString(),
+      req.usuario.id,
+    );
+    repo.registrarLog(cliente.id, req.usuario.id, `${tipo === 'pendencia' ? 'anotou pendência' : 'registrou contato'} no contrato de ${cliente.nome}: ${t}`, null, null, 'cliente');
+    return reply.code(201).send(lerReg(db.prepare(`${SEL_REG} WHERE r.id = ?`).get(id) as Record<string, unknown>));
+  });
+  app.post<{ Params: { id: string } }>('/api/contratos/registros/:id/resolver', { preHandler: exigir(2, 'contratos') }, async (req) => {
+    const r = db.prepare('SELECT * FROM contrato_registros WHERE id = ?').get(req.params.id) as Record<string, unknown> | undefined;
+    if (!r || r.tipo !== 'pendencia') throw new NaoEncontrado('Pendência não encontrada.');
+    const b = (req.body ?? {}) as Record<string, unknown>;
+    const desfazer = b.desfazer === true;
+    db.prepare('UPDATE contrato_registros SET resolvida_em = ?, resolvida_por = ?, resolucao = ? WHERE id = ?').run(
+      desfazer ? null : new Date().toISOString(),
+      desfazer ? null : req.usuario.id,
+      desfazer ? '' : texto(b.resolucao, 'como resolveu', 500),
+      r.id,
+    );
+    repo.registrarLog(r.cliente_id as string, req.usuario.id, `${desfazer ? 'reabriu' : 'resolveu'} a pendência do contrato: ${r.texto}`, null, null, 'cliente');
+    return lerReg(db.prepare(`${SEL_REG} WHERE r.id = ?`).get(r.id) as Record<string, unknown>);
+  });
+  app.put('/api/contratos/status', { preHandler: exigir(2, 'contratos') }, async (req) => {
+    const b = (req.body ?? {}) as Record<string, unknown>;
+    const cliente = repo.buscarCliente(typeof b.clienteId === 'string' ? b.clienteId : '');
+    const chave = chaveValida(b.chave);
+    const antes = db.prepare('SELECT * FROM contrato_status WHERE chave = ?').get(chave) as Record<string, unknown> | undefined;
+    const atual = antes ? lerStatus(antes) : { renovacao: '', reajuste: '', reajustePercentual: null as number | null };
+    const novo = { ...atual };
+    const mudancas: string[] = [];
+    if (b.renovacao !== undefined) {
+      if (b.renovacao !== '' && !ETAPAS_RENOVACAO.includes(b.renovacao as string)) throw new Invalido('Etapa da renovação inválida.');
+      if (b.renovacao !== atual.renovacao) mudancas.push(`renovação → ${NOME_ETAPA[b.renovacao as string]}`);
+      novo.renovacao = b.renovacao as string;
+    }
+    if (b.reajuste !== undefined) {
+      if (b.reajuste !== '' && !ETAPAS_REAJUSTE.includes(b.reajuste as string)) throw new Invalido('Etapa do reajuste inválida.');
+      if (b.reajuste !== atual.reajuste) mudancas.push(`reajuste → ${NOME_ETAPA[b.reajuste as string]}`);
+      novo.reajuste = b.reajuste as string;
+    }
+    if (b.reajustePercentual !== undefined) {
+      const p = b.reajustePercentual === null || b.reajustePercentual === '' ? null : Number(b.reajustePercentual);
+      if (p !== null && !(Number.isFinite(p) && p > -50 && p < 100)) throw new Invalido('Percentual inválido.');
+      if (p !== atual.reajustePercentual) mudancas.push(`percentual proposto: ${p === null ? '—' : `${String(p).replace('.', ',')}%`}`);
+      novo.reajustePercentual = p;
+    }
+    db.transaction(() => {
+      db.prepare(
+        `INSERT INTO contrato_status (chave, cliente_id, renovacao, reajuste, reajuste_percentual, atualizado_em, usuario_id) VALUES (?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(chave) DO UPDATE SET renovacao = excluded.renovacao, reajuste = excluded.reajuste, reajuste_percentual = excluded.reajuste_percentual,
+           atualizado_em = excluded.atualizado_em, usuario_id = excluded.usuario_id`,
+      ).run(chave, cliente.id, novo.renovacao, novo.reajuste, novo.reajustePercentual, new Date().toISOString(), req.usuario.id);
+      // cada mudança de etapa fica na linha do tempo do contrato
+      if (mudancas.length) {
+        const assunto = b.reajuste !== undefined || b.reajustePercentual !== undefined ? 'reajuste' : 'renovacao';
+        db.prepare("INSERT INTO contrato_registros (id, cliente_id, chave, assunto, tipo, texto, criado_em, usuario_id) VALUES (?, ?, ?, ?, 'etapa', ?, ?, ?)").run(
+          randomUUID(),
+          cliente.id,
+          chave,
+          assunto,
+          mudancas.join(' · '),
+          new Date().toISOString(),
+          req.usuario.id,
+        );
+        repo.registrarLog(cliente.id, req.usuario.id, `contrato de ${cliente.nome}: ${mudancas.join(' · ')}`, null, null, 'cliente');
+      }
+    })();
+    return lerStatus(db.prepare('SELECT * FROM contrato_status WHERE chave = ?').get(chave) as Record<string, unknown>);
+  });
+
   // ---------- pasta do cliente: tudo o que o sistema guarda dele, num lugar só ----------
   const pastaDocsCliente = juntarCaminho(opcoes.pastaDados ?? '/dados', 'clientes');
   const TIPOS_DOC: Record<string, { ext: string; mime: string }> = {

@@ -220,3 +220,25 @@ describe('pasta do cliente', () => {
     expect((await a('GET', `/api/clientes/${c.id}/pasta`)).json().documentos).toEqual([]);
   });
 });
+
+describe('acompanhamento dos contratos', () => {
+  it('registra contato com retorno, pendência, resolve, muda etapa (vai para a linha do tempo) e conta alertas', async () => {
+    const a = como('angelise');
+    const c = (await a('POST', '/api/clientes', { nome: 'Omega', para: ['a@o.com.br'], cc: [], apelidos: [], cnpj: '', observacoes: '' })).json();
+    const chave = `${c.id}|n:OM-1`;
+    expect((await a('POST', '/api/contratos/registros', { clienteId: c.id, chave, tipo: 'contato', texto: '' })).statusCode).toBe(400);
+    await a('POST', '/api/contratos/registros', { clienteId: c.id, chave, assunto: 'reajuste', tipo: 'contato', texto: 'Liguei, pediu proposta por e-mail', canal: 'telefone', contato: 'Carla', proximaData: '2026-01-01' });
+    const pend = (await a('POST', '/api/contratos/registros', { clienteId: c.id, chave, tipo: 'pendencia', texto: 'Falta a via assinada do aditivo' })).json();
+    expect((await a('GET', '/api/contratos/alertas')).json()).toEqual({ pendencias: 1, retornos: 1 });
+    await a('POST', `/api/contratos/registros/${pend.id}/resolver`, { resolucao: 'chegou pelo correio' });
+    expect((await a('GET', '/api/contratos/alertas')).json().pendencias).toBe(0);
+    expect((await a('PUT', '/api/contratos/status', { clienteId: c.id, chave, reajuste: 'xyz' })).statusCode).toBe(400);
+    const st = await a('PUT', '/api/contratos/status', { clienteId: c.id, chave, reajuste: 'proposta_enviada', reajustePercentual: 4.8 });
+    expect(st.json()).toMatchObject({ reajuste: 'proposta_enviada', reajustePercentual: 4.8, renovacao: '' });
+    const ac = (await a('GET', '/api/contratos/acompanhamento')).json();
+    expect(ac.registros.map((r: { tipo: string }) => r.tipo).sort()).toEqual(['contato', 'etapa', 'pendencia']);
+    expect(ac.registros.find((r: { tipo: string }) => r.tipo === 'pendencia')).toMatchObject({ resolucao: 'chegou pelo correio', resolvidaPor: 'Angelise' });
+    expect(ac.registros.find((r: { tipo: string }) => r.tipo === 'contato')).toMatchObject({ canal: 'telefone', contato: 'Carla', por: 'Angelise', assunto: 'reajuste' });
+    expect((await como('tecnico')('POST', '/api/contratos/registros', { clienteId: c.id, chave, texto: 'x' })).statusCode).toBe(403);
+  });
+});

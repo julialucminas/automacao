@@ -509,6 +509,33 @@ const MIGRACOES = [
      usuario_id INTEGER
    );
    CREATE INDEX cliente_documentos_cliente ON cliente_documentos (cliente_id);`,
+  // 31: acompanhamento dos contratos: contatos/tratativas, pendências e a etapa da renovação e do reajuste
+  `CREATE TABLE contrato_registros (
+     id TEXT PRIMARY KEY,
+     cliente_id TEXT NOT NULL,
+     chave TEXT NOT NULL,
+     assunto TEXT NOT NULL,
+     tipo TEXT NOT NULL,
+     texto TEXT NOT NULL,
+     canal TEXT NOT NULL DEFAULT '',
+     contato TEXT NOT NULL DEFAULT '',
+     proxima_data TEXT,
+     criado_em TEXT NOT NULL,
+     usuario_id INTEGER,
+     resolvida_em TEXT,
+     resolvida_por INTEGER,
+     resolucao TEXT NOT NULL DEFAULT ''
+   );
+   CREATE INDEX contrato_registros_chave ON contrato_registros (chave);
+   CREATE TABLE contrato_status (
+     chave TEXT PRIMARY KEY,
+     cliente_id TEXT NOT NULL,
+     renovacao TEXT NOT NULL DEFAULT '',
+     reajuste TEXT NOT NULL DEFAULT '',
+     reajuste_percentual REAL,
+     atualizado_em TEXT NOT NULL,
+     usuario_id INTEGER
+   );`,
 ];
 
 export function abrirBanco(caminho: string) {

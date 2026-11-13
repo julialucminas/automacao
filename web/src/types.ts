@@ -538,3 +538,24 @@ export type ItemEntrega = { item: string; estado: 'ok' | 'problema' | 'nao_tem' 
 export type ChecklistEntrega = { itens: ItemEntrega[]; horimetro: number | null; observacoes: string; por: string; em: string };
 export type VideoEntrega = { nome: string; ext: string; tamanho: number; tipo: string; por: string; em: string };
 export type Entrega = { movId: string; frota: string; checklist: ChecklistEntrega | null; video: VideoEntrega | null; atualizadoEm: string };
+
+/** Acompanhamento do contrato: contato/tratativa, pendência ou mudança de etapa. `chave` identifica o contrato. */
+export type RegistroContrato = {
+  id: string;
+  clienteId: string;
+  chave: string;
+  assunto: 'renovacao' | 'reajuste' | 'geral';
+  tipo: 'contato' | 'pendencia' | 'etapa';
+  texto: string;
+  canal: string;
+  contato: string;
+  proximaData: string | null;
+  criadoEm: string;
+  por: string;
+  resolvidaEm: string | null;
+  resolvidaPor: string | null;
+  resolucao: string;
+};
+export type EtapaRenovacao = '' | 'a_contatar' | 'em_conversa' | 'minuta_enviada' | 'aguardando_assinatura' | 'renovado' | 'nao_renova';
+export type EtapaReajuste = '' | 'a_negociar' | 'em_conversa' | 'proposta_enviada' | 'aceito' | 'recusado' | 'aplicado';
+export type StatusContrato = { chave: string; clienteId: string; renovacao: EtapaRenovacao; reajuste: EtapaReajuste; reajustePercentual: number | null; atualizadoEm: string };

@@ -274,3 +274,13 @@ servido com Range (iPhone exige). Mostrado no cartão da movimentação e na fic
   entregas, documentos avulsos (`cliente_documentos`, PDF/JPG/PNG/Word/Excel até 15 MB, em `<pastaDados>/clientes/`)
   e faturas/boletos (PDFs guardados em `<pastaDados>/envios/<id>/`, servidos por `/api/envios/:id/arquivos/:nome`)
   — faturas só para os perfis admin e financeiro.
+
+## Contratos: Renovações, Reajustes e Pendências (13/nov)
+A aba Contratos tem 4 áreas (`?aba=renovacoes|reajustes|pendencias`). Acompanhamento em `contrato_registros`
+(contato com canal/com quem/retorno, pendência com resolver/reabrir, e cada mudança de etapa) e `contrato_status`
+(etapa da renovação e do reajuste, % proposto) — migração 31. O contrato é identificado pela chave da tela
+(`clienteId|n:NÚMERO` ou `clienteId|v:vencimento`): se o número mudar, o histórico fica no número antigo.
+Renovações: vencendo em 120 dias ou em andamento. Reajustes: próximos 60 dias, atrasados ou em negociação, com %
+proposto e valor novo; "Aplicar" leva ao reajuste em Movimentações quando a etapa é "aceito". Pendências abertas ficam
+em vermelho na lista, no contrato e na gaveta; o menu "Contratos" conta pendências + retornos vencidos
+(`GET /api/contratos/alertas`).

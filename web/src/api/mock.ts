@@ -703,6 +703,21 @@ export const mockApi: Api = {
   async listarArquivosContrato() {
     return [];
   },
+  async acompanhamentoContratos() {
+    return { registros: [], status: [] };
+  },
+  async alertasContratos() {
+    return { pendencias: 0, retornos: 0 };
+  },
+  async registrarNoContrato() {
+    throw new Error('Indisponível na demonstração.');
+  },
+  async resolverPendenciaContrato() {
+    throw new Error('Indisponível na demonstração.');
+  },
+  async mudarStatusContrato() {
+    throw new Error('Indisponível na demonstração.');
+  },
   async pastaCliente(id: string) {
     return { clienteId: id, contratos: [], documentos: [], nfe: [], entregas: [], faturas: null };
   },

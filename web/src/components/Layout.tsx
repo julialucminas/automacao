@@ -40,7 +40,7 @@ export type ItemMenu = { aba: Aba; rotulo: string; rota: string; grupo: Grupo; b
 
 /** Monta o menu do usuário: só as abas que o perfil dele vê, nos 6 grupos. */
 export function useMenu(): ItemMenu[] {
-  const { lote, clientes, envios, pendentesParaMim, solicitacoes, aguardandoAprovacao, propostas, movimentacoes, pode, aprova, usuario, config, novasMov, avisosOk, veValores } = useEstado();
+  const { lote, clientes, envios, pendentesParaMim, solicitacoes, aguardandoAprovacao, propostas, movimentacoes, pode, aprova, usuario, config, novasMov, avisosOk, veValores, alertasContratos } = useEstado();
   const avisosLote = lote ? lote.itens.filter((i) => temAviso(i, clientes)).length : 0;
   // e-mails com problema que ninguém deu ok
   const devolvidos = emailsComProblema(envios, avisosOk).length;
@@ -67,6 +67,8 @@ export function useMenu(): ItemMenu[] {
       aprovacoes: [aguardandoAprovacao, true],
       historico: [devolvidos, true],
       movimentacoes: [novas, true],
+      // pendências abertas + contatos com retorno marcado para hoje ou antes
+      contratos: [alertasContratos.pendencias + alertasContratos.retornos, true],
       clientes: [clientes.filter((c) => c.ativo).length, false],
     };
     const [n, alerta] = badge[a.id] ?? [0, false];

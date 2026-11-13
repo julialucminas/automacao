@@ -24,6 +24,10 @@ import type {
   ArquivoContrato,
   DocumentoCliente,
   PastaCliente,
+  RegistroContrato,
+  StatusContrato,
+  EtapaRenovacao,
+  EtapaReajuste,
   TipoDocContrato,
   EnvioContrato,
   FotoEquipamento,
@@ -134,6 +138,11 @@ export interface Api {
   /** anexa o contrato assinado (PDF/JPG/PNG em base64) às máquinas; já marca como assinado */
   anexarContrato(d: { clienteId: string; frotas: string[]; arquivo: string; nome: string; tipo?: TipoDocContrato; descricao?: string; movId?: string }): Promise<ArquivoContrato>;
   pastaCliente(clienteId: string): Promise<PastaCliente>;
+  acompanhamentoContratos(): Promise<{ registros: RegistroContrato[]; status: StatusContrato[] }>;
+  alertasContratos(): Promise<{ pendencias: number; retornos: number }>;
+  registrarNoContrato(d: { clienteId: string; chave: string; assunto: RegistroContrato['assunto']; tipo: 'contato' | 'pendencia'; texto: string; canal?: string; contato?: string; proximaData?: string | null }): Promise<RegistroContrato>;
+  resolverPendenciaContrato(id: string, resolucao: string, desfazer?: boolean): Promise<RegistroContrato>;
+  mudarStatusContrato(d: { clienteId: string; chave: string; renovacao?: EtapaRenovacao; reajuste?: EtapaReajuste; reajustePercentual?: number | null }): Promise<StatusContrato>;
   enviarDocumentoCliente(clienteId: string, arquivo: string, nome: string, descricao: string): Promise<DocumentoCliente>;
   apagarDocumentoCliente(id: string): Promise<{ ok: boolean }>;
   /** fatura enviada por fora do sistema: fica no histórico e conta como faturada */
