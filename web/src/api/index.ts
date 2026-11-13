@@ -22,6 +22,8 @@ import type {
   ItemLog,
   FotoMensal,
   ArquivoContrato,
+  EnvioContrato,
+  IntegracaoAutentique,
   Movimentacao,
   NovaMovimentacao,
   NovaSolicitacao,
@@ -97,6 +99,24 @@ export interface Api {
   /** contrato do cliente: grava número, início, vencimento e obs nas fichas das máquinas marcadas */
   salvarContrato(d: { clienteId: string; frotas: string[]; tirar: string[]; numero: string; inicio: string | null; vencimento: string; obs: string; renovacao?: boolean; assinado?: boolean; assinadoEm?: string | null }): Promise<{ ok: boolean }>;
   listarArquivosContrato(): Promise<ArquivoContrato[]>;
+  lerAutentique(): Promise<IntegracaoAutentique>;
+  salvarAutentique(d: Partial<Omit<IntegracaoAutentique, 'configurado' | 'final' | 'conta'>> & { token?: string; apagarToken?: boolean }): Promise<IntegracaoAutentique>;
+  testarAutentique(): Promise<IntegracaoAutentique>;
+  mandarParaAssinar(d: {
+    clienteId: string;
+    frotas: string[];
+    arquivo: string;
+    nome: string;
+    cliente: { nome: string; email: string };
+    testemunhaCliente: { nome: string; email: string };
+    testemunhaLucminas: { nome: string; email: string };
+    mensagem: string;
+  }): Promise<EnvioContrato>;
+  listarEnviosContrato(): Promise<EnvioContrato[]>;
+  atualizarEnviosContrato(): Promise<EnvioContrato[]>;
+  linkAssinatura(envioId: string, publicId: string): Promise<{ link: string }>;
+  reenviarAssinatura(envioId: string): Promise<{ ok: boolean; reenviados: number }>;
+  cancelarAssinatura(envioId: string): Promise<EnvioContrato>;
   /** anexa o contrato assinado (PDF/JPG/PNG em base64) às máquinas; já marca como assinado */
   anexarContrato(d: { clienteId: string; frotas: string[]; arquivo: string; nome: string }): Promise<ArquivoContrato>;
   /** fatura enviada por fora do sistema: fica no histórico e conta como faturada */

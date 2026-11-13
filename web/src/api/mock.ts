@@ -655,6 +655,33 @@ export const mockApi: Api = {
   async anexarNfe() {
     throw new Error('Indisponível na demonstração.');
   },
+  async lerAutentique() {
+    return { configurado: false, final: '', teste: true, conta: '', lucminasNome: '', lucminasEmail: '', testemunhaNome: '', testemunhaEmail: '' };
+  },
+  async salvarAutentique() {
+    throw new Error('Indisponível na demonstração.');
+  },
+  async testarAutentique() {
+    throw new Error('Indisponível na demonstração.');
+  },
+  async mandarParaAssinar() {
+    throw new Error('Indisponível na demonstração.');
+  },
+  async listarEnviosContrato() {
+    return [];
+  },
+  async atualizarEnviosContrato() {
+    return [];
+  },
+  async linkAssinatura() {
+    throw new Error('Indisponível na demonstração.');
+  },
+  async reenviarAssinatura() {
+    throw new Error('Indisponível na demonstração.');
+  },
+  async cancelarAssinatura() {
+    throw new Error('Indisponível na demonstração.');
+  },
   async listarArquivosContrato() {
     return [];
   },

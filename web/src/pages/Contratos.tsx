@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api';
 import { useEstado } from '../state';
-import type { ArquivoContrato, Cliente, Equipamento } from '../types';
+import type { ArquivoContrato, Cliente, EnvioContrato, Equipamento, IntegracaoAutentique } from '../types';
+import { AcompanharAssinatura, EnviarParaAssinar } from '../components/AssinaturaContrato';
 import { lerBase64 } from '../components/NfeAnexo';
 import { dataBr, hojeIso } from '../lib/calendario';
 import { formatarReais } from '../lib/dinheiro';
@@ -28,7 +29,21 @@ export function Contratos() {
   const veValor = veValores || pode('conferencia');
   const [fichas, setFichas] = useState<Equipamento[]>([]);
   const [arquivos, setArquivos] = useState<ArquivoContrato[]>([]);
-  const recarregar = () => Promise.all([api.listarEquipamentos().then(setFichas, () => undefined), api.listarArquivosContrato().then(setArquivos, () => undefined)]);
+  const [envios, setEnvios] = useState<EnvioContrato[]>([]);
+  const [autentique, setAutentique] = useState<IntegracaoAutentique | null>(null);
+  const [assinar, setAssinar] = useState<Contrato | null>(null);
+  const recarregar = () =>
+    Promise.all([
+      api.listarEquipamentos().then(setFichas, () => undefined),
+      api.listarArquivosContrato().then(setArquivos, () => undefined),
+      api.listarEnviosContrato().then(setEnvios, () => undefined),
+      api.lerAutentique().then(setAutentique, () => undefined),
+    ]);
+  // envio na Autentique de um contrato: o em aberto (ou o último recusado) com o mesmo cliente e alguma das máquinas
+  const envioDe = (c: Contrato) => {
+    const meus = envios.filter((e) => e.clienteId === c.cliente.id && e.frotas.some((f) => c.maquinas.some((m) => m.numero === f)));
+    return meus.find((e) => e.status === 'aguardando') ?? (c.assinado ? undefined : meus.find((e) => e.status === 'recusado'));
+  };
   useEffect(() => {
     void recarregar();
   }, []);
@@ -149,11 +164,23 @@ export function Contratos() {
               {c.datasDiferentes && <p className="mt-2 text-[12.5px] text-warn-strong">As máquinas deste contrato estão com vencimentos diferentes nas fichas. Use Editar para acertar.</p>}
               {c.obs && <p className="mt-2 text-[13px] text-ink-2">{c.obs}</p>}
               <ArquivosDoContrato c={c} arquivos={arquivos} edita={edita} anexado={() => void recarregar()} />
+              {envioDe(c) && <AcompanharAssinatura e={envioDe(c)!} edita={edita} mudou={() => void recarregar()} />}
               {edita && (
                 <div className="mt-3 flex flex-wrap gap-2">
                   <button type="button" className="btn-primary btn-sm" onClick={() => editar(c, true)}>
                     Renovar
                   </button>
+                  {!c.assinado && envioDe(c)?.status !== 'aguardando' && (
+                    <button
+                      type="button"
+                      className="btn-secondary btn-sm"
+                      title={autentique?.configurado ? 'Manda o PDF para assinar na Autentique' : 'Ligue a Autentique em Configurações → Integrações'}
+                      disabled={!autentique?.configurado}
+                      onClick={() => setAssinar(c)}
+                    >
+                      Enviar para assinatura
+                    </button>
+                  )}
                   <button type="button" className="btn-secondary btn-sm" onClick={() => editar(c, false)}>
                     Editar
                   </button>
@@ -202,6 +229,9 @@ export function Contratos() {
         </p>
       )}
 
+      {assinar && autentique && (
+        <EnviarParaAssinar cliente={assinar.cliente} frotas={assinar.maquinas.map((m) => m.numero)} cfg={autentique} fechar={() => setAssinar(null)} enviado={() => void recarregar()} />
+      )}
       {edicao && <EditorContrato e={edicao} fechar={() => setEdicao(null)} salvo={() => void recarregar()} veValor={veValor} />}
     </div>
   );

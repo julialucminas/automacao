@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ConfigConferencia, RegrasManutencao } from '../components/RegrasManutencao';
 import { useEstado } from '../state';
+import { IntegracaoAutentique } from '../components/IntegracaoAutentique';
 import type { ConfigEmail } from '../types';
 import { MODELO_PADRAO, preencher, REMETENTE, referenciaAtual, referenciaPorExtenso, VARIAVEIS } from '../lib/email';
 
@@ -137,6 +138,7 @@ export function Configuracoes() {
       </div>
       <RegrasManutencao />
       <ConfigConferencia />
+      {pode('usuarios', 2) && <IntegracaoAutentique />}
     </div>
   );
 }

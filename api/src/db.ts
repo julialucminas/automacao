@@ -457,6 +457,23 @@ const MIGRACOES = [
      usuario_id INTEGER
    );
    CREATE INDEX contratos_arquivos_cliente ON contratos_arquivos (cliente_id);`,
+  // 27: integração com a Autentique (token guardado à parte) e contratos mandados para assinatura
+  `CREATE TABLE integracoes (chave TEXT PRIMARY KEY, valor TEXT NOT NULL, atualizado_em TEXT NOT NULL, usuario_id INTEGER);
+   CREATE TABLE contratos_envios (
+     id TEXT PRIMARY KEY,
+     cliente_id TEXT NOT NULL,
+     frotas TEXT NOT NULL,
+     numero TEXT NOT NULL DEFAULT '',
+     nome TEXT NOT NULL,
+     status TEXT NOT NULL,
+     assinantes TEXT NOT NULL,
+     teste INTEGER NOT NULL DEFAULT 0,
+     enviado_em TEXT NOT NULL,
+     usuario_id INTEGER,
+     concluido_em TEXT,
+     arquivo_id TEXT,
+     erro TEXT NOT NULL DEFAULT ''
+   );`,
 ];
 
 export function abrirBanco(caminho: string) {

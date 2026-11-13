@@ -238,3 +238,14 @@ com o resto do contrato na locação/devolução). `POST /api/contratos` aceita 
 para "falta assinar" e solta o arquivo. Arquivos em `<pastaDados>/contratos/<id>.<pdf|jpg|png>` + tabela
 `contratos_arquivos` (migração 26), que guarda também os de períodos anteriores. Rotas GET/POST `/api/contratos/arquivos`
 e GET `/api/contratos/arquivos/:id`. Anexar já marca como assinado. Filtro/cartão "Falta assinatura" na aba.
+
+## Autentique (assinatura eletrônica dos contratos, 13/nov)
+`api/src/autentique.ts`: cliente GraphQL (`https://api.autentique.com.br/v2/graphql`, Bearer token): `me`,
+`createDocument` em multipart (sandbox quando "modo de teste"), `document(id){files{signed} signatures{…}}`,
+`createLinkToSignature`, `resendSignatures`. `AUTENTIQUE_URL` só para testar contra servidor falso.
+Token na tabela `integracoes` (migração 27), nunca volta para a tela nem para /api/config; só a administradora
+(usuarios 2) muda em Configurações → Integrações. Assinantes: cliente (SIGN), Lucminas/Arnaldo (SIGN), testemunha do
+cliente e da Lucminas (SIGN_AS_A_WITNESS), todos por e-mail. Envios em `contratos_envios`; o servidor consulta os em
+aberto a cada 10 min (e no "Atualizar agora"); quando todos assinaram, baixa `files.signed` e guarda como contrato
+assinado (em nome de quem mandou). "Copiar mensagem para WhatsApp" gera os links do lado do cliente.
+Não testado contra a Autentique de verdade (sem token aqui): o primeiro uso deve ser no modo de teste.

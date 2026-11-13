@@ -482,3 +482,24 @@ export type FotoMensal = { mes: string; receita: number; receitaContrato: number
 
 /** Arquivo de contrato assinado (PDF ou foto). O atual de cada máquina está na ficha; os antigos ficam guardados. */
 export type ArquivoContrato = { id: string; clienteId: string; frotas: string[]; numero: string; vencimento: string | null; nome: string; ext: string; tamanho: number; enviadoEm: string; por: string };
+
+/** Integração com a Autentique (o token nunca vem para a tela: só se está configurado e os 4 últimos caracteres). */
+export type IntegracaoAutentique = { configurado: boolean; final: string; teste: boolean; conta: string; lucminasNome: string; lucminasEmail: string; testemunhaNome: string; testemunhaEmail: string };
+export type AssinanteEnvio = { publicId: string; nome: string; email: string; acao: string; papel: string; vistoEm: string | null; assinadoEm: string | null; recusadoEm: string | null };
+/** Contrato mandado para assinar na Autentique. */
+export type EnvioContrato = {
+  id: string;
+  clienteId: string;
+  clienteNome: string;
+  frotas: string[];
+  numero: string;
+  nome: string;
+  status: 'aguardando' | 'assinado' | 'recusado' | 'cancelado';
+  assinantes: AssinanteEnvio[];
+  teste: boolean;
+  enviadoEm: string;
+  por: string;
+  concluidoEm: string | null;
+  arquivoId: string | null;
+  erro: string;
+};

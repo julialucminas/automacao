@@ -5,6 +5,7 @@ import { CONFIG_PADRAO, Conflito2, operacoes, type NfArquivo, type NovaMov, type
 import { monitorCaixa } from './monitor.js';
 import { agendarCopias, listarCopias } from './backup.js';
 import { fotos as tabelaFotos } from './fotos.js';
+import { clienteAutentique, ErroAutentique, type Assinante, type ClienteAutentique, type SituacaoAssinante } from './autentique.js';
 import { randomUUID } from 'node:crypto';
 import { createReadStream, existsSync, mkdirSync, unlinkSync, writeFileSync } from 'node:fs';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -191,7 +192,10 @@ function limitador(max: number, janelaMs: number) {
 /** hoje no horário de Brasília (AAAA-MM-DD) */
 const hojeBr = () => new Date(Date.now() - 3 * 3_600_000).toISOString().slice(0, 10);
 
-export function criarApp(db: Banco, opcoes: { cookieSeguro: boolean; logger?: boolean; pastaDados?: string; carteiro?: Carteiro; monitorar?: boolean; esperaCopiaMs?: number }) {
+export function criarApp(
+  db: Banco,
+  opcoes: { cookieSeguro: boolean; logger?: boolean; pastaDados?: string; carteiro?: Carteiro; monitorar?: boolean; esperaCopiaMs?: number; autentique?: (token: string) => ClienteAutentique },
+) {
   const repo = repositorio(db);
   const ops = operacoes(db, repo, {
     // movimentações mantêm a ficha da máquina em dia (contrato, venda, compra)
@@ -206,6 +210,7 @@ export function criarApp(db: Banco, opcoes: { cookieSeguro: boolean; logger?: bo
   app.setErrorHandler((err, _req, reply) => {
     if (err instanceof Invalido || err instanceof DadoInvalido) return reply.code(400).send({ erro: err.message });
     if (err instanceof NaoEncontrado) return reply.code(404).send({ erro: err.message });
+    if (err instanceof ErroAutentique) return reply.code(502).send({ erro: err.message });
     if (err instanceof Conflito || err instanceof Conflito2) return reply.code(409).send({ erro: err.message });
     if (err instanceof SemPermissao) return reply.code(403).send({ erro: err.message });
     if ((err as { statusCode?: number }).statusCode && (err as { statusCode: number }).statusCode < 500) {
@@ -535,20 +540,12 @@ export function criarApp(db: Banco, opcoes: { cookieSeguro: boolean; logger?: bo
   app.get('/api/contratos/arquivos', { preHandler: exigir(1, 'contratos') }, async () =>
     (db.prepare(`${SEL_ARQ} ORDER BY a.enviado_em DESC`).all() as Record<string, unknown>[]).map(lerArquivoContrato),
   );
-  app.post('/api/contratos/arquivos', { preHandler: exigir(2, 'contratos'), bodyLimit: 14 * 1024 * 1024 }, async (req, reply) => {
-    const b = (req.body ?? {}) as Record<string, unknown>;
-    const cliente = repo.buscarCliente(typeof b.clienteId === 'string' ? b.clienteId : '');
-    const frotas = Array.isArray(b.frotas) ? [...new Set(b.frotas.filter((x): x is string => typeof x === 'string'))] : [];
-    if (!frotas.length) throw new Invalido('Diga de quais máquinas é o contrato.');
-    const fora = frotas.filter((f) => !cliente.frotas.some((x) => x.numero === f));
-    if (fora.length) throw new Invalido(`FT${fora.join(', FT')} não ${fora.length > 1 ? 'estão' : 'está'} com ${cliente.nome}.`);
-    const buf = Buffer.from(typeof b.arquivo === 'string' ? b.arquivo.replace(/^data:[^;]*;base64,/, '') : '', 'base64');
-    if (!buf.length) throw new Invalido('Escolha o arquivo do contrato.');
-    if (buf.length > 10 * 1024 * 1024) throw new Invalido('Arquivo grande demais (máximo 10 MB).');
+  const extensaoContrato = (buf: Buffer) => {
     const cab = buf.subarray(0, 8);
-    const ext = cab.subarray(0, 5).toString('latin1') === '%PDF-' ? 'pdf' : cab[0] === 0xff && cab[1] === 0xd8 ? 'jpg' : cab.subarray(1, 4).toString('latin1') === 'PNG' ? 'png' : null;
-    if (!ext) throw new Invalido('O contrato precisa ser PDF, JPG ou PNG.');
-    const nome = (typeof b.nome === 'string' ? b.nome : '').replace(/[\\/\r\n]/g, '').slice(0, 120) || `contrato.${ext}`;
+    return cab.subarray(0, 5).toString('latin1') === '%PDF-' ? 'pdf' : cab[0] === 0xff && cab[1] === 0xd8 ? 'jpg' : cab.subarray(1, 4).toString('latin1') === 'PNG' ? 'png' : null;
+  };
+  /** Guarda o arquivo do contrato assinado, liga às máquinas e marca como assinado (se ainda não estava). */
+  const guardarContratoAssinado = (cliente: { id: string; nome: string }, frotas: string[], buf: Buffer, ext: string, nome: string, usuarioId: number | null, assinadoEm: string, origem: string) => {
     const id = randomUUID();
     const ficha = equip.buscar(frotas[0]);
     mkdirSync(pastaContratos, { recursive: true });
@@ -566,21 +563,277 @@ export function criarApp(db: Banco, opcoes: { cookieSeguro: boolean; logger?: bo
           ext,
           buf.length,
           new Date().toISOString(),
-          req.usuario.id,
+          usuarioId,
         );
-        // anexar o assinado já marca como assinado (se ainda não estava)
         for (const f of frotas) {
           const fi = equip.buscar(f);
-          equip.salvar(f, { contratoArquivo: id, ...(fi?.contratoAssinado ? {} : { contratoAssinado: 'sim', contratoAssinadoEm: hojeBr() }) }, req.usuario.id);
+          equip.salvar(f, { contratoArquivo: id, ...(fi?.contratoAssinado ? {} : { contratoAssinado: 'sim', contratoAssinadoEm: assinadoEm }) }, usuarioId as number);
         }
-        repo.registrarLog(cliente.id, req.usuario.id, `anexou o contrato assinado de ${cliente.nome} (FT${frotas.join(', FT')}): ${nome}`, null, null, 'cliente');
+        repo.registrarLog(cliente.id, usuarioId as number, `${origem} o contrato assinado de ${cliente.nome} (FT${frotas.join(', FT')}): ${nome}`, null, null, 'cliente');
       })();
     } catch (e) {
       unlinkSync(caminho);
       throw e;
     }
+    return id;
+  };
+  const frotasDoPedido = (cliente: { nome: string; frotas: { numero: string }[] }, v: unknown) => {
+    const frotas = Array.isArray(v) ? [...new Set(v.filter((x): x is string => typeof x === 'string'))] : [];
+    if (!frotas.length) throw new Invalido('Diga de quais máquinas é o contrato.');
+    const fora = frotas.filter((f) => !cliente.frotas.some((x) => x.numero === f));
+    if (fora.length) throw new Invalido(`FT${fora.join(', FT')} não ${fora.length > 1 ? 'estão' : 'está'} com ${cliente.nome}.`);
+    return frotas;
+  };
+  const arquivoDoPedido = (b: Record<string, unknown>, maxMb: number) => {
+    const buf = Buffer.from(typeof b.arquivo === 'string' ? b.arquivo.replace(/^data:[^;]*;base64,/, '') : '', 'base64');
+    if (!buf.length) throw new Invalido('Escolha o arquivo do contrato.');
+    if (buf.length > maxMb * 1024 * 1024) throw new Invalido(`Arquivo grande demais (máximo ${maxMb} MB).`);
+    return buf;
+  };
+  const nomeArquivo = (v: unknown, ext: string) => (typeof v === 'string' ? v : '').replace(/[\\/\r\n]/g, '').slice(0, 120) || `contrato.${ext}`;
+
+  app.post('/api/contratos/arquivos', { preHandler: exigir(2, 'contratos'), bodyLimit: 14 * 1024 * 1024 }, async (req, reply) => {
+    const b = (req.body ?? {}) as Record<string, unknown>;
+    const cliente = repo.buscarCliente(typeof b.clienteId === 'string' ? b.clienteId : '');
+    const frotas = frotasDoPedido(cliente, b.frotas);
+    const buf = arquivoDoPedido(b, 10);
+    const ext = extensaoContrato(buf);
+    if (!ext) throw new Invalido('O contrato precisa ser PDF, JPG ou PNG.');
+    const id = guardarContratoAssinado(cliente, frotas, buf, ext, nomeArquivo(b.nome, ext), req.usuario.id, hojeBr(), 'anexou');
     return reply.code(201).send(lerArquivoContrato(db.prepare(`${SEL_ARQ} WHERE a.id = ?`).get(id) as Record<string, unknown>));
   });
+
+  // ---------- integração com a Autentique (assinatura eletrônica) ----------
+  // o token fica numa tabela à parte: nunca vai para /api/config nem volta para a tela
+  const integ = {
+    ler: (k: string) => (db.prepare('SELECT valor FROM integracoes WHERE chave = ?').get(k) as { valor: string } | undefined)?.valor ?? '',
+    gravar: (k: string, v: string, usuarioId: number) =>
+      db
+        .prepare('INSERT INTO integracoes (chave, valor, atualizado_em, usuario_id) VALUES (?, ?, ?, ?) ON CONFLICT(chave) DO UPDATE SET valor = excluded.valor, atualizado_em = excluded.atualizado_em, usuario_id = excluded.usuario_id')
+        .run(k, v, new Date().toISOString(), usuarioId),
+  };
+  const CAMPOS_AUT = ['lucminasNome', 'lucminasEmail', 'testemunhaNome', 'testemunhaEmail'] as const;
+  const fazerAutentique = opcoes.autentique ?? ((t: string) => clienteAutentique(t));
+  const autentique = () => {
+    const t = integ.ler('autentique.token');
+    if (!t) throw new Invalido('A Autentique ainda não está ligada. A administradora cola o token em Configurações → Integrações.');
+    return fazerAutentique(t);
+  };
+  const configAutentique = () => {
+    const t = integ.ler('autentique.token');
+    return {
+      configurado: !!t,
+      final: t ? t.slice(-4) : '',
+      teste: integ.ler('autentique.teste') !== 'nao',
+      conta: integ.ler('autentique.conta'),
+      lucminasNome: integ.ler('autentique.lucminasNome'),
+      lucminasEmail: integ.ler('autentique.lucminasEmail'),
+      testemunhaNome: integ.ler('autentique.testemunhaNome'),
+      testemunhaEmail: integ.ler('autentique.testemunhaEmail'),
+    };
+  };
+  const emailValido = (v: unknown, rot: string) => {
+    const e = typeof v === 'string' ? v.trim().toLowerCase() : '';
+    if (e && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) throw new Invalido(`E-mail inválido: ${rot}.`);
+    return e;
+  };
+  app.get('/api/integracoes/autentique', { preHandler: exigir(1, 'contratos', 'usuarios') }, async () => configAutentique());
+  app.put('/api/integracoes/autentique', { preHandler: exigir(2, 'usuarios') }, async (req) => {
+    const b = (req.body ?? {}) as Record<string, unknown>;
+    db.transaction(() => {
+      if (b.apagarToken === true) integ.gravar('autentique.token', '', req.usuario.id);
+      else if (typeof b.token === 'string' && b.token.trim()) {
+        const t = b.token.trim();
+        if (t.length < 20 || /\s/.test(t)) throw new Invalido('Esse token não parece certo. Copie de novo no painel da Autentique.');
+        integ.gravar('autentique.token', t, req.usuario.id);
+        integ.gravar('autentique.conta', '', req.usuario.id);
+      }
+      if (typeof b.teste === 'boolean') integ.gravar('autentique.teste', b.teste ? 'sim' : 'nao', req.usuario.id);
+      for (const k of CAMPOS_AUT)
+        if (b[k] !== undefined) integ.gravar(`autentique.${k}`, k.endsWith('Email') ? emailValido(b[k], k) : texto(b[k], k, 120), req.usuario.id);
+      repo.registrarLog('', req.usuario.id, `mudou a integração com a Autentique${typeof b.token === 'string' && b.token.trim() ? ' (token novo)' : b.apagarToken === true ? ' (tirou o token)' : ''}`, null, null, 'config');
+    })();
+    return configAutentique();
+  });
+  app.post('/api/integracoes/autentique/testar', { preHandler: exigir(2, 'usuarios') }, async (req) => {
+    const eu = await autentique().quemSou();
+    integ.gravar('autentique.conta', `${eu.nome} <${eu.email}>`, req.usuario.id);
+    return { ...configAutentique(), ok: true };
+  });
+
+  type EnvioContrato = {
+    id: string;
+    clienteId: string;
+    clienteNome: string;
+    frotas: string[];
+    numero: string;
+    nome: string;
+    status: 'aguardando' | 'assinado' | 'recusado' | 'cancelado';
+    assinantes: (SituacaoAssinante & { papel: string })[];
+    teste: boolean;
+    enviadoEm: string;
+    por: string;
+    concluidoEm: string | null;
+    arquivoId: string | null;
+    erro: string;
+    usuarioId: number | null;
+  };
+  const SEL_ENV = "SELECT e.*, COALESCE(u.nome, '') AS por, COALESCE(c.nome, '') AS cliente_nome FROM contratos_envios e LEFT JOIN usuarios u ON u.id = e.usuario_id LEFT JOIN clientes c ON c.id = e.cliente_id";
+  const lerEnvio = (r: Record<string, unknown>): EnvioContrato => ({
+    id: r.id as string,
+    clienteId: r.cliente_id as string,
+    clienteNome: r.cliente_nome as string,
+    frotas: JSON.parse(r.frotas as string) as string[],
+    numero: r.numero as string,
+    nome: r.nome as string,
+    status: r.status as EnvioContrato['status'],
+    assinantes: JSON.parse(r.assinantes as string) as EnvioContrato['assinantes'],
+    teste: !!r.teste,
+    enviadoEm: r.enviado_em as string,
+    por: r.por as string,
+    concluidoEm: (r.concluido_em as string) ?? null,
+    arquivoId: (r.arquivo_id as string) ?? null,
+    erro: (r.erro as string) ?? '',
+    usuarioId: (r.usuario_id as number) ?? null,
+  });
+  const buscarEnvio = (id: string) => {
+    const r = db.prepare(`${SEL_ENV} WHERE e.id = ?`).get(id) as Record<string, unknown> | undefined;
+    if (!r) throw new NaoEncontrado('Envio para assinatura não encontrado.');
+    return lerEnvio(r);
+  };
+
+  app.post('/api/contratos/assinatura', { preHandler: exigir(2, 'contratos'), bodyLimit: 14 * 1024 * 1024 }, async (req, reply) => {
+    const b = (req.body ?? {}) as Record<string, unknown>;
+    const cliente = repo.buscarCliente(typeof b.clienteId === 'string' ? b.clienteId : '');
+    const frotas = frotasDoPedido(cliente, b.frotas);
+    const cfg = configAutentique();
+    const buf = arquivoDoPedido(b, 5);
+    if (extensaoContrato(buf) !== 'pdf') throw new Invalido('Para mandar assinar, o contrato precisa ser PDF.');
+    const pessoa = (v: unknown, rot: string, obrigatorio: boolean) => {
+      const o = (v && typeof v === 'object' ? v : {}) as Record<string, unknown>;
+      const nome = texto(o.nome, rot, 120);
+      const email = emailValido(o.email, rot);
+      if (obrigatorio && (!nome || !email)) throw new Invalido(`Informe nome e e-mail: ${rot}.`);
+      return { nome, email };
+    };
+    const repCliente = pessoa(b.cliente, 'quem assina pelo cliente', true);
+    const testCliente = pessoa(b.testemunhaCliente, 'testemunha do cliente', true);
+    const testLucminas = pessoa(b.testemunhaLucminas ?? { nome: cfg.testemunhaNome, email: cfg.testemunhaEmail }, 'testemunha da Lucminas', true);
+    const lucminas = { nome: cfg.lucminasNome, email: cfg.lucminasEmail };
+    if (!lucminas.email) throw new Invalido('Falta o e-mail de quem assina pela Lucminas em Configurações → Integrações.');
+    const assinantes: Assinante[] = [
+      { ...repCliente, acao: 'SIGN', papel: `Contratante (${cliente.nome})` },
+      { ...lucminas, acao: 'SIGN', papel: 'Lucminas' },
+      { ...testCliente, acao: 'SIGN_AS_A_WITNESS', papel: 'Testemunha do cliente' },
+      { ...testLucminas, acao: 'SIGN_AS_A_WITNESS', papel: 'Testemunha da Lucminas' },
+    ];
+    const emails = assinantes.map((a) => a.email);
+    if (new Set(emails).size !== emails.length) throw new Invalido('Cada assinante precisa de um e-mail diferente.');
+    const ficha = equip.buscar(frotas[0]);
+    const numero = (ficha?.contratoNumero as string) ?? '';
+    const nome = `Contrato de locação${numero ? ` ${numero}` : ''} · ${cliente.nome} · FT${frotas.join(', FT')}`;
+    const doc = await autentique().criarDocumento({
+      nome,
+      mensagem: texto(b.mensagem, 'mensagem', 500),
+      pdf: buf,
+      nomeArquivo: nomeArquivo(b.nome, 'pdf'),
+      assinantes,
+      teste: cfg.teste,
+    });
+    // junta o que a Autentique devolveu com o papel de cada um (pelo e-mail)
+    const situacao = assinantes.map((a) => ({ ...(doc.assinaturas.find((s) => s.email.toLowerCase() === a.email) ?? { publicId: '', nome: a.nome, email: a.email, acao: a.acao, vistoEm: null, assinadoEm: null, recusadoEm: null }), nome: a.nome, papel: a.papel }));
+    db.transaction(() => {
+      db.prepare('INSERT INTO contratos_envios (id, cliente_id, frotas, numero, nome, status, assinantes, teste, enviado_em, usuario_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(
+        doc.id,
+        cliente.id,
+        JSON.stringify(frotas),
+        numero,
+        nome,
+        'aguardando',
+        JSON.stringify(situacao),
+        cfg.teste ? 1 : 0,
+        new Date().toISOString(),
+        req.usuario.id,
+      );
+      repo.registrarLog(cliente.id, req.usuario.id, `mandou o contrato de ${cliente.nome} (FT${frotas.join(', FT')}) para assinatura na Autentique${cfg.teste ? ' (teste)' : ''}`, null, null, 'cliente');
+    })();
+    return reply.code(201).send(buscarEnvio(doc.id));
+  });
+
+  /** Pergunta à Autentique como estão os envios em aberto; quando todos assinaram, guarda o PDF assinado. */
+  const atualizarAssinaturas = async () => {
+    const abertos = (db.prepare(`${SEL_ENV} WHERE e.status = 'aguardando'`).all() as Record<string, unknown>[]).map(lerEnvio);
+    if (!abertos.length || !integ.ler('autentique.token')) return;
+    const api = autentique();
+    for (const e of abertos) {
+      try {
+        const doc = await api.buscarDocumento(e.id);
+        if (!doc) {
+          db.prepare("UPDATE contratos_envios SET status = 'cancelado', erro = ? WHERE id = ?").run('O documento não existe mais na Autentique.', e.id);
+          continue;
+        }
+        const assinantes = e.assinantes.map((a) => {
+          const s = doc.assinaturas.find((x) => (a.publicId && x.publicId === a.publicId) || x.email.toLowerCase() === a.email.toLowerCase());
+          return s ? { ...a, publicId: s.publicId || a.publicId, vistoEm: s.vistoEm, assinadoEm: s.assinadoEm, recusadoEm: s.recusadoEm } : a;
+        });
+        const recusou = assinantes.some((a) => a.recusadoEm);
+        const todos = assinantes.length > 0 && assinantes.every((a) => a.assinadoEm);
+        let status: EnvioContrato['status'] = recusou ? 'recusado' : 'aguardando';
+        let arquivoId: string | null = null;
+        if (todos && doc.arquivoAssinado) {
+          const buf = await api.baixar(doc.arquivoAssinado);
+          const cliente = repo.listarClientes().find((c) => c.id === e.clienteId);
+          // máquinas que ainda estão com o cliente (alguma pode ter saído enquanto assinavam)
+          const frotas = e.frotas.filter((f) => cliente?.frotas.some((x) => x.numero === f));
+          const ultima = assinantes.map((a) => a.assinadoEm!).sort().pop()!.slice(0, 10);
+          // fica registrado em nome de quem mandou para assinar
+          arquivoId = guardarContratoAssinado({ id: e.clienteId, nome: cliente?.nome ?? e.clienteNome }, frotas.length ? frotas : e.frotas, buf, 'pdf', `${e.nome} (assinado).pdf`, e.usuarioId, ultima, 'chegou da Autentique');
+          status = 'assinado';
+        }
+        db.prepare('UPDATE contratos_envios SET assinantes = ?, status = ?, arquivo_id = COALESCE(?, arquivo_id), concluido_em = ?, erro = ? WHERE id = ?').run(
+          JSON.stringify(assinantes),
+          status,
+          arquivoId,
+          status === 'aguardando' ? null : new Date().toISOString(),
+          '',
+          e.id,
+        );
+      } catch (x) {
+        db.prepare('UPDATE contratos_envios SET erro = ? WHERE id = ?').run(x instanceof Error ? x.message : String(x), e.id);
+      }
+    }
+  };
+  if (opcoes.monitorar) {
+    const t = setInterval(() => void atualizarAssinaturas().catch((e) => app.log.warn(`assinaturas: ${e}`)), 10 * 60_000);
+    app.addHook('onClose', async () => clearInterval(t));
+  }
+  app.get('/api/contratos/envios', { preHandler: exigir(1, 'contratos') }, async () =>
+    (db.prepare(`${SEL_ENV} ORDER BY e.enviado_em DESC`).all() as Record<string, unknown>[]).map(lerEnvio),
+  );
+  app.post('/api/contratos/envios/atualizar', { preHandler: exigir(1, 'contratos') }, async () => {
+    await atualizarAssinaturas();
+    return (db.prepare(`${SEL_ENV} ORDER BY e.enviado_em DESC`).all() as Record<string, unknown>[]).map(lerEnvio);
+  });
+  app.post<{ Params: { id: string; publicId: string } }>('/api/contratos/envios/:id/link/:publicId', { preHandler: exigir(2, 'contratos') }, async (req) => {
+    const e = buscarEnvio(req.params.id);
+    if (!e.assinantes.some((a) => a.publicId === req.params.publicId)) throw new NaoEncontrado('Assinante não encontrado.');
+    return { link: await autentique().linkDeAssinatura(req.params.publicId) };
+  });
+  app.post<{ Params: { id: string } }>('/api/contratos/envios/:id/reenviar', { preHandler: exigir(2, 'contratos') }, async (req) => {
+    const e = buscarEnvio(req.params.id);
+    const faltam = e.assinantes.filter((a) => !a.assinadoEm && a.publicId).map((a) => a.publicId);
+    if (e.status !== 'aguardando' || !faltam.length) throw new Invalido('Não há ninguém faltando assinar.');
+    await autentique().reenviar(faltam);
+    return { ok: true, reenviados: faltam.length };
+  });
+  app.post<{ Params: { id: string } }>('/api/contratos/envios/:id/cancelar', { preHandler: exigir(2, 'contratos') }, async (req) => {
+    const e = buscarEnvio(req.params.id);
+    if (e.status !== 'aguardando') throw new Invalido('Esse envio já terminou.');
+    db.prepare("UPDATE contratos_envios SET status = 'cancelado', concluido_em = ? WHERE id = ?").run(new Date().toISOString(), e.id);
+    repo.registrarLog(e.clienteId, req.usuario.id, `parou de acompanhar a assinatura do contrato de ${e.clienteNome} na Autentique`, null, null, 'cliente');
+    return buscarEnvio(e.id);
+  });
+
   app.get<{ Params: { id: string } }>('/api/contratos/arquivos/:id', { preHandler: exigir(1, 'contratos') }, async (req, reply) => {
     const r = db.prepare(`${SEL_ARQ} WHERE a.id = ?`).get(req.params.id) as Record<string, unknown> | undefined;
     if (!r) throw new NaoEncontrado('Arquivo não encontrado.');
