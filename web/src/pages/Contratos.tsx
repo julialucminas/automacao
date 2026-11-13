@@ -23,7 +23,7 @@ const STATUS: Record<StatusContrato, { rotulo: string; tom: Tom }> = {
 };
 
 /** Rascunho do editor: contrato existente (editar/renovar) ou novo para um cliente. */
-type Edicao = { cliente: Cliente; frotas: string[]; antes: string[]; numero: string; inicio: string; vencimento: string; obs: string; renovacao: boolean; assinado: boolean; assinadoEm: string };
+type Edicao = { chave?: string; cliente: Cliente; frotas: string[]; antes: string[]; numero: string; inicio: string; vencimento: string; obs: string; renovacao: boolean; assinado: boolean; assinadoEm: string };
 
 export function Contratos() {
   const { clientes, movimentacoes, pode, veValores } = useEstado();
@@ -77,6 +77,7 @@ export function Contratos() {
 
   const editar = (c: Contrato, renovacao: boolean) =>
     setEdicao({
+      chave: c.chave,
       cliente: c.cliente,
       frotas: c.maquinas.map((m) => m.numero),
       antes: c.maquinas.map((m) => m.numero),
@@ -278,22 +279,28 @@ export function Contratos() {
       {assinar && autentique && (
         <EnviarParaAssinar cliente={assinar.cliente} frotas={assinar.maquinas.map((m) => m.numero)} cfg={autentique} fechar={() => setAssinar(null)} enviado={() => void recarregar()} />
       )}
-      {edicao && <EditorContrato e={edicao} fechar={() => setEdicao(null)} salvo={() => void recarregar()} veValor={veValor} />}
+      {edicao && <EditorContrato e={edicao} contratos={contratos} fechar={() => setEdicao(null)} salvo={() => void recarregar()} veValor={veValor} />}
     </div>
   );
 }
 
-function EditorContrato({ e, fechar, salvo, veValor }: { e: Edicao; fechar: () => void; salvo: () => void; veValor: boolean }) {
+function EditorContrato({ e, contratos, fechar, salvo, veValor }: { e: Edicao; contratos: Contrato[]; fechar: () => void; salvo: () => void; veValor: boolean }) {
   const { avisar } = useEstado();
   const [d, setD] = useState(e);
   const [erro, setErro] = useState('');
   const [salvando, setSalvando] = useState(false);
   const marcar = (n: string, sim: boolean) => setD({ ...d, frotas: sim ? [...d.frotas, n] : d.frotas.filter((x) => x !== n) });
+  // outros contratos do mesmo cliente (máquinas contratadas em outra data ficam em contrato separado)
+  const outros = contratos.filter((c) => c.cliente.id === d.cliente.id && c.chave !== e.chave);
+  const outroDe = (frota: string) => outros.find((c) => c.maquinas.some((m) => m.numero === frota));
+  const mudamDeContrato = d.frotas.filter((f) => outroDe(f));
+  const mesmoNumero = d.numero.trim() ? outros.find((c) => c.numero.trim().toUpperCase() === d.numero.trim().toUpperCase()) : undefined;
 
   const salvar = async () => {
     setErro('');
     if (!d.frotas.length) return setErro('Marque pelo menos uma máquina.');
     if (!d.vencimento) return setErro('Informe o vencimento do contrato.');
+    if (!d.numero.trim() && outros.length) return setErro('Informe o nº do contrato: esse cliente tem mais de um contrato, e é o número que separa um do outro.');
     setSalvando(true);
     try {
       await api.salvarContrato({
@@ -324,22 +331,33 @@ function EditorContrato({ e, fechar, salvo, veValor }: { e: Edicao; fechar: () =
         {d.renovacao && <span className="text-ink-3"> · confira as datas do novo período</span>}
       </p>
       <fieldset className="flex flex-col gap-1.5">
-        <legend className="label mb-1">Máquinas do contrato</legend>
+        <legend className="label mb-1">Máquinas deste contrato</legend>
+        <p className="mb-1 text-[12.5px] text-ink-3">Marque só as que entraram neste contrato. Máquinas contratadas em outra data ficam no contrato delas, com número e vencimento próprios.</p>
         <div className="flex flex-wrap gap-2">
-          {d.cliente.frotas.map((f) => (
-            <label key={f.numero} className={`flex cursor-pointer items-center gap-2 rounded-lg border px-2.5 py-1.5 text-[13px] ${d.frotas.includes(f.numero) ? 'border-ink bg-brand-tint' : 'border-line'}`}>
-              <input type="checkbox" className="h-4 w-4 accent-ink" checked={d.frotas.includes(f.numero)} onChange={(ev) => marcar(f.numero, ev.target.checked)} />
-              <b className="font-mono">FT{f.numero}</b>
-              {veValor && f.valor > 0 && <span className="text-ink-3">{formatarReais(f.valor)}</span>}
-            </label>
-          ))}
+          {d.cliente.frotas.map((f) => {
+            const outro = outroDe(f.numero);
+            return (
+              <label key={f.numero} className={`flex cursor-pointer items-center gap-2 rounded-lg border px-2.5 py-1.5 text-[13px] ${d.frotas.includes(f.numero) ? 'border-ink bg-brand-tint' : 'border-line'}`}>
+                <input type="checkbox" className="h-4 w-4 accent-ink" checked={d.frotas.includes(f.numero)} onChange={(ev) => marcar(f.numero, ev.target.checked)} />
+                <b className="font-mono">FT{f.numero}</b>
+                {veValor && f.valor > 0 && <span className="text-ink-3">{formatarReais(f.valor)}</span>}
+                {outro && <span className="rounded bg-warn-soft px-1.5 py-0.5 text-[11.5px] text-warn-strong">no contrato {outro.numero || 'sem número'} · vence {dataBr(outro.vencimento)}</span>}
+              </label>
+            );
+          })}
         </div>
+        {mudamDeContrato.length > 0 && (
+          <p className="text-[12.5px] text-warn-strong">
+            FT{mudamDeContrato.join(', FT')} {mudamDeContrato.length > 1 ? 'vão sair' : 'vai sair'} do contrato onde {mudamDeContrato.length > 1 ? 'estão' : 'está'} e entrar neste.
+          </p>
+        )}
       </fieldset>
       <label className="flex flex-col gap-1.5">
         <span className="label">
-          Nº do contrato <span className="font-normal text-ink-3">(opcional)</span>
+          Nº do contrato {outros.length ? '' : <span className="font-normal text-ink-3">(opcional)</span>}
         </span>
         <input className="input" value={d.numero} onChange={(ev) => setD({ ...d, numero: ev.target.value })} />
+        {mesmoNumero && <span className="text-[12.5px] text-warn-strong">Já existe o contrato {mesmoNumero.numero} deste cliente: com o mesmo número, as máquinas vão ficar juntas nele.</span>}
       </label>
       <div className="grid grid-cols-2 gap-3">
         <label className="flex flex-col gap-1.5">
