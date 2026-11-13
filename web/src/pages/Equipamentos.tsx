@@ -4,6 +4,7 @@ import { useEstado } from '../state';
 import { SeloHelbert } from '../components/Balao';
 import type { DadosEquipamento, Equipamento, Movimentacao, PecaHistorico, RegraPeriferico } from '../types';
 import { urlNfe } from '../components/NfeAnexo';
+import { FotosEquipamento } from '../components/FotosEquipamento';
 import { regrasDe, situacaoPerifericos } from '../lib/manutencao';
 import { COMBUSTIVEIS, SITUACOES, TIPOS_VISITA, horasParaPreventiva, montarEquipamentos, nomeEquipamento, type LinhaEquipamento, type Situacao } from '../lib/equipamentos';
 import { chaveEmpresa, semAcento } from '../lib/normalizar';
@@ -225,7 +226,7 @@ export function Ficha({
   salvo: (e: Equipamento) => void;
 }) {
   const [editando, setEditando] = useState(false);
-  const { config, movimentacoes } = useEstado();
+  const { config, movimentacoes, pode } = useEstado();
   useEffect(() => setEditando(false), [linha?.frota]);
   // NF-e anexada na movimentação de compra/venda desta frota (a mais recente aprovada)
   const nfeDe = (tipo: 'compra' | 'venda') => movimentacoes.find((m) => m.tipo === tipo && m.status === 'aprovada' && m.frota === linha?.frota && m.dados.nfArquivo);
@@ -367,6 +368,7 @@ export function Ficha({
               )}
             </Bloco>
           )}
+          <FotosEquipamento frota={linha.frota} edita={pode('frotas', 2)} />
           <Perifericos ficha={linha.ficha} regras={regrasDe(config).perifericos} />
           {extra}
           <HistoricoPecas frota={linha.frota} veValores={veValores} />

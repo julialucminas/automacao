@@ -16,6 +16,8 @@ export function EnviarParaAssinar({ cliente, frotas, cfg, fechar, enviado }: { c
   const [rep, setRep] = useState({ nome: cliente.contato ?? '', email: cliente.para[0] ?? '' });
   const [tCli, setTCli] = useState({ nome: '', email: '' });
   const [tLuc, setTLuc] = useState({ nome: cfg.testemunhaNome, email: cfg.testemunhaEmail });
+  // a testemunha da Lucminas é sempre a mesma (Configurações → Integrações); só abre os campos se pedir para trocar
+  const [trocarTestemunha, setTrocarTestemunha] = useState(!cfg.testemunhaEmail);
   const [mensagem, setMensagem] = useState('');
   const [erro, setErro] = useState('');
   const [enviando, setEnviando] = useState(false);
@@ -64,7 +66,18 @@ export function EnviarParaAssinar({ cliente, frotas, cfg, fechar, enviado }: { c
         <span className="text-ink-3"> · {cfg.lucminasEmail || 'sem e-mail (configure em Integrações)'}</span>
       </div>
       {pessoa('Testemunha do cliente', tCli, setTCli)}
-      {pessoa('Testemunha da Lucminas', tLuc, setTLuc)}
+      {trocarTestemunha ? (
+        pessoa('Testemunha da Lucminas', tLuc, setTLuc)
+      ) : (
+        <div className="flex flex-wrap items-center gap-x-2 rounded-[10px] bg-[#F8F7F3] px-3 py-2 text-[13px]">
+          <span className="text-ink-3">Testemunha pela Lucminas:</span>
+          <b>{tLuc.nome}</b>
+          <span className="text-ink-3">· {tLuc.email}</span>
+          <button type="button" className="ml-auto text-[12.5px] text-ink-3 underline" onClick={() => setTrocarTestemunha(true)}>
+            trocar só neste contrato
+          </button>
+        </div>
+      )}
       <label className="flex flex-col gap-1.5">
         <span className="label">
           Mensagem no e-mail <span className="font-normal text-ink-3">(opcional)</span>

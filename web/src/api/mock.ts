@@ -655,6 +655,15 @@ export const mockApi: Api = {
   async anexarNfe() {
     throw new Error('Indisponível na demonstração.');
   },
+  async listarFotosEquip() {
+    return [];
+  },
+  async enviarFotoEquip() {
+    throw new Error('Indisponível na demonstração.');
+  },
+  async apagarFotoEquip() {
+    throw new Error('Indisponível na demonstração.');
+  },
   async lerAutentique() {
     return { configurado: false, final: '', teste: true, conta: '', lucminasNome: '', lucminasEmail: '', testemunhaNome: '', testemunhaEmail: '' };
   },

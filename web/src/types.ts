@@ -503,3 +503,6 @@ export type EnvioContrato = {
   arquivoId: string | null;
   erro: string;
 };
+
+/** Foto da empilhadeira na ficha. */
+export type FotoEquipamento = { id: string; frota: string; legenda: string; tamanho: number; enviadoEm: string; por: string };

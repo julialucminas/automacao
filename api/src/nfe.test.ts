@@ -143,3 +143,19 @@ describe('contratos', () => {
     expect((await a('GET', `/api/contratos/arquivos/${arq.json().id}`)).statusCode).toBe(200);
   });
 });
+
+describe('fotos da empilhadeira', () => {
+  it('põe, lista, abre e tira fotos da ficha; só JPEG', async () => {
+    const a = como('angelise');
+    const JPG = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3]).toString('base64');
+    expect((await a('POST', '/api/equipamentos/FT40/fotos', { arquivo: PDF })).statusCode).toBe(400);
+    const r = await a('POST', '/api/equipamentos/FT40/fotos', { arquivo: JPG, legenda: 'lateral' });
+    expect(r.statusCode).toBe(201);
+    expect(r.json()).toMatchObject({ frota: '40', legenda: 'lateral', por: 'Angelise' });
+    expect((await a('GET', '/api/equipamentos/40/fotos')).json()).toHaveLength(1);
+    expect((await a('GET', `/api/equipamentos/fotos/${r.json().id}`)).headers['content-type']).toBe('image/jpeg');
+    await a('DELETE', `/api/equipamentos/fotos/${r.json().id}`);
+    expect((await a('GET', '/api/equipamentos/40/fotos')).json()).toEqual([]);
+    expect(existsSync(join(pasta, 'equipamentos', `${r.json().id}.jpg`))).toBe(false);
+  });
+});

@@ -23,6 +23,7 @@ import type {
   FotoMensal,
   ArquivoContrato,
   EnvioContrato,
+  FotoEquipamento,
   IntegracaoAutentique,
   Movimentacao,
   NovaMovimentacao,
@@ -99,6 +100,10 @@ export interface Api {
   /** contrato do cliente: grava número, início, vencimento e obs nas fichas das máquinas marcadas */
   salvarContrato(d: { clienteId: string; frotas: string[]; tirar: string[]; numero: string; inicio: string | null; vencimento: string; obs: string; renovacao?: boolean; assinado?: boolean; assinadoEm?: string | null }): Promise<{ ok: boolean }>;
   listarArquivosContrato(): Promise<ArquivoContrato[]>;
+  listarFotosEquip(frota: string): Promise<FotoEquipamento[]>;
+  /** foto em JPEG base64 (já reduzida) */
+  enviarFotoEquip(frota: string, arquivo: string, legenda: string): Promise<FotoEquipamento>;
+  apagarFotoEquip(id: string): Promise<{ ok: boolean }>;
   lerAutentique(): Promise<IntegracaoAutentique>;
   salvarAutentique(d: Partial<Omit<IntegracaoAutentique, 'configurado' | 'final' | 'conta'>> & { token?: string; apagarToken?: boolean }): Promise<IntegracaoAutentique>;
   testarAutentique(): Promise<IntegracaoAutentique>;

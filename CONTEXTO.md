@@ -249,3 +249,9 @@ cliente e da Lucminas (SIGN_AS_A_WITNESS), todos por e-mail. Envios em `contrato
 aberto a cada 10 min (e no "Atualizar agora"); quando todos assinaram, baixa `files.signed` e guarda como contrato
 assinado (em nome de quem mandou). "Copiar mensagem para WhatsApp" gera os links do lado do cliente.
 Não testado contra a Autentique de verdade (sem token aqui): o primeiro uso deve ser no modo de teste.
+
+## Fotos da empilhadeira (13/nov)
+Tabela `equipamento_fotos` (migração 28); arquivos em `<pastaDados>/equipamentos/<id>.jpg` (o navegador reduz para
+JPEG de 1600 px com `reduzirFoto`). Rotas GET/POST `/api/equipamentos/:frota/fotos`, GET/DELETE
+`/api/equipamentos/fotos/:id` (ver: frotas 1; pôr/apagar: frotas 2). Componente `FotosEquipamento` na ficha.
+Testemunha da Lucminas na assinatura: fixa pelo que está em Integrações (dá para trocar só num contrato).

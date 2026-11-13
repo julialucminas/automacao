@@ -474,6 +474,16 @@ const MIGRACOES = [
      arquivo_id TEXT,
      erro TEXT NOT NULL DEFAULT ''
    );`,
+  // 28: fotos da empilhadeira na ficha
+  `CREATE TABLE equipamento_fotos (
+     id TEXT PRIMARY KEY,
+     frota TEXT NOT NULL,
+     legenda TEXT NOT NULL DEFAULT '',
+     tamanho INTEGER NOT NULL,
+     enviado_em TEXT NOT NULL,
+     usuario_id INTEGER
+   );
+   CREATE INDEX equipamento_fotos_frota ON equipamento_fotos (frota);`,
 ];
 
 export function abrirBanco(caminho: string) {

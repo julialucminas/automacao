@@ -1036,6 +1036,46 @@ export function criarApp(
     return f;
   };
 
+  // ---------- fotos da empilhadeira (JPEG já reduzido no navegador), em <pastaDados>/equipamentos/<id>.jpg ----------
+  const pastaFotosEquip = juntarCaminho(opcoes.pastaDados ?? '/dados', 'equipamentos');
+  const SEL_FOTO = "SELECT f.id, f.frota, f.legenda, f.tamanho, f.enviado_em AS enviadoEm, COALESCE(u.nome, '') AS por FROM equipamento_fotos f LEFT JOIN usuarios u ON u.id = f.usuario_id";
+  const numeroFrota = (v: string) => v.trim().toUpperCase().replace(/^FT[\s-]*/, '');
+  app.get<{ Params: { frota: string } }>('/api/equipamentos/:frota/fotos', { preHandler: exigir(1, 'frotas') }, async (req) =>
+    db.prepare(`${SEL_FOTO} WHERE f.frota = ? ORDER BY f.enviado_em DESC`).all(numeroFrota(req.params.frota)),
+  );
+  app.post<{ Params: { frota: string } }>('/api/equipamentos/:frota/fotos', { preHandler: exigir(2, 'frotas'), bodyLimit: 6 * 1024 * 1024 }, async (req, reply) => {
+    const frota = numeroFrota(req.params.frota);
+    if (!frota) throw new Invalido('Frota inválida.');
+    const b = (req.body ?? {}) as Record<string, unknown>;
+    const buf = Buffer.from(typeof b.arquivo === 'string' ? b.arquivo.replace(/^data:[^;]*;base64,/, '') : '', 'base64');
+    if (!buf.length) throw new Invalido('Escolha a foto.');
+    if (buf.length > 4 * 1024 * 1024) throw new Invalido('Foto grande demais.');
+    if (!(buf[0] === 0xff && buf[1] === 0xd8)) throw new Invalido('A foto precisa ser JPEG.');
+    const id = randomUUID();
+    mkdirSync(pastaFotosEquip, { recursive: true });
+    writeFileSync(juntarCaminho(pastaFotosEquip, `${id}.jpg`), buf);
+    const legenda = texto(b.legenda, 'legenda', 120);
+    db.prepare('INSERT INTO equipamento_fotos (id, frota, legenda, tamanho, enviado_em, usuario_id) VALUES (?, ?, ?, ?, ?, ?)').run(id, frota, legenda, buf.length, new Date().toISOString(), req.usuario.id);
+    repo.registrarLog('', req.usuario.id, `pôs uma foto na ficha da FT${frota}${legenda ? `: ${legenda}` : ''}`, null, null, 'equipamento');
+    return reply.code(201).send(db.prepare(`${SEL_FOTO} WHERE f.id = ?`).get(id));
+  });
+  app.get<{ Params: { id: string } }>('/api/equipamentos/fotos/:id', { preHandler: exigir(1, 'frotas') }, async (req, reply) => {
+    const r = db.prepare('SELECT id FROM equipamento_fotos WHERE id = ?').get(req.params.id) as { id: string } | undefined;
+    const caminho = r ? juntarCaminho(pastaFotosEquip, `${r.id}.jpg`) : '';
+    if (!r || !existsSync(caminho)) throw new NaoEncontrado('Foto não encontrada.');
+    reply.header('Content-Type', 'image/jpeg').header('Cache-Control', 'private, max-age=86400');
+    return reply.send(createReadStream(caminho));
+  });
+  app.delete<{ Params: { id: string } }>('/api/equipamentos/fotos/:id', { preHandler: exigir(2, 'frotas') }, async (req) => {
+    const r = db.prepare('SELECT id, frota FROM equipamento_fotos WHERE id = ?').get(req.params.id) as { id: string; frota: string } | undefined;
+    if (!r) throw new NaoEncontrado('Foto não encontrada.');
+    db.prepare('DELETE FROM equipamento_fotos WHERE id = ?').run(r.id);
+    const caminho = juntarCaminho(pastaFotosEquip, `${r.id}.jpg`);
+    if (existsSync(caminho)) unlinkSync(caminho);
+    repo.registrarLog('', req.usuario.id, `tirou uma foto da ficha da FT${r.frota}`, null, null, 'equipamento');
+    return { ok: true };
+  });
+
   app.get('/api/equipamentos', { preHandler: exigir(1, 'frotas') }, async (req) => equip.listar().map((e) => semValoresEquip(req, e)));
 
   app.put<{ Params: { frota: string } }>('/api/equipamentos/:frota', { preHandler: exigir(2, 'frotas') }, async (req) => {
