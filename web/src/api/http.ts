@@ -107,6 +107,30 @@ export const httpApi: Api = {
   desfazerOk: (chave) => chamar('POST', '/api/avisos-ok/desfazer', { chave }).then(() => undefined),
   registrarMovimentacao: (m) => chamar('POST', '/api/movimentacoes', m),
   anexarNfe: (id, arquivo, nome) => chamar('POST', `/api/movimentacoes/${id}/nfe`, { arquivo, nome }),
+  listarEntregas: (f) => chamar('GET', `/api/entregas${f ? `?frota=${encodeURIComponent(f)}` : ''}`),
+  salvarChecklistEntrega: (id, d) => chamar('PUT', `/api/entregas/${id}/checklist`, d),
+  enviarVideoEntrega: (id, arquivo, progresso) =>
+    new Promise((ok, falha) => {
+      // XMLHttpRequest para mostrar o andamento (vídeo pode demorar no 4G)
+      const x = new XMLHttpRequest();
+      x.open('POST', `/api/entregas/${id}/video`);
+      const tipo = arquivo.type || (/\.mov$/i.test(arquivo.name) ? 'video/quicktime' : 'video/mp4');
+      x.setRequestHeader('Content-Type', tipo);
+      x.setRequestHeader('X-Nome-Arquivo', encodeURIComponent(arquivo.name));
+      x.upload.onprogress = (e) => e.lengthComputable && progresso?.(e.loaded / e.total);
+      x.onload = () => {
+        let d: { erro?: string } | null = null;
+        try {
+          d = JSON.parse(x.responseText);
+        } catch {
+          /* sem corpo */
+        }
+        if (x.status >= 200 && x.status < 300) ok(d as never);
+        else falha(new ErroApi(x.status, d?.erro ?? `Erro ${x.status}`));
+      };
+      x.onerror = () => falha(new ErroApi(0, 'A conexão caiu durante o envio do vídeo. Tente de novo.'));
+      x.send(arquivo);
+    }),
   listarFotosEquip: (f) => chamar('GET', `/api/equipamentos/${encodeURIComponent(f)}/fotos`),
   enviarFotoEquip: (f, arquivo, legenda) => chamar('POST', `/api/equipamentos/${encodeURIComponent(f)}/fotos`, { arquivo, legenda }),
   apagarFotoEquip: (id) => chamar('DELETE', `/api/equipamentos/fotos/${id}`),

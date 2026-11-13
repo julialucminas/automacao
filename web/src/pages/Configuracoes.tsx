@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ConfigConferencia, RegrasManutencao } from '../components/RegrasManutencao';
+import { ConfigChecklistEntrega, ConfigConferencia, RegrasManutencao } from '../components/RegrasManutencao';
 import { useEstado } from '../state';
 import { IntegracaoAutentique } from '../components/IntegracaoAutentique';
 import type { ConfigEmail } from '../types';
@@ -138,6 +138,7 @@ export function Configuracoes() {
       </div>
       <RegrasManutencao />
       <ConfigConferencia />
+      <ConfigChecklistEntrega />
       {pode('usuarios', 2) && <IntegracaoAutentique />}
     </div>
   );

@@ -159,3 +159,36 @@ describe('fotos da empilhadeira', () => {
     expect(existsSync(join(pasta, 'equipamentos', `${r.json().id}.jpg`))).toBe(false);
   });
 });
+
+describe('entrega da máquina', () => {
+  it('checklist na saída (atualiza horímetro), vídeo cru com Range; só locação/troca', async () => {
+    const a = como('angelise');
+    const c = (await a('POST', '/api/clientes', { nome: 'Gama', para: ['a@g.com.br'], cc: [], apelidos: [], cnpj: '', observacoes: '' })).json();
+    const loc = (await a('POST', '/api/movimentacoes', { tipo: 'locacao', frota: '20', clienteId: c.id, data: '2026-11-13', valor: 300000 })).json();
+    const itens = [
+      { item: 'Pneus', estado: 'ok', obs: '' },
+      { item: 'Extintor', estado: 'problema', obs: '' },
+    ];
+    expect((await a('PUT', `/api/entregas/${loc.id}/checklist`, { itens })).statusCode).toBe(400);
+    itens[1].obs = 'vencido, trocar';
+    const r = await a('PUT', `/api/entregas/${loc.id}/checklist`, { itens, horimetro: 1234.5, observacoes: 'saiu às 8h' });
+    expect(r.statusCode).toBe(200);
+    expect(r.json()).toMatchObject({ frota: '20', checklist: { horimetro: 1234.5, por: 'Angelise', itens: [{ estado: 'ok' }, { estado: 'problema', obs: 'vencido, trocar' }] }, video: null });
+    expect((await a('GET', '/api/equipamentos')).json().find((e: { frota: string }) => e.frota === '20').horimetro).toBe(1234.5);
+
+    const video = Buffer.alloc(5000, 7);
+    const up = await app.inject({ method: 'POST', url: `/api/entregas/${loc.id}/video`, payload: video, headers: { cookie: cookies.angelise, 'content-type': 'video/mp4', 'x-nome-arquivo': encodeURIComponent('vídeo entrega.mp4') } });
+    expect(up.statusCode).toBe(201);
+    expect(up.json().video).toMatchObject({ nome: 'vídeo entrega.mp4', ext: 'mp4', tamanho: 5000 });
+    const parte = await app.inject({ method: 'GET', url: `/api/entregas/${loc.id}/video`, headers: { cookie: cookies.angelise, range: 'bytes=0-99' } });
+    expect(parte.statusCode).toBe(206);
+    expect(parte.headers['content-range']).toBe('bytes 0-99/5000');
+    expect(parte.rawPayload.length).toBe(100);
+    expect((await a('GET', '/api/entregas?frota=FT20')).json()).toHaveLength(1);
+    const ruim = await app.inject({ method: 'POST', url: `/api/entregas/${loc.id}/video`, payload: video, headers: { cookie: cookies.angelise, 'content-type': 'application/pdf' } });
+    expect(ruim.statusCode).toBeGreaterThanOrEqual(400);
+
+    const dev = (await a('POST', '/api/movimentacoes', { tipo: 'devolucao', frota: '20', data: '2026-11-14' })).json();
+    expect((await a('PUT', `/api/entregas/${dev.id}/checklist`, { itens })).statusCode).toBe(400);
+  });
+});

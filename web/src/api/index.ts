@@ -24,6 +24,8 @@ import type {
   ArquivoContrato,
   EnvioContrato,
   FotoEquipamento,
+  Entrega,
+  ItemEntrega,
   IntegracaoAutentique,
   Movimentacao,
   NovaMovimentacao,
@@ -100,6 +102,10 @@ export interface Api {
   /** contrato do cliente: grava número, início, vencimento e obs nas fichas das máquinas marcadas */
   salvarContrato(d: { clienteId: string; frotas: string[]; tirar: string[]; numero: string; inicio: string | null; vencimento: string; obs: string; renovacao?: boolean; assinado?: boolean; assinadoEm?: string | null }): Promise<{ ok: boolean }>;
   listarArquivosContrato(): Promise<ArquivoContrato[]>;
+  listarEntregas(frota?: string): Promise<Entrega[]>;
+  salvarChecklistEntrega(movId: string, d: { itens: ItemEntrega[]; horimetro: number | null; observacoes: string }): Promise<Entrega>;
+  /** vídeo vai inteiro (sem base64); progresso de 0 a 1 */
+  enviarVideoEntrega(movId: string, arquivo: File, progresso?: (p: number) => void): Promise<Entrega>;
   listarFotosEquip(frota: string): Promise<FotoEquipamento[]>;
   /** foto em JPEG base64 (já reduzida) */
   enviarFotoEquip(frota: string, arquivo: string, legenda: string): Promise<FotoEquipamento>;

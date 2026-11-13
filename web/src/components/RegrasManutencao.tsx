@@ -222,3 +222,42 @@ export function ConfigConferencia() {
     </section>
   );
 }
+
+/** Itens do checklist de entrega (quando a máquina sai da empresa), um por linha. */
+export function ConfigChecklistEntrega() {
+  const { config, salvarConfig, avisar, pode } = useEstado();
+  const edita = pode('configuracoes', 2);
+  const atual = config?.['entrega.checklist'] ?? '';
+  const [texto, setTexto] = useState(atual);
+  useEffect(() => setTexto(config?.['entrega.checklist'] ?? ''), [config]);
+  const itens = texto.split('\n').map((s) => s.trim()).filter(Boolean);
+  return (
+    <section className="flex flex-col gap-3 rounded-xl border border-line bg-white p-5">
+      <div>
+        <h2 className="text-lg font-bold">Checklist de entrega</h2>
+        <p className="text-[13px] text-ink-3">Itens que o Júnior confere quando a máquina sai da empresa. Um por linha. Mudar aqui vale para os próximos checklists.</p>
+      </div>
+      <textarea aria-label="Itens do checklist de entrega" className="input min-h-[220px] resize-y py-2 font-mono text-[13px]" disabled={!edita} value={texto} onChange={(e) => setTexto(e.target.value)} />
+      {edita && (
+        <div className="flex items-center justify-end gap-3">
+          <span className="text-[13px] text-ink-3">{itens.length} itens</span>
+          <button
+            type="button"
+            className="btn-primary btn-sm"
+            disabled={texto === atual || !itens.length}
+            onClick={async () => {
+              try {
+                await salvarConfig({ 'entrega.checklist': itens.join('\n') });
+                avisar('Checklist de entrega salvo.');
+              } catch (e) {
+                avisar(e instanceof Error ? e.message : 'Não foi possível salvar.', 'bad');
+              }
+            }}
+          >
+            Salvar checklist
+          </button>
+        </div>
+      )}
+    </section>
+  );
+}

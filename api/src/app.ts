@@ -7,7 +7,9 @@ import { agendarCopias, listarCopias } from './backup.js';
 import { fotos as tabelaFotos } from './fotos.js';
 import { clienteAutentique, ErroAutentique, type Assinante, type ClienteAutentique, type SituacaoAssinante } from './autentique.js';
 import { randomUUID } from 'node:crypto';
-import { createReadStream, existsSync, mkdirSync, unlinkSync, writeFileSync } from 'node:fs';
+import { createReadStream, createWriteStream, existsSync, mkdirSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
+import { Transform } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join as juntarCaminho } from 'node:path';
@@ -1035,6 +1037,133 @@ export function criarApp(
     if (!f || f.length > 20) throw new Invalido('Frota inválida.');
     return f;
   };
+
+  // ---------- entrega da máquina: checklist na saída + vídeo do transportador ----------
+  const pastaEntregas = juntarCaminho(opcoes.pastaDados ?? '/dados', 'entregas');
+  type ItemEntrega = { item: string; estado: 'ok' | 'problema' | 'nao_tem' | ''; obs: string };
+  type ChecklistEntrega = { itens: ItemEntrega[]; horimetro: number | null; observacoes: string; por: string; em: string };
+  type VideoEntrega = { nome: string; ext: string; tamanho: number; tipo: string; por: string; em: string };
+  type Entrega = { movId: string; frota: string; checklist: ChecklistEntrega | null; video: VideoEntrega | null; atualizadoEm: string };
+  const lerEntrega = (r: Record<string, unknown>): Entrega => ({
+    movId: r.mov_id as string,
+    frota: r.frota as string,
+    checklist: r.checklist ? (JSON.parse(r.checklist as string) as ChecklistEntrega) : null,
+    video: r.video ? (JSON.parse(r.video as string) as VideoEntrega) : null,
+    atualizadoEm: r.atualizado_em as string,
+  });
+  /** movimentação que leva uma máquina para o cliente: locação (a frota) ou troca (a frota nova) */
+  const movDeEntrega = (id: string) => {
+    const m = ops.listarMovimentacoes().find((x) => x.id === id);
+    if (!m) throw new NaoEncontrado('Movimentação não encontrada.');
+    if (m.tipo !== 'locacao' && m.tipo !== 'troca') throw new Invalido('Entrega é só para locação ou troca.');
+    if (m.status === 'rejeitada') throw new Invalido('Essa movimentação foi recusada.');
+    return { m, frota: m.tipo === 'troca' ? (m.frotaNova ?? m.frota) : m.frota };
+  };
+  const gravarEntrega = (movId: string, frota: string, campo: 'checklist' | 'video', valor: unknown) => {
+    db.prepare(
+      `INSERT INTO entregas (mov_id, frota, ${campo}, atualizado_em) VALUES (?, ?, ?, ?)
+       ON CONFLICT(mov_id) DO UPDATE SET ${campo} = excluded.${campo}, atualizado_em = excluded.atualizado_em`,
+    ).run(movId, frota, valor === null ? null : JSON.stringify(valor), new Date().toISOString());
+  };
+  app.get('/api/entregas', { preHandler: exigir(1, 'movimentacoes', 'frotas') }, async (req) => {
+    const q = req.query as { frota?: string };
+    const linhas = q.frota
+      ? db.prepare('SELECT * FROM entregas WHERE frota = ? ORDER BY atualizado_em DESC').all(numeroFrotaEnt(q.frota))
+      : db.prepare('SELECT * FROM entregas ORDER BY atualizado_em DESC').all();
+    return (linhas as Record<string, unknown>[]).map(lerEntrega);
+  });
+  const numeroFrotaEnt = (v: string) => v.trim().toUpperCase().replace(/^FT[\s-]*/, '');
+  app.put<{ Params: { id: string } }>('/api/entregas/:id/checklist', { preHandler: exigir(2, 'movimentacoes') }, async (req) => {
+    const { m, frota } = movDeEntrega(req.params.id);
+    const b = (req.body ?? {}) as Record<string, unknown>;
+    const itens = (Array.isArray(b.itens) ? b.itens : []).slice(0, 60).map((x) => {
+      const o = (x && typeof x === 'object' ? x : {}) as Record<string, unknown>;
+      const estado = ['ok', 'problema', 'nao_tem'].includes(o.estado as string) ? (o.estado as ItemEntrega['estado']) : '';
+      return { item: texto(o.item, 'item', 120), estado, obs: texto(o.obs, 'observação do item', 300) };
+    }).filter((i) => i.item);
+    if (!itens.length) throw new Invalido('O checklist está vazio.');
+    const faltam = itens.filter((i) => !i.estado);
+    if (faltam.length) throw new Invalido(`Falta marcar: ${faltam.map((i) => i.item).join(', ')}.`);
+    const semObs = itens.filter((i) => i.estado === 'problema' && !i.obs);
+    if (semObs.length) throw new Invalido(`Diga qual é o problema em: ${semObs.map((i) => i.item).join(', ')}.`);
+    const h = b.horimetro === null || b.horimetro === '' || b.horimetro === undefined ? null : Number(b.horimetro);
+    if (h !== null && !(Number.isFinite(h) && h >= 0 && h < 1_000_000)) throw new Invalido('Horímetro inválido.');
+    const ck: ChecklistEntrega = { itens, horimetro: h, observacoes: texto(b.observacoes, 'observações', 1000), por: req.usuario.nome, em: new Date().toISOString() };
+    db.transaction(() => {
+      gravarEntrega(m.id, frota, 'checklist', ck);
+      const problemas = itens.filter((i) => i.estado === 'problema').length;
+      repo.registrarLog(m.clienteId ?? '', req.usuario.id, `fez o checklist de entrega da FT${frota}${problemas ? ` (${problemas} com problema)` : ' (tudo ok)'}`, null, null, 'movimentacao');
+      // horímetro da saída atualiza a ficha, se for maior que o que estava
+      const fi = equip.buscar(frota);
+      if (h !== null && (!fi || !fi.horimetro || Number(fi.horimetro) <= h)) equip.salvar(frota, { horimetro: h, horimetroEm: hojeBr() }, req.usuario.id);
+    })();
+    return lerEntrega(db.prepare('SELECT * FROM entregas WHERE mov_id = ?').get(m.id) as Record<string, unknown>);
+  });
+  // vídeo vai "cru" no corpo (sem base64), para aguentar arquivos grandes
+  const TIPOS_VIDEO: Record<string, string> = { 'video/mp4': 'mp4', 'video/quicktime': 'mov', 'video/3gpp': '3gp', 'video/webm': 'webm', 'video/x-m4v': 'm4v' };
+  const MAX_VIDEO = 300 * 1024 * 1024;
+  app.addContentTypeParser(/^video\//, (_req, payload, feito) => feito(null, payload));
+  app.post<{ Params: { id: string } }>('/api/entregas/:id/video', { preHandler: exigir(2, 'movimentacoes') }, async (req, reply) => {
+    const { m, frota } = movDeEntrega(req.params.id);
+    const tipo = String(req.headers['content-type'] ?? '').split(';')[0].trim().toLowerCase();
+    const ext = TIPOS_VIDEO[tipo];
+    if (!ext) throw new Invalido('O vídeo precisa ser MP4, MOV, 3GP ou WEBM.');
+    const tamanhoDito = Number(req.headers['content-length'] ?? 0);
+    if (tamanhoDito > MAX_VIDEO) throw new Invalido('Vídeo grande demais (máximo 300 MB).');
+    mkdirSync(pastaEntregas, { recursive: true });
+    const destino = juntarCaminho(pastaEntregas, `${m.id}.${ext}.parcial`);
+    let tamanho = 0;
+    const corpo = req.body as NodeJS.ReadableStream;
+    const contar = new Transform({
+      transform(pedaco: Buffer, _enc, prox) {
+        tamanho += pedaco.length;
+        if (tamanho > MAX_VIDEO) return prox(new Invalido('Vídeo grande demais (máximo 300 MB).'));
+        prox(null, pedaco);
+      },
+    });
+    try {
+      await pipeline(corpo, contar, createWriteStream(destino));
+    } catch (e) {
+      if (existsSync(destino)) unlinkSync(destino);
+      throw e instanceof Invalido ? e : new Invalido('O envio do vídeo foi interrompido. Tente de novo.');
+    }
+    if (!tamanho) {
+      unlinkSync(destino);
+      throw new Invalido('O vídeo chegou vazio.');
+    }
+    // troca o anterior (se tinha) pelo novo
+    for (const x of Object.values(TIPOS_VIDEO)) {
+      const antigo = juntarCaminho(pastaEntregas, `${m.id}.${x}`);
+      if (existsSync(antigo)) unlinkSync(antigo);
+    }
+    renameSync(destino, juntarCaminho(pastaEntregas, `${m.id}.${ext}`));
+    const nome = decodeURIComponent(String(req.headers['x-nome-arquivo'] ?? '')).replace(/[\\/\r\n]/g, '').slice(0, 120) || `entrega-FT${frota}.${ext}`;
+    const v: VideoEntrega = { nome, ext, tamanho, tipo, por: req.usuario.nome, em: new Date().toISOString() };
+    gravarEntrega(m.id, frota, 'video', v);
+    repo.registrarLog(m.clienteId ?? '', req.usuario.id, `anexou o vídeo de entrega da FT${frota} (${Math.round(tamanho / 1024 / 1024)} MB)`, null, null, 'movimentacao');
+    return reply.code(201).send(lerEntrega(db.prepare('SELECT * FROM entregas WHERE mov_id = ?').get(m.id) as Record<string, unknown>));
+  });
+  // assistir: responde por partes (Range), que é o que o iPhone exige para tocar vídeo
+  app.get<{ Params: { id: string } }>('/api/entregas/:id/video', { preHandler: exigir(1, 'movimentacoes', 'frotas') }, async (req, reply) => {
+    const r = db.prepare('SELECT * FROM entregas WHERE mov_id = ?').get(req.params.id) as Record<string, unknown> | undefined;
+    const v = r ? lerEntrega(r).video : null;
+    const caminho = v ? juntarCaminho(pastaEntregas, `${req.params.id}.${v.ext}`) : '';
+    if (!v || !existsSync(caminho)) throw new NaoEncontrado('Vídeo não encontrado.');
+    const total = statSync(caminho).size;
+    reply.header('Content-Type', v.tipo).header('Accept-Ranges', 'bytes').header('Cache-Control', 'private, max-age=3600');
+    const range = /^bytes=(\d*)-(\d*)$/.exec(String(req.headers.range ?? ''));
+    if (range && (range[1] || range[2])) {
+      let ini = range[1] ? Number(range[1]) : total - Number(range[2]);
+      let fim = range[1] && range[2] ? Number(range[2]) : total - 1;
+      ini = Math.max(0, ini);
+      fim = Math.min(total - 1, fim);
+      if (ini > fim) return reply.code(416).header('Content-Range', `bytes */${total}`).send();
+      reply.code(206).header('Content-Range', `bytes ${ini}-${fim}/${total}`).header('Content-Length', fim - ini + 1);
+      return reply.send(createReadStream(caminho, { start: ini, end: fim }));
+    }
+    reply.header('Content-Length', total);
+    return reply.send(createReadStream(caminho));
+  });
 
   // ---------- fotos da empilhadeira (JPEG já reduzido no navegador), em <pastaDados>/equipamentos/<id>.jpg ----------
   const pastaFotosEquip = juntarCaminho(opcoes.pastaDados ?? '/dados', 'equipamentos');

@@ -13,6 +13,7 @@ import { BotaoOk } from '../components/BotaoOk';
 import { chaveContrato, chaveNota, chaveObs, urgenciasDe } from '../lib/avisos';
 import { BalaoUrgente } from '../components/Balao';
 import { IcBusca, IcMais } from '../components/Icones';
+import { EntregaDaMov } from '../components/EntregaMaquina';
 import { EscolherNfe, lerBase64, lerXmlNfe, NfeAnexo, problemaNfe } from '../components/NfeAnexo';
 
 export const STATUS_MOV: Record<Movimentacao['status'], { rotulo: string; tom: Tom }> = {
@@ -1348,6 +1349,7 @@ export function CartaoMov({ m, children, semBorda }: { m: Movimentacao; children
           <BotaoOk chave={chaveObs(m)} rotulo="Ok, resolvido" />
         </div>
       )}
+      <EntregaDaMov m={m} />
       <NotasMov m={m} />
       <NfeAnexo m={m} />
       <p className="mt-2.5 text-xs text-ink-3">

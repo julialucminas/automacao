@@ -139,6 +139,21 @@ export const CONFIG_PADRAO: Record<string, string> = {
   // conferência das frotas: abre no dia X do mês e fica aberta até o dia Y do mês seguinte
   'conferencia.abreDia': '25',
   'conferencia.fechaDia': '5',
+  // checklist da entrega (quando a máquina sai da empresa): um item por linha
+  'entrega.checklist': [
+    'Garfos e correntes do mastro',
+    'Pneus',
+    'Mangueiras sem vazamento',
+    'Freio e freio de mão',
+    'Direção',
+    'Buzina, luzes e sinal de ré',
+    'Cinto de segurança',
+    'Extintor',
+    'Gás / bateria carregada',
+    'Painel e horímetro funcionando',
+    'Lataria e pintura',
+    'Limpeza',
+  ].join('\n'),
   'manutencao.perifericos': JSON.stringify([
     { id: 'motorPartida', nome: 'Motor de partida', dias: 120 },
     { id: 'filtroAr', nome: 'Filtro de ar', dias: 90 },

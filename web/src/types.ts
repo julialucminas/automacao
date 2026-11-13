@@ -260,7 +260,7 @@ export type Proposta = {
 export type ItemLog = { id: number; quando: string; usuario: string; area: string; acao: string; clienteId: string; clienteNome: string; antes: unknown; depois: unknown };
 export type ConfigEmail = Record<'email.remetente' | 'email.assunto' | 'email.corpo' | 'email.corpoSemBoleto', string> &
   /** regras da manutenção (JSON), editadas em Configurações */
-  Partial<Record<'manutencao.tipos' | 'manutencao.perifericos' | 'os.relatorioCliente' | 'conferencia.abreDia' | 'conferencia.fechaDia', string>>;
+  Partial<Record<'manutencao.tipos' | 'manutencao.perifericos' | 'os.relatorioCliente' | 'conferencia.abreDia' | 'conferencia.fechaDia' | 'entrega.checklist', string>>;
 
 export type TipoVisita = { sigla: string; nome: string; dias?: number; horas?: number };
 export type PerifericoId = 'motorPartida' | 'filtroAr' | 'correia' | 'oleoTransmissao' | 'oleoHidraulico';
@@ -506,3 +506,9 @@ export type EnvioContrato = {
 
 /** Foto da empilhadeira na ficha. */
 export type FotoEquipamento = { id: string; frota: string; legenda: string; tamanho: number; enviadoEm: string; por: string };
+
+/** Entrega da máquina (locação ou troca): checklist feito na saída e vídeo do transportador. */
+export type ItemEntrega = { item: string; estado: 'ok' | 'problema' | 'nao_tem' | ''; obs: string };
+export type ChecklistEntrega = { itens: ItemEntrega[]; horimetro: number | null; observacoes: string; por: string; em: string };
+export type VideoEntrega = { nome: string; ext: string; tamanho: number; tipo: string; por: string; em: string };
+export type Entrega = { movId: string; frota: string; checklist: ChecklistEntrega | null; video: VideoEntrega | null; atualizadoEm: string };

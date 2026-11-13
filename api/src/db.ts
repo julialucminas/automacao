@@ -484,6 +484,15 @@ const MIGRACOES = [
      usuario_id INTEGER
    );
    CREATE INDEX equipamento_fotos_frota ON equipamento_fotos (frota);`,
+  // 29: entrega da máquina (locação ou troca): checklist feito na saída e vídeo do transportador
+  `CREATE TABLE entregas (
+     mov_id TEXT PRIMARY KEY,
+     frota TEXT NOT NULL,
+     checklist TEXT,
+     video TEXT,
+     atualizado_em TEXT NOT NULL
+   );
+   CREATE INDEX entregas_frota ON entregas (frota);`,
 ];
 
 export function abrirBanco(caminho: string) {

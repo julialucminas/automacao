@@ -5,6 +5,7 @@ import { SeloHelbert } from '../components/Balao';
 import type { DadosEquipamento, Equipamento, Movimentacao, PecaHistorico, RegraPeriferico } from '../types';
 import { urlNfe } from '../components/NfeAnexo';
 import { FotosEquipamento } from '../components/FotosEquipamento';
+import { EntregasDaMaquina } from '../components/EntregaMaquina';
 import { regrasDe, situacaoPerifericos } from '../lib/manutencao';
 import { COMBUSTIVEIS, SITUACOES, TIPOS_VISITA, horasParaPreventiva, montarEquipamentos, nomeEquipamento, type LinhaEquipamento, type Situacao } from '../lib/equipamentos';
 import { chaveEmpresa, semAcento } from '../lib/normalizar';
@@ -369,6 +370,7 @@ export function Ficha({
             </Bloco>
           )}
           <FotosEquipamento frota={linha.frota} edita={pode('frotas', 2)} />
+          <EntregasDaMaquina frota={linha.frota} />
           <Perifericos ficha={linha.ficha} regras={regrasDe(config).perifericos} />
           {extra}
           <HistoricoPecas frota={linha.frota} veValores={veValores} />

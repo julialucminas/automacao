@@ -255,3 +255,10 @@ Tabela `equipamento_fotos` (migração 28); arquivos em `<pastaDados>/equipament
 JPEG de 1600 px com `reduzirFoto`). Rotas GET/POST `/api/equipamentos/:frota/fotos`, GET/DELETE
 `/api/equipamentos/fotos/:id` (ver: frotas 1; pôr/apagar: frotas 2). Componente `FotosEquipamento` na ficha.
 Testemunha da Lucminas na assinatura: fixa pelo que está em Integrações (dá para trocar só num contrato).
+
+## Entrega da máquina (13/nov)
+Locação e troca (frota nova) têm uma "Entrega": checklist feito pelo Júnior na saída (itens de `entrega.checklist`
+em Configurações, um por linha; OK/Problema/Não tem, problema exige descrição; horímetro da saída atualiza a ficha) e
+o vídeo do transportador (vem pelo WhatsApp, o Júnior anexa). Tabela `entregas` (migração 29). Vídeo sobe cru
+(`POST /api/entregas/:movId/video`, Content-Type video/*, até 300 MB) para `<pastaDados>/entregas/<movId>.<ext>` e é
+servido com Range (iPhone exige). Mostrado no cartão da movimentação e na ficha (bloco Entregas). Só na entrega.
