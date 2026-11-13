@@ -18,7 +18,7 @@ import { IcBusca } from '../components/Icones';
 /** colunas da lista no computador */
 const COLS = 'lg:grid-cols-[minmax(180px,1.4fr)_minmax(120px,1fr)_110px_120px_130px_110px]';
 
-type Filtro = 'todos' | StatusContrato | 'reajuste' | 'sem' | 'assinar';
+type Filtro = 'todos' | StatusContrato | 'reajuste' | 'sem' | 'assinar' | 'semArquivo';
 const STATUS: Record<StatusContrato, { rotulo: string; tom: Tom }> = {
   vencido: { rotulo: 'Vencido', tom: 'bad' },
   vencendo: { rotulo: `Vence em até ${DIAS_AVISO} dias`, tom: 'warn' },
@@ -79,10 +79,16 @@ export function Contratos() {
   const q = chaveEmpresa(busca);
   const achou = (c: Cliente, maquinas: { numero: string }[], numero = '') =>
     !q || chaveEmpresa(c.nome).includes(q) || chaveEmpresa(numero).includes(q) || maquinas.some((m) => chaveEmpresa(m.numero).includes(q));
+  // contrato sem nenhum arquivo deste período (contrato, assinado ou renovação com o vencimento atual)
+  const semArquivo = (c: Contrato) =>
+    !c.arquivoId &&
+    !arquivos.some(
+      (a) => a.clienteId === c.cliente.id && ['contrato', 'assinado', 'renovacao'].includes(a.tipo) && a.vencimento === c.vencimento && a.frotas.some((f) => c.maquinas.some((m) => m.numero === f)),
+    );
   const conta = (f: Filtro) =>
-    f === 'todos' ? contratos.length : f === 'assinar' ? contratos.filter((c) => !c.assinado).length : f === 'reajuste' ? contratos.filter((c) => c.reajusteAtrasado).length : f === 'sem' ? semContrato.reduce((s, x) => s + x.maquinas.length, 0) : contratos.filter((c) => c.status === f).length;
+    f === 'semArquivo' ? contratos.filter(semArquivo).length : f === 'todos' ? contratos.length : f === 'assinar' ? contratos.filter((c) => !c.assinado).length : f === 'reajuste' ? contratos.filter((c) => c.reajusteAtrasado).length : f === 'sem' ? semContrato.reduce((s, x) => s + x.maquinas.length, 0) : contratos.filter((c) => c.status === f).length;
   const lista = contratos.filter(
-    (c) => (filtro === 'todos' || filtro === c.status || (filtro === 'reajuste' && c.reajusteAtrasado) || (filtro === 'assinar' && !c.assinado)) && achou(c.cliente, c.maquinas, c.numero),
+    (c) => (filtro === 'todos' || filtro === c.status || (filtro === 'reajuste' && c.reajusteAtrasado) || (filtro === 'assinar' && !c.assinado) || (filtro === 'semArquivo' && semArquivo(c))) && achou(c.cliente, c.maquinas, c.numero),
   );
   const soma = (l: Contrato[]) => l.reduce((s, c) => s + c.valor, 0);
   const porStatus = (s: StatusContrato) => contratos.filter((c) => c.status === s);
@@ -160,11 +166,12 @@ export function Contratos() {
 
       {aba === 'contratos' && (
       <>
-      <section aria-label="Resumo dos contratos" className="grid grid-cols-3 gap-2 xl:grid-cols-6">
+      <section aria-label="Resumo dos contratos" className="grid grid-cols-3 gap-2 md:grid-cols-4 xl:grid-cols-7">
         {cartao('Vencidos', porStatus('vencido').length, soma(porStatus('vencido')), 'vencido', porStatus('vencido').length ? 'text-bad' : 'text-ink-3')}
         {cartao(`Vencem em ${DIAS_AVISO} dias`, porStatus('vencendo').length, soma(porStatus('vencendo')), 'vencendo', porStatus('vencendo').length ? 'text-warn-strong' : 'text-ink-3')}
         {cartao('Vigentes', porStatus('vigente').length, soma(porStatus('vigente')), 'vigente', 'text-ok')}
         {cartao('Reajuste atrasado', conta('reajuste'), soma(contratos.filter((c) => c.reajusteAtrasado)), 'reajuste', conta('reajuste') ? 'text-warn-strong' : 'text-ink-3')}
+        {cartao('Sem contrato anexado', conta('semArquivo'), soma(contratos.filter(semArquivo)), 'semArquivo', conta('semArquivo') ? 'text-warn-strong' : 'text-ink-3')}
         {cartao('Falta assinatura', conta('assinar'), soma(contratos.filter((c) => !c.assinado)), 'assinar', conta('assinar') ? 'text-bad' : 'text-ink-3')}
         {cartao('Máquinas sem contrato', conta('sem'), semContrato.reduce((s, x) => s + x.valor, 0), 'sem', conta('sem') ? 'text-warn-strong' : 'text-ink-3')}
       </section>
@@ -222,6 +229,7 @@ export function Contratos() {
                           ) : (
                             <span className="font-semibold text-bad">○ {c.assinaturaParcial ? 'Incompleta' : 'Falta assinar'}</span>
                           )}
+                          {semArquivo(c) && <span className="block text-[11.5px] font-semibold text-warn-strong">📎 contrato não anexado</span>}
                         </span>
                         <span className={`max-lg:pl-5 ${c.reajusteAtrasado ? 'font-semibold text-warn-strong' : 'text-ink-2'}`}>
                           <span className="text-ink-3 lg:hidden">Reajuste </span>
@@ -257,6 +265,11 @@ export function Contratos() {
                                 <ItemPendencia key={r.id} r={r} mudou={mudouAcomp} />
                               ))}
                             </div>
+                          )}
+                          {semArquivo(c) && (
+                            <p className="mt-2.5 rounded-[10px] border border-warn-line bg-warn-soft px-3 py-2 text-[13px] font-semibold text-warn-strong">
+                              📎 O contrato deste período ainda não foi anexado. Anexe o assinado aqui embaixo ou, em “Editar”, junto com os dados.
+                            </p>
                           )}
                           <ArquivosDoContrato c={c} arquivos={arquivos} edita={edita} anexado={() => void recarregar()} />
                           {veValor && (
@@ -360,6 +373,8 @@ function EditorContrato({ e, contratos, fechar, salvo, veValor }: { e: Edicao; c
   const [d, setD] = useState(e);
   const [erro, setErro] = useState('');
   const [salvando, setSalvando] = useState(false);
+  const [arquivo, setArquivo] = useState<File | null>(null);
+  const [arquivoAssinado, setArquivoAssinado] = useState(true);
   const marcar = (n: string, sim: boolean) => setD({ ...d, frotas: sim ? [...d.frotas, n] : d.frotas.filter((x) => x !== n) });
   // outros contratos do mesmo cliente (máquinas contratadas em outra data ficam em contrato separado)
   const outros = contratos.filter((c) => c.cliente.id === d.cliente.id && c.chave !== e.chave);
@@ -383,9 +398,27 @@ function EditorContrato({ e, contratos, fechar, salvo, veValor }: { e: Edicao; c
         vencimento: d.vencimento,
         obs: d.obs.trim(),
         renovacao: d.renovacao,
-        ...(d.renovacao ? {} : { assinado: d.assinado, assinadoEm: d.assinado ? d.assinadoEm || null : null }),
+        // arquivo marcado como assinado já conta como assinado
+        ...(d.renovacao ? {} : { assinado: d.assinado || (!!arquivo && arquivoAssinado), assinadoEm: d.assinado ? d.assinadoEm || null : null }),
       });
-      avisar(d.renovacao ? `Contrato de ${d.cliente.nome} renovado até ${dataBr(d.vencimento)}.` : `Contrato de ${d.cliente.nome} salvo.`);
+      // o arquivo sobe depois dos dados, para ficar com o número e o vencimento novos
+      let falhou = '';
+      if (arquivo) {
+        try {
+          await api.anexarContrato({
+            clienteId: d.cliente.id,
+            frotas: d.frotas,
+            arquivo: await lerBase64(arquivo),
+            nome: arquivo.name,
+            tipo: arquivoAssinado ? 'assinado' : d.renovacao ? 'renovacao' : 'contrato',
+            descricao: d.renovacao ? `Renovação até ${dataBr(d.vencimento)}` : '',
+          });
+        } catch (x) {
+          falhou = x instanceof Error ? x.message : 'erro';
+        }
+      }
+      if (falhou) avisar(`Contrato salvo, mas o arquivo não subiu (${falhou}). Anexe de novo no contrato.`, 'bad');
+      else avisar(d.renovacao ? `Contrato de ${d.cliente.nome} renovado até ${dataBr(d.vencimento)}.` : `Contrato de ${d.cliente.nome} salvo${arquivo ? ' com o arquivo' : ''}.`);
       salvo();
       fechar();
     } catch (x) {
@@ -462,6 +495,19 @@ function EditorContrato({ e, contratos, fechar, salvo, veValor }: { e: Edicao; c
           )}
         </div>
       )}
+      <div className="flex flex-col gap-1.5 rounded-[10px] border border-dashed border-line-strong px-3 py-2.5">
+        <span className="label">
+          📎 Arquivo do contrato <span className="font-normal text-ink-3">(PDF ou foto{e.antes.length && !d.renovacao ? ', se ainda não anexou' : ''})</span>
+        </span>
+        <input type="file" accept=".pdf,.jpg,.jpeg,.png" aria-label="Arquivo do contrato" className="text-[13px]" onChange={(ev) => setArquivo(ev.target.files?.[0] ?? null)} />
+        {arquivo && (
+          <label className="flex cursor-pointer items-center gap-2 text-[13px]">
+            <input type="checkbox" className="h-4 w-4 accent-ink" checked={arquivoAssinado} onChange={(ev) => setArquivoAssinado(ev.target.checked)} />
+            Este arquivo já é o contrato assinado
+          </label>
+        )}
+        {!arquivo && <span className="text-[12px] text-ink-3">Sem arquivo, o contrato fica com o aviso “contrato não anexado”.</span>}
+      </div>
       <p className="text-[12.5px] text-ink-3">O início é a base do reajuste anual. Valores mudam pelo reajuste, em Movimentações.</p>
       {erro && (
         <div role="alert" className="rounded-[10px] bg-bad-soft px-3 py-2.5 text-[13px] text-bad-strong">
