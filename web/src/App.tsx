@@ -25,6 +25,7 @@ import { Campo } from './pages/Campo';
 import { useMenu, usaCentralFinanceiro } from './components/Layout';
 import { CentralFinanceiro } from './pages/CentralFinanceiro';
 import { Contratos } from './pages/Contratos';
+import { ConfigOperacao } from './pages/ConfigOperacao';
 import type { Aba } from './lib/acesso';
 import type { ReactNode } from 'react';
 
@@ -45,6 +46,7 @@ const TELAS: [Aba, string, ReactNode][] = [
   ['envio', '/envio', <Envio />],
   ['historico', '/historico', <Historico />],
   ['configuracoes', '/configuracoes', <Configuracoes />],
+  ['configOperacao', '/config-operacao', <ConfigOperacao />],
   ['clientes', '/clientes', <Clientes />],
   ['registro', '/registro', <Registro />],
   ['usuarios', '/usuarios', <Usuarios />],

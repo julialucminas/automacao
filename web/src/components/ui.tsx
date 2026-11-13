@@ -18,13 +18,17 @@ export function Chip({ tom, children }: { tom: Tom; children: ReactNode }) {
 /** Mantém o foco dentro do diálogo e fecha com Esc. */
 function useDialogo(aberto: boolean, fechar: () => void) {
   const ref = useRef<HTMLDivElement>(null);
+  // "fechar" costuma ser uma função nova a cada render da tela de trás (que se atualiza sozinha a cada 15 s):
+  // guardada num ref, o foco só é ajustado quando o diálogo abre — antes ele pulava para o 1º campo no meio da digitação
+  const fecharRef = useRef(fechar);
+  fecharRef.current = fechar;
   useEffect(() => {
     if (!aberto) return;
     const anterior = document.activeElement as HTMLElement | null;
     const el = ref.current;
     el?.querySelector<HTMLElement>('input, textarea, button:not([data-fechar])')?.focus();
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') fechar();
+      if (e.key === 'Escape') fecharRef.current();
       if (e.key === 'Tab' && el) {
         const foc = el.querySelectorAll<HTMLElement>('button, input, textarea, select, a[href]');
         if (!foc.length) return;
@@ -44,7 +48,7 @@ function useDialogo(aberto: boolean, fechar: () => void) {
       el?.removeEventListener('keydown', onKey);
       anterior?.focus?.();
     };
-  }, [aberto, fechar]);
+  }, [aberto]);
   return ref;
 }
 

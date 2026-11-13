@@ -16,7 +16,7 @@ beforeEach(async () => {
   repositorio(db).criarUsuario('junior@lucminas.com.br', 'Júnior', await gerarHash('senha-junior'), 'Júnior', 'operacoes');
   app = criarApp(db, { cookieSeguro: false });
   // estes testes cobrem o fluxo de aprovação: aqui operações volta a não aprovar (o padrão agora é registrar direto)
-  db.prepare("UPDATE perfis SET permissoes = json_set(permissoes, '$.aprovacoes', 0) WHERE id = 'operacoes'").run();
+  db.prepare("UPDATE perfis SET permissoes = json_set(permissoes, '$.aprovacoes', 0, '$.clientes', 1) WHERE id = 'operacoes'").run();
   const r = await req('POST', '/api/sessao', { email: 'JULIA@lucminas.com.br', senha: 'senha-certa' }, false);
   expect(r.statusCode).toBe(200);
   cookie = String(r.headers['set-cookie']).split(';')[0];

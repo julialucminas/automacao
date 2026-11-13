@@ -17,7 +17,7 @@ const comIntervalo = <T extends { dias?: number; horas?: number }>(x: T, n: stri
 /** Configurações → Manutenção: tipos de visita (CF, CR, B, C, D) e de quanto em quanto troca cada periférico. */
 export function RegrasManutencao() {
   const { config, salvarConfig, avisar, pode } = useEstado();
-  const edita = pode('configuracoes', 2);
+  const edita = pode('configOperacao', 2);
   const atual = regrasDe(config);
   const [tipos, setTipos] = useState<TipoVisita[]>(atual.tipos);
   const [perifericos, setPerifericos] = useState<RegraPeriferico[]>(atual.perifericos);
@@ -181,7 +181,7 @@ export function RegrasManutencao() {
 /** Configurações → Conferência: em que dias do mês a aba fica aberta. */
 export function ConfigConferencia() {
   const { config, salvarConfig, avisar, pode } = useEstado();
-  const edita = pode('configuracoes', 2);
+  const edita = pode('configOperacao', 2);
   const [abre, setAbre] = useState(config?.['conferencia.abreDia'] ?? '25');
   const [fecha, setFecha] = useState(config?.['conferencia.fechaDia'] ?? '5');
   useEffect(() => {
@@ -226,7 +226,7 @@ export function ConfigConferencia() {
 /** Itens do checklist de entrega (quando a máquina sai da empresa), um por linha. */
 export function ConfigChecklistEntrega() {
   const { config, salvarConfig, avisar, pode } = useEstado();
-  const edita = pode('configuracoes', 2);
+  const edita = pode('configOperacao', 2);
   const atual = config?.['entrega.checklist'] ?? '';
   const [texto, setTexto] = useState(atual);
   useEffect(() => setTexto(config?.['entrega.checklist'] ?? ''), [config]);

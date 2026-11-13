@@ -33,7 +33,7 @@ describe('permissões por perfil', () => {
   it('a sessão traz o que cada um pode ver e fazer', async () => {
     const j = (await como('junior')('GET', '/api/sessao')).json();
     expect(j).toMatchObject({ perfil: 'operacoes', perfilNome: 'Operações', veValores: false });
-    expect(j.permissoes).toMatchObject({ movimentacoes: 2, frotas: 2, envio: 0, clientes: 0, usuarios: 0 });
+    expect(j.permissoes).toMatchObject({ movimentacoes: 2, frotas: 2, envio: 0, clientes: 2, configOperacao: 2, configuracoes: 0, usuarios: 0 });
     expect((await como('dono')('GET', '/api/sessao')).json().permissoes).toMatchObject({ envio: 1, clientes: 1, usuarios: 0 });
   });
 

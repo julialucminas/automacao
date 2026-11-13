@@ -984,10 +984,13 @@ export function criarApp(
 
   // ---------- configurações e registro ----------
   app.get('/api/config', { preHandler: exigirLogin }, async () => ops.lerConfig());
-  app.put('/api/config', { preHandler: exigir(2, 'configuracoes') }, async (req) => {
+  app.put('/api/config', { preHandler: exigir(2, 'configuracoes', 'configOperacao') }, async (req, reply) => {
     const b = (req.body ?? {}) as Record<string, unknown>;
     const valores: Record<string, string> = {};
     for (const k of Object.keys(CONFIG_PADRAO)) if (b[k] !== undefined) valores[k] = texto(b[k], k, 5000) || CONFIG_PADRAO[k];
+    // modelo do e-mail: Configurações do e-mail; o resto (manutenção, conferência, checklist, OS): Configurações da operação
+    for (const k of Object.keys(valores)) if (!pode(req, k.startsWith('email.') ? 'configuracoes' : 'configOperacao', 2)) delete valores[k];
+    if (!Object.keys(valores).length) return reply.code(403).send({ erro: SEM_PERMISSAO });
     if (valores['os.relatorioCliente'] && !['sim', 'nao'].includes(valores['os.relatorioCliente'])) throw new Invalido('Opção inválida.');
     for (const k of ['conferencia.abreDia', 'conferencia.fechaDia'])
       if (valores[k] && !(/^\d{1,2}$/.test(valores[k]) && Number(valores[k]) >= (k.endsWith('fechaDia') ? 0 : 1) && Number(valores[k]) <= 28)) throw new Invalido('Dia da conferência inválido (use de 1 a 28).');

@@ -327,3 +327,15 @@ telas menos o app do dono). Novo aviso = para quem + texto (o título é o come�
 recebe vê um cartão no canto; abre como chat; "✓ Concluir" tira do canto. A página /solicitacoes virou só "Histórico de
 avisos" (logo depois do Histórico de envios no menu), com busca e "Reabrir". Saíram: faixa amarela do topo, itens na
 Central e no Painel do dia, contadores no menu, caixas/filtros/datas/cliente. A API e as tabelas continuam as mesmas.
+
+## Foco pulando nos diálogos (13/nov)
+`useDialogo` (components/ui.tsx) tinha `fechar` nas dependências do efeito que põe o foco no 1º campo. Como a tela de trás
+se atualiza sozinha (avisos a cada 15 s) e passa um `fechar` novo, o foco pulava para o 1º campo no meio da digitação
+(ex.: cadastrar/renovar contrato). Agora `fechar` fica num ref e o efeito só roda ao abrir.
+
+## Configurações separadas (13/nov)
+Aba nova `configOperacao` ("Configurações da operação", /config-operacao: manutenção, conferência, checklist de entrega,
+relatório da OS). "Configurações" virou "Configurações do e-mail" (modelo do e-mail + Autentique). `PUT /api/config` aceita
+quem tem uma das duas e descarta as chaves que a pessoa não pode mudar (`email.*` = configuracoes; resto = configOperacao).
+Migração 33: configOperacao = nível que cada perfil tinha em configuracoes; Operações (Júnior) ganha clientes 2 e
+configOperacao 2.

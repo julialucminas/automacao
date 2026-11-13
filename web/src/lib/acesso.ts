@@ -30,6 +30,7 @@ export type Aba =
   | 'envio'
   | 'historico'
   | 'configuracoes'
+  | 'configOperacao'
   | 'clientes'
   | 'aprovacoes'
   | 'registro'
@@ -52,7 +53,8 @@ export const ABAS: DefAba[] = [
   { id: 'envio', rotulo: 'Envio do mês', grupo: 'financeiro', rota: '/envio', ve: 'vê as faturas no Calendário (sem a tela de envio)', edita: 'envia faturas e marca faturado' },
   { id: 'historico', rotulo: 'Histórico de envios', grupo: 'financeiro', rota: '/historico', ve: 'vê o que foi enviado', edita: 'reenvia e confere a caixa de entrada' },
   { id: 'solicitacoes', rotulo: 'Histórico de avisos', grupo: 'inicio', rota: '/solicitacoes', ve: 'vê os avisos', edita: 'manda, responde e conclui avisos (🔔 no canto da tela)' },
-  { id: 'configuracoes', rotulo: 'Configurações', grupo: 'financeiro', rota: '/configuracoes', ve: 'vê o texto do e-mail', edita: 'muda o texto do e-mail' },
+  { id: 'configuracoes', rotulo: 'Configurações do e-mail', grupo: 'financeiro', rota: '/configuracoes', ve: 'vê o texto do e-mail', edita: 'muda o texto do e-mail' },
+  { id: 'configOperacao', rotulo: 'Configurações da operação', grupo: 'operacao', rota: '/config-operacao', ve: 'vê as regras', edita: 'muda manutenção, conferência e checklist de entrega' },
   { id: 'clientes', rotulo: 'Cadastro de clientes', grupo: 'clientes', rota: '/clientes', ve: 'só consulta o cadastro', edita: 'altera o cadastro direto' },
   { id: 'aprovacoes', rotulo: 'Aprovações', grupo: 'administracao', rota: '/aprovacoes', ve: 'vê o que está pendente', edita: 'aprova e recusa' },
   { id: 'registro', rotulo: 'Registro de alterações', grupo: 'administracao', rota: '/registro', ve: 'vê o registro', edita: 'vê o registro' },
@@ -87,8 +89,8 @@ export const PERFIS_PADRAO: PerfilAcesso[] = [
   {
     id: 'operacoes',
     nome: 'Operações',
-    descricao: 'Movimentações, conferência e frotas. Alterações de cadastro vão para aprovação.',
-    permissoes: com(0, { inicio: 2, solicitacoes: 2, manutencao: 2, ordens: 2, externos: 2, movimentacoes: 2, conferencia: 2, calendario: 1, frotas: 2 }),
+    descricao: 'Movimentações, conferência, frotas, clientes e configurações da operação. O que registra entra direto no cadastro.',
+    permissoes: com(0, { inicio: 2, solicitacoes: 2, manutencao: 2, ordens: 2, externos: 2, movimentacoes: 2, conferencia: 2, calendario: 1, frotas: 2, aprovacoes: 2, contratos: 2, clientes: 2, configOperacao: 2 }),
     veValores: false,
     padrao: true,
   },

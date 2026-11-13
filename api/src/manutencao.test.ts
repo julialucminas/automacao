@@ -58,7 +58,7 @@ describe('painel de manutenção', () => {
     expect(JSON.parse((await como('julia')('GET', '/api/config')).json()['manutencao.tipos'])[2]).toEqual({ sigla: 'B', nome: 'Preventiva B', horas: 400 });
     expect((await como('julia')('PUT', '/api/config', { 'manutencao.tipos': '[{"sigla":"B","nome":"x"},{"sigla":"b","nome":"y"}]' })).json().erro).toMatch(/duas vezes/);
     expect((await como('julia')('PUT', '/api/config', { 'manutencao.perifericos': '[{"id":"turbo","nome":"x","dias":1}]' })).statusCode).toBe(400);
-    expect((await como('junior')('PUT', '/api/config', { 'manutencao.tipos': JSON.stringify(tipos) })).statusCode).toBe(403);
+    expect((await como('tec')('PUT', '/api/config', { 'manutencao.tipos': JSON.stringify(tipos) })).statusCode).toBe(403);
   });
 
   it('registrar visita atualiza a ficha, troca periféricos e lança no histórico (que o Auvo não apaga)', async () => {

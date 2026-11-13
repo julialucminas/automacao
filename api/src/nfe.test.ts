@@ -25,10 +25,12 @@ beforeEach(async () => {
   const h = await gerarHash('senha-teste-1');
   repo.criarUsuario('financeiro@lucminas.com.br', 'Angelise', h, '', 'financeiro');
   repo.criarUsuario('tecnico@lucminas.com.br', 'Fabrício', h, '', 'tecnico');
+  repo.criarUsuario('locacao@lucminas.com.br', 'Júnior', h, '', 'operacoes');
   app = criarApp(db, { cookieSeguro: false, pastaDados: pasta });
   for (const [k, e] of [
     ['angelise', 'financeiro@lucminas.com.br'],
     ['tecnico', 'tecnico@lucminas.com.br'],
+    ['junior', 'locacao@lucminas.com.br'],
   ]) {
     const r = await app.inject({ method: 'POST', url: '/api/sessao', payload: { email: e, senha: 'senha-teste-1' } });
     cookies[k] = String(r.headers['set-cookie']).split(';')[0];
@@ -296,5 +298,19 @@ describe('aviso de devolução', () => {
     expect(f.devolucaoAvisada ?? null).toBeNull();
     expect(f.devolucaoPrevista ?? null).toBeNull();
     expect(f.etiquetas).toBe('Negociando'); // etiqueta é da máquina: fica
+  });
+});
+
+describe('configurações separadas', () => {
+  it('operações muda as regras da operação e o cadastro de clientes, mas não o e-mail', async () => {
+    const j = como('junior');
+    expect((await j('PUT', '/api/config', { 'entrega.checklist': 'Pneus\nGarfos' })).json()['entrega.checklist']).toBe('Pneus\nGarfos');
+    expect((await j('PUT', '/api/config', { 'email.assunto': 'Outro' })).statusCode).toBe(403);
+    // mandando tudo junto, o do e-mail é ignorado
+    const r = (await j('PUT', '/api/config', { 'email.assunto': 'Outro', 'conferencia.abreDia': '24' })).json();
+    expect(r['conferencia.abreDia']).toBe('24');
+    expect(r['email.assunto']).not.toBe('Outro');
+    expect((await como('angelise')('PUT', '/api/config', { 'email.assunto': 'Fatura {numero}' })).json()['email.assunto']).toBe('Fatura {numero}');
+    expect((await j('POST', '/api/clientes', { nome: 'Cliente do Júnior', para: ['x@y.com.br'], cc: [], apelidos: [], cnpj: '', observacoes: '' })).statusCode).toBe(201);
   });
 });

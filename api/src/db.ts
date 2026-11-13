@@ -551,6 +551,10 @@ const MIGRACOES = [
      PRIMARY KEY (validade, uid)
    );
    CREATE INDEX caixa_entrada_recebido ON caixa_entrada (recebido_em);`,
+  // 33: Configurações separadas em "do e-mail" (configuracoes) e "da operação" (configOperacao): quem já editava
+  // Configurações continua editando as duas; Operações (Júnior) passa a editar a da operação e o cadastro de clientes
+  `UPDATE perfis SET permissoes = json_set(permissoes, '$.configOperacao', COALESCE(json_extract(permissoes, '$.configuracoes'), 0));
+   UPDATE perfis SET permissoes = json_set(permissoes, '$.configOperacao', 2, '$.clientes', 2) WHERE id = 'operacoes';`,
 ];
 
 export function abrirBanco(caminho: string) {

@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { ConfigChecklistEntrega, ConfigConferencia, RegrasManutencao } from '../components/RegrasManutencao';
 import { useEstado } from '../state';
 import { IntegracaoAutentique } from '../components/IntegracaoAutentique';
 import type { ConfigEmail } from '../types';
@@ -38,8 +37,8 @@ export function Configuracoes() {
   return (
     <div className="flex flex-col gap-5">
       <div>
-        <h1 className="text-xl font-bold">Configurações</h1>
-        <p className="text-[13px] text-ink-3">Texto do e-mail que vai junto com a fatura e o boleto, e as regras da manutenção.</p>
+        <h1 className="text-xl font-bold">Configurações do e-mail</h1>
+        <p className="text-[13px] text-ink-3">Texto do e-mail que vai junto com a fatura e o boleto. As regras da manutenção, da conferência e o checklist de entrega ficam em Configurações da operação.</p>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
@@ -136,9 +135,6 @@ export function Configuracoes() {
           </div>
         </section>
       </div>
-      <RegrasManutencao />
-      <ConfigConferencia />
-      <ConfigChecklistEntrega />
       {pode('usuarios', 2) && <IntegracaoAutentique />}
     </div>
   );
