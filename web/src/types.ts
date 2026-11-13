@@ -481,7 +481,33 @@ export type DadosExterno = Partial<Pick<ServicoExterno, 'clienteId' | 'clienteNo
 export type FotoMensal = { mes: string; receita: number; receitaContrato: number; locadas: number; frota: number; clientes: number; atualizadaEm: string };
 
 /** Arquivo de contrato assinado (PDF ou foto). O atual de cada máquina está na ficha; os antigos ficam guardados. */
-export type ArquivoContrato = { id: string; clienteId: string; frotas: string[]; numero: string; vencimento: string | null; nome: string; ext: string; tamanho: number; enviadoEm: string; por: string };
+export type TipoDocContrato = 'contrato' | 'assinado' | 'aditivo' | 'renovacao' | 'outro';
+export type ArquivoContrato = {
+  id: string;
+  clienteId: string;
+  frotas: string[];
+  numero: string;
+  vencimento: string | null;
+  nome: string;
+  ext: string;
+  tamanho: number;
+  enviadoEm: string;
+  por: string;
+  tipo: TipoDocContrato;
+  descricao: string;
+  movId: string | null;
+};
+/** Documento qualquer guardado na pasta do cliente (cartão CNPJ, proposta…). */
+export type DocumentoCliente = { id: string; clienteId: string; nome: string; ext: string; tamanho: number; descricao: string; enviadoEm: string; por: string };
+/** Tudo o que o sistema guarda de um cliente. `faturas` vem null para quem não é administrador/financeiro. */
+export type PastaCliente = {
+  clienteId: string;
+  contratos: ArquivoContrato[];
+  documentos: DocumentoCliente[];
+  nfe: { movId: string; tipo: TipoMov; frota: string; data: string; nf: string; arquivo: NfArquivo }[];
+  entregas: (Entrega & { data: string | null })[];
+  faturas: { id: string; numero: string; referencia: string; enviadoEm: string; status: string; manual: boolean; arquivos: string[] }[] | null;
+};
 
 /** Integração com a Autentique (o token nunca vem para a tela: só se está configurado e os 4 últimos caracteres). */
 export type IntegracaoAutentique = { configurado: boolean; final: string; teste: boolean; conta: string; lucminasNome: string; lucminasEmail: string; testemunhaNome: string; testemunhaEmail: string };

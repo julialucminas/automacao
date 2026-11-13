@@ -22,6 +22,9 @@ import type {
   ItemLog,
   FotoMensal,
   ArquivoContrato,
+  DocumentoCliente,
+  PastaCliente,
+  TipoDocContrato,
   EnvioContrato,
   FotoEquipamento,
   Entrega,
@@ -129,7 +132,10 @@ export interface Api {
   reenviarAssinatura(envioId: string): Promise<{ ok: boolean; reenviados: number }>;
   cancelarAssinatura(envioId: string): Promise<EnvioContrato>;
   /** anexa o contrato assinado (PDF/JPG/PNG em base64) às máquinas; já marca como assinado */
-  anexarContrato(d: { clienteId: string; frotas: string[]; arquivo: string; nome: string }): Promise<ArquivoContrato>;
+  anexarContrato(d: { clienteId: string; frotas: string[]; arquivo: string; nome: string; tipo?: TipoDocContrato; descricao?: string; movId?: string }): Promise<ArquivoContrato>;
+  pastaCliente(clienteId: string): Promise<PastaCliente>;
+  enviarDocumentoCliente(clienteId: string, arquivo: string, nome: string, descricao: string): Promise<DocumentoCliente>;
+  apagarDocumentoCliente(id: string): Promise<{ ok: boolean }>;
   /** fatura enviada por fora do sistema: fica no histórico e conta como faturada */
   lancarFaturaManual(d: { clienteId: string; referencia: string; data: string; numero: string; observacao: string }): Promise<Envio>;
   /** mais uma observação numa movimentação já lançada */

@@ -262,3 +262,15 @@ em Configurações, um por linha; OK/Problema/Não tem, problema exige descriç�
 o vídeo do transportador (vem pelo WhatsApp, o Júnior anexa). Tabela `entregas` (migração 29). Vídeo sobe cru
 (`POST /api/entregas/:movId/video`, Content-Type video/*, até 300 MB) para `<pastaDados>/entregas/<movId>.<ext>` e é
 servido com Range (iPhone exige). Mostrado no cartão da movimentação e na ficha (bloco Entregas). Só na entrega.
+
+## Contratos como arquivo + pasta do cliente (13/nov)
+- `contratos_arquivos` ganhou `tipo` (contrato, assinado, aditivo, renovacao, outro), `descricao` e `mov_id` (migração 30).
+  Só o tipo "assinado" vira o contrato atual da máquina; os outros entram no histórico do contrato.
+- Reajuste em Movimentações aceita o aditivo/novo contrato: depois de registrar, sobe como `aditivo` com o id da
+  movimentação. Na aba Contratos: "+ Outro documento" e "histórico de documentos".
+- Histórico de preços (`web/src/lib/precos.ts`): montado das movimentações aprovadas (locação, reajuste com %, troca,
+  devolução); na ficha (quem vê valores ou confere frotas) e dentro do contrato.
+- Pasta do cliente (botão "📁 Pasta" no Cadastro de clientes): `GET /api/clientes/:id/pasta` junta contratos, NF-e,
+  entregas, documentos avulsos (`cliente_documentos`, PDF/JPG/PNG/Word/Excel até 15 MB, em `<pastaDados>/clientes/`)
+  e faturas/boletos (PDFs guardados em `<pastaDados>/envios/<id>/`, servidos por `/api/envios/:id/arquivos/:nome`)
+  — faturas só para os perfis admin e financeiro.

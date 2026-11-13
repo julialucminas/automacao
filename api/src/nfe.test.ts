@@ -192,3 +192,31 @@ describe('entrega da máquina', () => {
     expect((await a('PUT', `/api/entregas/${dev.id}/checklist`, { itens })).statusCode).toBe(400);
   });
 });
+
+describe('pasta do cliente', () => {
+  it('junta contratos (com tipo), documentos, NF-e e entregas; faturas só para financeiro', async () => {
+    const a = como('angelise');
+    const c = (await a('POST', '/api/clientes', { nome: 'Delta', para: ['a@d.com.br'], cc: [], apelidos: [], cnpj: '', observacoes: '' })).json();
+    const loc = (await a('POST', '/api/movimentacoes', { tipo: 'locacao', frota: '30', clienteId: c.id, data: '2026-01-10', valor: 300000 })).json();
+    await a('PUT', `/api/entregas/${loc.id}/checklist`, { itens: [{ item: 'Pneus', estado: 'ok', obs: '' }] });
+    await a('POST', '/api/contratos', { clienteId: c.id, frotas: ['30'], numero: 'D-1', vencimento: '2027-01-09' });
+    await a('POST', '/api/contratos/arquivos', { clienteId: c.id, frotas: ['30'], arquivo: PDF, nome: 'contrato.pdf', tipo: 'assinado' });
+    const adit = await a('POST', '/api/contratos/arquivos', { clienteId: c.id, frotas: ['30'], arquivo: PDF, nome: 'aditivo.pdf', tipo: 'aditivo', descricao: 'Reajuste IPCA', movId: 'x' });
+    expect(adit.json()).toMatchObject({ tipo: 'aditivo', descricao: 'Reajuste IPCA' });
+    // aditivo não troca o "contrato atual" da máquina
+    const f30 = (await a('GET', '/api/equipamentos')).json().find((e: { frota: string }) => e.frota === '30');
+    expect(f30.contratoArquivo).not.toBe(adit.json().id);
+    expect((await a('POST', `/api/clientes/${c.id}/documentos`, { arquivo: PDF, nome: 'virus.exe' })).statusCode).toBe(400);
+    const doc = await a('POST', `/api/clientes/${c.id}/documentos`, { arquivo: PDF, nome: 'Cartão CNPJ.pdf', descricao: 'cartão' });
+    expect(doc.statusCode).toBe(201);
+    await a('POST', '/api/envios/manual', { clienteId: c.id, referencia: '2026-11', data: '2026-11-10', numero: '77' });
+    const pasta = (await a('GET', `/api/clientes/${c.id}/pasta`)).json();
+    expect(pasta.contratos.map((x: { tipo: string }) => x.tipo).sort()).toEqual(['aditivo', 'assinado']);
+    expect(pasta.documentos).toMatchObject([{ nome: 'Cartão CNPJ.pdf', descricao: 'cartão', por: 'Angelise' }]);
+    expect(pasta.entregas).toHaveLength(1);
+    expect(pasta.faturas).toMatchObject([{ numero: '77', manual: true, arquivos: [] }]);
+    expect((await a('GET', `/api/clientes/documentos/${doc.json().id}`)).headers['content-type']).toBe('application/pdf');
+    await a('DELETE', `/api/clientes/documentos/${doc.json().id}`);
+    expect((await a('GET', `/api/clientes/${c.id}/pasta`)).json().documentos).toEqual([]);
+  });
+});

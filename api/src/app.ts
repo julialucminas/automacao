@@ -7,7 +7,7 @@ import { agendarCopias, listarCopias } from './backup.js';
 import { fotos as tabelaFotos } from './fotos.js';
 import { clienteAutentique, ErroAutentique, type Assinante, type ClienteAutentique, type SituacaoAssinante } from './autentique.js';
 import { randomUUID } from 'node:crypto';
-import { createReadStream, createWriteStream, existsSync, mkdirSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
+import { createReadStream, createWriteStream, existsSync, mkdirSync, readdirSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import { Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -525,7 +525,8 @@ export function criarApp(
 
   // ---------- contrato assinado (PDF ou foto), guardado em <pastaDados>/contratos/<id>.<ext> ----------
   const pastaContratos = juntarCaminho(opcoes.pastaDados ?? '/dados', 'contratos');
-  type ArquivoContrato = { id: string; clienteId: string; frotas: string[]; numero: string; vencimento: string | null; nome: string; ext: string; tamanho: number; enviadoEm: string; por: string };
+  type ArquivoContrato = { id: string; clienteId: string; frotas: string[]; numero: string; vencimento: string | null; nome: string; ext: string; tamanho: number; enviadoEm: string; por: string; tipo: string; descricao: string; movId: string | null };
+  const TIPOS_DOC_CONTRATO = ['contrato', 'assinado', 'aditivo', 'renovacao', 'outro'];
   const lerArquivoContrato = (r: Record<string, unknown>): ArquivoContrato => ({
     id: r.id as string,
     clienteId: r.cliente_id as string,
@@ -537,6 +538,9 @@ export function criarApp(
     tamanho: r.tamanho as number,
     enviadoEm: r.enviado_em as string,
     por: (r.por as string) ?? '',
+    tipo: (r.tipo as string) ?? 'assinado',
+    descricao: (r.descricao as string) ?? '',
+    movId: (r.mov_id as string) ?? null,
   });
   const SEL_ARQ = "SELECT a.*, COALESCE(u.nome, '') AS por FROM contratos_arquivos a LEFT JOIN usuarios u ON u.id = a.usuario_id";
   app.get('/api/contratos/arquivos', { preHandler: exigir(1, 'contratos') }, async () =>
@@ -547,7 +551,19 @@ export function criarApp(
     return cab.subarray(0, 5).toString('latin1') === '%PDF-' ? 'pdf' : cab[0] === 0xff && cab[1] === 0xd8 ? 'jpg' : cab.subarray(1, 4).toString('latin1') === 'PNG' ? 'png' : null;
   };
   /** Guarda o arquivo do contrato assinado, liga às máquinas e marca como assinado (se ainda não estava). */
-  const guardarContratoAssinado = (cliente: { id: string; nome: string }, frotas: string[], buf: Buffer, ext: string, nome: string, usuarioId: number | null, assinadoEm: string, origem: string) => {
+  const guardarContratoAssinado = (
+    cliente: { id: string; nome: string },
+    frotas: string[],
+    buf: Buffer,
+    ext: string,
+    nome: string,
+    usuarioId: number | null,
+    assinadoEm: string,
+    origem: string,
+    tipo = 'assinado',
+    descricao = '',
+    movId: string | null = null,
+  ) => {
     const id = randomUUID();
     const ficha = equip.buscar(frotas[0]);
     mkdirSync(pastaContratos, { recursive: true });
@@ -555,7 +571,7 @@ export function criarApp(
     writeFileSync(caminho, buf);
     try {
       db.transaction(() => {
-        db.prepare('INSERT INTO contratos_arquivos (id, cliente_id, frotas, numero, vencimento, nome, ext, tamanho, enviado_em, usuario_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(
+        db.prepare('INSERT INTO contratos_arquivos (id, cliente_id, frotas, numero, vencimento, nome, ext, tamanho, enviado_em, usuario_id, tipo, descricao, mov_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(
           id,
           cliente.id,
           JSON.stringify(frotas),
@@ -566,12 +582,18 @@ export function criarApp(
           buf.length,
           new Date().toISOString(),
           usuarioId,
+          tipo,
+          descricao,
+          movId,
         );
-        for (const f of frotas) {
-          const fi = equip.buscar(f);
-          equip.salvar(f, { contratoArquivo: id, ...(fi?.contratoAssinado ? {} : { contratoAssinado: 'sim', contratoAssinadoEm: assinadoEm }) }, usuarioId as number);
-        }
-        repo.registrarLog(cliente.id, usuarioId as number, `${origem} o contrato assinado de ${cliente.nome} (FT${frotas.join(', FT')}): ${nome}`, null, null, 'cliente');
+        // só o contrato assinado vira o "atual" da máquina e marca como assinado; os outros entram no histórico
+        if (tipo === 'assinado')
+          for (const f of frotas) {
+            const fi = equip.buscar(f);
+            equip.salvar(f, { contratoArquivo: id, ...(fi?.contratoAssinado ? {} : { contratoAssinado: 'sim', contratoAssinadoEm: assinadoEm }) }, usuarioId as number);
+          }
+        const rot: Record<string, string> = { assinado: 'o contrato assinado', contrato: 'o contrato', aditivo: 'o aditivo de reajuste', renovacao: 'a renovação', outro: 'um documento do contrato' };
+        repo.registrarLog(cliente.id, usuarioId as number, `${origem} ${rot[tipo] ?? 'um documento'} de ${cliente.nome} (FT${frotas.join(', FT')}): ${nome}`, null, null, 'cliente');
       })();
     } catch (e) {
       unlinkSync(caminho);
@@ -601,7 +623,9 @@ export function criarApp(
     const buf = arquivoDoPedido(b, 10);
     const ext = extensaoContrato(buf);
     if (!ext) throw new Invalido('O contrato precisa ser PDF, JPG ou PNG.');
-    const id = guardarContratoAssinado(cliente, frotas, buf, ext, nomeArquivo(b.nome, ext), req.usuario.id, hojeBr(), 'anexou');
+    const tipo = typeof b.tipo === 'string' && TIPOS_DOC_CONTRATO.includes(b.tipo) ? b.tipo : 'assinado';
+    const movId = typeof b.movId === 'string' && b.movId ? b.movId : null;
+    const id = guardarContratoAssinado(cliente, frotas, buf, ext, nomeArquivo(b.nome, ext), req.usuario.id, hojeBr(), 'anexou', tipo, texto(b.descricao, 'descrição', 200), movId);
     return reply.code(201).send(lerArquivoContrato(db.prepare(`${SEL_ARQ} WHERE a.id = ?`).get(id) as Record<string, unknown>));
   });
 
@@ -1163,6 +1187,88 @@ export function criarApp(
     }
     reply.header('Content-Length', total);
     return reply.send(createReadStream(caminho));
+  });
+
+  // ---------- pasta do cliente: tudo o que o sistema guarda dele, num lugar só ----------
+  const pastaDocsCliente = juntarCaminho(opcoes.pastaDados ?? '/dados', 'clientes');
+  const TIPOS_DOC: Record<string, { ext: string; mime: string }> = {
+    pdf: { ext: 'pdf', mime: 'application/pdf' },
+    jpg: { ext: 'jpg', mime: 'image/jpeg' },
+    png: { ext: 'png', mime: 'image/png' },
+    docx: { ext: 'docx', mime: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' },
+    xlsx: { ext: 'xlsx', mime: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' },
+    doc: { ext: 'doc', mime: 'application/msword' },
+    xls: { ext: 'xls', mime: 'application/vnd.ms-excel' },
+  };
+  const SEL_DOC = "SELECT d.id, d.cliente_id AS clienteId, d.nome, d.ext, d.tamanho, d.descricao, d.enviado_em AS enviadoEm, COALESCE(u.nome, '') AS por FROM cliente_documentos d LEFT JOIN usuarios u ON u.id = d.usuario_id";
+  /** faturas e boletos na pasta: só administrador e financeiro */
+  const veFaturasDaPasta = (req: FastifyRequest) => req.acesso.perfil === 'admin' || req.acesso.perfil === 'financeiro';
+  app.get<{ Params: { id: string } }>('/api/clientes/:id/pasta', { preHandler: exigir(1, 'clientes') }, async (req) => {
+    const cliente = repo.buscarCliente(req.params.id);
+    const contratos = (db.prepare(`${SEL_ARQ} WHERE a.cliente_id = ? ORDER BY a.enviado_em DESC`).all(cliente.id) as Record<string, unknown>[]).map(lerArquivoContrato);
+    const documentos = db.prepare(`${SEL_DOC} WHERE d.cliente_id = ? ORDER BY d.enviado_em DESC`).all(cliente.id);
+    const movs = ops.listarMovimentacoes().filter((m) => m.clienteId === cliente.id && m.status !== 'rejeitada');
+    const nfe = movs.filter((m) => m.dados.nfArquivo).map((m) => ({ movId: m.id, tipo: m.tipo, frota: m.frota, data: m.dados.data, nf: m.dados.nf ?? '', arquivo: m.dados.nfArquivo }));
+    const ids = new Set(movs.map((m) => m.id));
+    const entregas = (db.prepare('SELECT * FROM entregas ORDER BY atualizado_em DESC').all() as Record<string, unknown>[])
+      .map(lerEntrega)
+      .filter((e) => ids.has(e.movId))
+      .map((e) => ({ ...e, data: movs.find((m) => m.id === e.movId)?.dados.data ?? null }));
+    const faturas = veFaturasDaPasta(req)
+      ? repo
+          .listarEnvios()
+          .filter((e) => e.clienteId === cliente.id && e.status !== 'falhou')
+          .map((e) => {
+            const pasta = juntarCaminho(opcoes.pastaDados ?? '/dados', 'envios', e.id);
+            const arquivos = existsSync(pasta) ? readdirSync(pasta).filter((n) => n !== 'mensagem.eml') : [];
+            return { id: e.id, numero: e.numero, referencia: e.referencia, enviadoEm: e.enviadoEm, status: e.status, manual: e.messageId.startsWith('manual:'), arquivos };
+          })
+      : null;
+    return { clienteId: cliente.id, contratos, documentos, nfe, entregas, faturas };
+  });
+  app.get<{ Params: { id: string; nome: string } }>('/api/envios/:id/arquivos/:nome', { preHandler: exigir(1, 'historico', 'clientes') }, async (req, reply) => {
+    if (!veFaturasDaPasta(req)) return reply.code(403).send({ erro: 'Só o administrador e o financeiro abrem as faturas.' });
+    if (!/^[0-9a-f-]{36}$/.test(req.params.id) || /[\\/]/.test(req.params.nome) || req.params.nome === 'mensagem.eml') throw new NaoEncontrado('Arquivo não encontrado.');
+    const caminho = juntarCaminho(opcoes.pastaDados ?? '/dados', 'envios', req.params.id, req.params.nome);
+    if (!existsSync(caminho)) throw new NaoEncontrado('Arquivo não encontrado.');
+    reply
+      .header('Content-Type', /\.pdf$/i.test(req.params.nome) ? 'application/pdf' : 'application/octet-stream')
+      .header('Content-Disposition', `inline; filename*=UTF-8''${encodeURIComponent(req.params.nome)}`)
+      .header('Cache-Control', 'private, no-store');
+    return reply.send(createReadStream(caminho));
+  });
+  app.post<{ Params: { id: string } }>('/api/clientes/:id/documentos', { preHandler: exigir(2, 'clientes'), bodyLimit: 22 * 1024 * 1024 }, async (req, reply) => {
+    const cliente = repo.buscarCliente(req.params.id);
+    const b = (req.body ?? {}) as Record<string, unknown>;
+    const buf = Buffer.from(typeof b.arquivo === 'string' ? b.arquivo.replace(/^data:[^;]*;base64,/, '') : '', 'base64');
+    if (!buf.length) throw new Invalido('Escolha o arquivo.');
+    if (buf.length > 15 * 1024 * 1024) throw new Invalido('Arquivo grande demais (máximo 15 MB).');
+    const nome = (typeof b.nome === 'string' ? b.nome : '').replace(/[\\/\r\n]/g, '').slice(0, 140);
+    const ext = (/\.([a-z0-9]+)$/i.exec(nome)?.[1] ?? '').toLowerCase().replace('jpeg', 'jpg');
+    if (!TIPOS_DOC[ext]) throw new Invalido('Tipos aceitos: PDF, JPG, PNG, Word e Excel.');
+    const id = randomUUID();
+    mkdirSync(pastaDocsCliente, { recursive: true });
+    writeFileSync(juntarCaminho(pastaDocsCliente, `${id}.${ext}`), buf);
+    const descricao = texto(b.descricao, 'descrição', 200);
+    db.prepare('INSERT INTO cliente_documentos (id, cliente_id, nome, ext, tipo, tamanho, descricao, enviado_em, usuario_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)').run(id, cliente.id, nome, ext, TIPOS_DOC[ext].mime, buf.length, descricao, new Date().toISOString(), req.usuario.id);
+    repo.registrarLog(cliente.id, req.usuario.id, `pôs na pasta de ${cliente.nome}: ${nome}`, null, null, 'cliente');
+    return reply.code(201).send(db.prepare(`${SEL_DOC} WHERE d.id = ?`).get(id));
+  });
+  app.get<{ Params: { id: string } }>('/api/clientes/documentos/:id', { preHandler: exigir(1, 'clientes') }, async (req, reply) => {
+    const r = db.prepare('SELECT * FROM cliente_documentos WHERE id = ?').get(req.params.id) as { id: string; nome: string; ext: string; tipo: string } | undefined;
+    const caminho = r ? juntarCaminho(pastaDocsCliente, `${r.id}.${r.ext}`) : '';
+    if (!r || !existsSync(caminho)) throw new NaoEncontrado('Documento não encontrado.');
+    reply.header('Content-Type', r.tipo).header('Content-Disposition', `inline; filename*=UTF-8''${encodeURIComponent(r.nome)}`).header('Cache-Control', 'private, no-store');
+    return reply.send(createReadStream(caminho));
+  });
+  app.delete<{ Params: { id: string } }>('/api/clientes/documentos/:id', { preHandler: exigir(2, 'clientes') }, async (req) => {
+    const r = db.prepare('SELECT * FROM cliente_documentos WHERE id = ?').get(req.params.id) as { id: string; nome: string; ext: string; cliente_id: string } | undefined;
+    if (!r) throw new NaoEncontrado('Documento não encontrado.');
+    db.prepare('DELETE FROM cliente_documentos WHERE id = ?').run(r.id);
+    const caminho = juntarCaminho(pastaDocsCliente, `${r.id}.${r.ext}`);
+    if (existsSync(caminho)) unlinkSync(caminho);
+    repo.registrarLog(r.cliente_id, req.usuario.id, `tirou da pasta do cliente: ${r.nome}`, null, null, 'cliente');
+    return { ok: true };
   });
 
   // ---------- fotos da empilhadeira (JPEG já reduzido no navegador), em <pastaDados>/equipamentos/<id>.jpg ----------

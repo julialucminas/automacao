@@ -2,7 +2,9 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api';
 import { useEstado } from '../state';
-import type { ArquivoContrato, Cliente, EnvioContrato, Equipamento, IntegracaoAutentique } from '../types';
+import type { ArquivoContrato, Cliente, EnvioContrato, Equipamento, IntegracaoAutentique, TipoDocContrato } from '../types';
+import { ROTULO_DOC } from '../components/PastaCliente';
+import { HistoricoPrecos } from '../components/HistoricoPrecos';
 import { AcompanharAssinatura, EnviarParaAssinar } from '../components/AssinaturaContrato';
 import { lerBase64 } from '../components/NfeAnexo';
 import { dataBr, hojeIso } from '../lib/calendario';
@@ -205,6 +207,16 @@ export function Contratos() {
                           {c.datasDiferentes && <p className="mt-2 text-[12.5px] text-warn-strong">As máquinas deste contrato estão com vencimentos diferentes nas fichas. Use Editar para acertar.</p>}
                           {c.obs && <p className="mt-2 text-[13px] text-ink-2">{c.obs}</p>}
                           <ArquivosDoContrato c={c} arquivos={arquivos} edita={edita} anexado={() => void recarregar()} />
+                          {veValor && (
+                            <details className="mt-2.5 rounded-[10px] border border-line bg-white px-3 py-2">
+                              <summary className="cursor-pointer text-[13px] font-semibold text-ink-2">Histórico de preços das máquinas</summary>
+                              <div className="mt-2 flex flex-col gap-2.5">
+                                {c.maquinas.map((m) => (
+                                  <HistoricoPrecos key={m.numero} frota={m.numero} compacto />
+                                ))}
+                              </div>
+                            </details>
+                          )}
                           {env && <AcompanharAssinatura e={env} edita={edita} mudou={() => void recarregar()} />}
                           {edita && (
                             <div className="mt-2.5 flex flex-wrap gap-2">
@@ -415,6 +427,7 @@ function ArquivosDoContrato({ c, arquivos, edita, anexado }: { c: Contrato; arqu
   const ref = useRef<HTMLInputElement>(null);
   const [enviando, setEnviando] = useState(false);
   const [verAntigos, setVerAntigos] = useState(false);
+  const [outro, setOutro] = useState(false);
   const frotas = c.maquinas.map((m) => m.numero);
   const atual = arquivos.find((a) => a.id === c.arquivoId) ?? null;
   const antigos = arquivos.filter((a) => a.clienteId === c.cliente.id && a.id !== c.arquivoId && a.frotas.some((f) => frotas.includes(f)));
@@ -473,9 +486,14 @@ function ArquivosDoContrato({ c, arquivos, edita, anexado }: { c: Contrato; arqu
             </button>
           </>
         )}
+        {edita && (
+          <button type="button" className="btn-secondary h-8 px-3 text-[12.5px]" onClick={() => setOutro(true)}>
+            + Outro documento
+          </button>
+        )}
         {antigos.length > 0 && (
           <button type="button" className="text-[12.5px] font-semibold text-ink-3 underline" onClick={() => setVerAntigos(!verAntigos)}>
-            {verAntigos ? 'esconder anteriores' : `anteriores (${antigos.length})`}
+            {verAntigos ? 'esconder histórico' : `histórico de documentos (${antigos.length})`}
           </button>
         )}
       </div>
@@ -483,16 +501,88 @@ function ArquivosDoContrato({ c, arquivos, edita, anexado }: { c: Contrato; arqu
         <ul className="flex flex-col gap-1 pl-1">
           {antigos.map((a) => (
             <li key={a.id}>
+              <span className="mr-1.5 rounded bg-white px-1.5 py-0.5 text-[11.5px] font-semibold text-ink-2">{ROTULO_DOC[a.tipo] ?? 'Documento'}</span>
               {link(a)}
               <span className="text-ink-3">
                 {' '}
-                · {a.numero ? `contrato ${a.numero} · ` : ''}
+                · {a.descricao ? `${a.descricao} · ` : ''}
+                {a.numero ? `contrato ${a.numero} · ` : ''}
                 {a.vencimento ? `vencimento ${dataBr(a.vencimento)} · ` : ''}anexado em {dataBr(a.enviadoEm.slice(0, 10))}
               </span>
             </li>
           ))}
         </ul>
       )}
+      {outro && <AnexarDocumento c={c} fechar={() => setOutro(false)} anexado={anexado} />}
     </div>
+  );
+}
+
+/** Aditivo de reajuste, renovação, minuta… entra no histórico do contrato (não muda a assinatura). */
+function AnexarDocumento({ c, fechar, anexado }: { c: Contrato; fechar: () => void; anexado: () => void }) {
+  const { avisar } = useEstado();
+  const [tipo, setTipo] = useState<TipoDocContrato>('aditivo');
+  const [descricao, setDescricao] = useState('');
+  const [arq, setArq] = useState<File | null>(null);
+  const [salvando, setSalvando] = useState(false);
+  const [erro, setErro] = useState('');
+  const salvar = async () => {
+    setErro('');
+    if (!arq) return setErro('Escolha o arquivo.');
+    if (!/\.(pdf|jpe?g|png)$/i.test(arq.name)) return setErro('O documento precisa ser PDF, JPG ou PNG.');
+    if (arq.size > 10 * 1024 * 1024) return setErro('Arquivo grande demais (máximo 10 MB).');
+    setSalvando(true);
+    try {
+      await api.anexarContrato({ clienteId: c.cliente.id, frotas: c.maquinas.map((m) => m.numero), arquivo: await lerBase64(arq), nome: arq.name, tipo, descricao: descricao.trim() });
+      avisar(`${ROTULO_DOC[tipo]} guardado no histórico do contrato.`);
+      anexado();
+      fechar();
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : 'Não foi possível anexar.');
+    } finally {
+      setSalvando(false);
+    }
+  };
+  return (
+    <Modal aberto fechar={fechar} titulo="Anexar documento ao contrato">
+      <p className="text-[14px]">
+        <b>{c.cliente.nome}</b>
+        <span className="text-ink-3"> · {c.numero ? `contrato ${c.numero}` : 'sem número'} · FT{c.maquinas.map((m) => m.numero).join(', FT')}</span>
+      </p>
+      <label className="flex flex-col gap-1.5">
+        <span className="label">Tipo</span>
+        <select className="input" value={tipo} onChange={(e) => setTipo(e.target.value as TipoDocContrato)}>
+          {(['aditivo', 'renovacao', 'contrato', 'outro'] as const).map((t) => (
+            <option key={t} value={t}>
+              {ROTULO_DOC[t]}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="flex flex-col gap-1.5">
+        <span className="label">
+          Descrição <span className="font-normal text-ink-3">(opcional)</span>
+        </span>
+        <input className="input" value={descricao} onChange={(e) => setDescricao(e.target.value)} placeholder="Ex.: reajuste IPCA 2027" />
+      </label>
+      <label className="flex flex-col gap-1.5">
+        <span className="label">Arquivo</span>
+        <input type="file" accept=".pdf,.jpg,.jpeg,.png" className="text-[13px]" onChange={(e) => setArq(e.target.files?.[0] ?? null)} />
+      </label>
+      <p className="text-[12.5px] text-ink-3">Fica guardado no histórico do contrato e na pasta do cliente. O contrato assinado atual continua o mesmo.</p>
+      {erro && (
+        <div role="alert" className="rounded-[10px] bg-bad-soft px-3 py-2.5 text-[13px] text-bad-strong">
+          {erro}
+        </div>
+      )}
+      <div className="flex justify-end gap-2">
+        <button type="button" className="btn-secondary" onClick={fechar}>
+          Cancelar
+        </button>
+        <button type="button" className="btn-primary" disabled={salvando} onClick={() => void salvar()}>
+          {salvando ? 'Enviando…' : 'Guardar'}
+        </button>
+      </div>
+    </Modal>
   );
 }

@@ -968,6 +968,8 @@ function FormReajuste({ clienteInicial, frotaInicial, fechar }: { clienteInicial
   const [motivo, setMotivo] = useState('');
   const [erro, setErro] = useState('');
   const [salvando, setSalvando] = useState(false);
+  const [aditivo, setAditivo] = useState<File | null>(null);
+  const [avisoAditivo, setAvisoAditivo] = useState('');
   const [feita, setFeita] = useState<Movimentacao | null>(null);
 
   // ao trocar de cliente: marca a frota que veio do aviso (ou todas, se só tem uma)
@@ -1023,6 +1025,22 @@ function FormReajuste({ clienteInicial, frotaInicial, fechar }: { clienteInicial
         renovaAte: renova || null,
         observacoes: motivo,
       });
+      // aditivo / novo contrato: vai para o histórico do contrato dessas máquinas e para a pasta do cliente
+      if (aditivo) {
+        try {
+          await api.anexarContrato({
+            clienteId: cliente.id,
+            frotas: prontos.map((i) => i.frota),
+            arquivo: await lerBase64(aditivo),
+            nome: aditivo.name,
+            tipo: 'aditivo',
+            descricao: motivo || `Reajuste a partir de ${dataBr(data)}`,
+            movId: salva.id,
+          });
+        } catch (e) {
+          setAvisoAditivo(`O reajuste foi registrado, mas o aditivo não subiu (${e instanceof Error ? e.message : 'erro'}). Anexe pela aba Contratos.`);
+        }
+      }
       await recarregarOperacoes();
       setFeita(salva);
     } catch (e) {
@@ -1032,7 +1050,7 @@ function FormReajuste({ clienteInicial, frotaInicial, fechar }: { clienteInicial
     }
   };
 
-  if (feita) return <Registrada m={feita} fechar={fechar} />;
+  if (feita) return <Registrada m={feita} fechar={fechar} aviso={avisoAditivo} />;
   const mensagemAtual = () =>
     textoMensagem({ tipo: 'reajuste', frota: prontos.map((i) => i.frota).join(', '), clienteNome: cliente?.nome ?? '', dados: { ...movVazia(data), itens: prontos, renovaAte: renova || null, observacoes: motivo } });
 
@@ -1151,6 +1169,13 @@ function FormReajuste({ clienteInicial, frotaInicial, fechar }: { clienteInicial
           <label className="flex flex-col gap-1.5">
             <span className="label">Motivo</span>
             <input className="input" value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Ex.: reajuste anual pelo IPCA (4,8%)" />
+          </label>
+          <label className="flex flex-col gap-1.5">
+            <span className="label">
+              Aditivo / novo contrato <span className="font-normal text-ink-3">(opcional · PDF ou foto)</span>
+            </span>
+            <input type="file" accept=".pdf,.jpg,.jpeg,.png" className="text-[13px]" onChange={(e) => setAditivo(e.target.files?.[0] ?? null)} />
+            <span className="text-xs text-ink-3">Fica guardado no histórico do contrato e na pasta do cliente.</span>
           </label>
           <p className="text-xs text-ink-3">Depois de {ehFinanceiro ? 'registrado' : 'aprovado'}, o valor novo vale no cadastro do cliente e na ficha de cada máquina. O valor antigo fica guardado no histórico.</p>
         </>

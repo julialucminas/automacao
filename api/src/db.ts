@@ -493,6 +493,22 @@ const MIGRACOES = [
      atualizado_em TEXT NOT NULL
    );
    CREATE INDEX entregas_frota ON entregas (frota);`,
+  // 30: documentos do contrato com tipo (contrato, assinado, aditivo de reajuste, renovação, outro) e a pasta do cliente
+  `ALTER TABLE contratos_arquivos ADD COLUMN tipo TEXT NOT NULL DEFAULT 'assinado';
+   ALTER TABLE contratos_arquivos ADD COLUMN descricao TEXT NOT NULL DEFAULT '';
+   ALTER TABLE contratos_arquivos ADD COLUMN mov_id TEXT;
+   CREATE TABLE cliente_documentos (
+     id TEXT PRIMARY KEY,
+     cliente_id TEXT NOT NULL,
+     nome TEXT NOT NULL,
+     ext TEXT NOT NULL,
+     tipo TEXT NOT NULL,
+     tamanho INTEGER NOT NULL,
+     descricao TEXT NOT NULL DEFAULT '',
+     enviado_em TEXT NOT NULL,
+     usuario_id INTEGER
+   );
+   CREATE INDEX cliente_documentos_cliente ON cliente_documentos (cliente_id);`,
 ];
 
 export function abrirBanco(caminho: string) {

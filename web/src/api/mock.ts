@@ -703,6 +703,15 @@ export const mockApi: Api = {
   async listarArquivosContrato() {
     return [];
   },
+  async pastaCliente(id: string) {
+    return { clienteId: id, contratos: [], documentos: [], nfe: [], entregas: [], faturas: null };
+  },
+  async enviarDocumentoCliente() {
+    throw new Error('Indisponível na demonstração.');
+  },
+  async apagarDocumentoCliente() {
+    throw new Error('Indisponível na demonstração.');
+  },
   async anexarContrato() {
     throw new Error('Indisponível na demonstração.');
   },

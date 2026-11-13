@@ -7,6 +7,7 @@ import { data } from '../lib/email';
 import { formatarReais } from '../lib/dinheiro';
 import { descreverRegra, regraDoCliente } from '../lib/calendario';
 import { ClienteForm, rascunhoDe, rascunhoVazio, type Rascunho } from '../components/ClienteForm';
+import { PastaCliente } from '../components/PastaCliente';
 import { Chip } from '../components/ui';
 import { IcBusca, IcMais } from '../components/Icones';
 import { baixarModelo, exportarClientes, useImportacao } from '../components/ImportarClientes';
@@ -34,6 +35,7 @@ const COLUNAS = 'grid grid-cols-[minmax(200px,1.2fr)_minmax(190px,1.1fr)_minmax(
 
 export function Clientes() {
   const { clientes, pode } = useEstado();
+  const [pasta, setPasta] = useState<Cliente | null>(null);
   const ehFinanceiro = pode('clientes', 2);
   const [busca, setBusca] = useState('');
   useBuscaDaUrl(setBusca);
@@ -217,7 +219,10 @@ export function Clientes() {
                     </div>
                     <div className="text-ink-2">{c.observacoes || '—'}</div>
                     <div className="text-xs text-ink-3">{data(c.atualizadoEm)}</div>
-                    <div>
+                    <div className="flex flex-wrap gap-1.5">
+                      <button type="button" className="btn-secondary btn-sm" onClick={() => setPasta(c)} aria-label={`Pasta de ${c.nome}`}>
+                        📁 Pasta
+                      </button>
                       {ehFinanceiro && (
                         <button type="button" className="btn-secondary btn-sm" onClick={() => setEditando(rascunhoDe(c))} aria-label={`Editar ${c.nome}`}>
                           Editar
@@ -236,6 +241,7 @@ export function Clientes() {
       )}
 
       <ClienteForm inicial={editando} fechar={() => setEditando(null)} />
+      {pasta && <PastaCliente cliente={pasta} fechar={() => setPasta(null)} />}
     </div>
   );
 }
