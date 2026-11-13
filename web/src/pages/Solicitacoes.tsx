@@ -349,9 +349,9 @@ function NovaSolicitacaoModal({
               Para
             </label>
             <select id="sol-para" value={para} onChange={(e) => setPara(e.target.value ? Number(e.target.value) : '')} className="input">
-              {pessoas.map((p) => (
+              {[...pessoas].sort((a, b) => a.nome.localeCompare(b.nome)).map((p) => (
                 <option key={p.id} value={p.id}>
-                  {p.chamar || p.nome}
+                  {p.nome}
                   {p.id === usuario?.id ? ' (você)' : ''}
                 </option>
               ))}
