@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { AvisosWidget } from './AvisosWidget';
+import { ProtecaoErro } from './ProtecaoErro';
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
 import { janelaConferencia } from '../lib/calendario';
 import { useEstado } from '../state';
@@ -296,11 +297,15 @@ export function Layout() {
                 </button>
               </div>
             )}
-            <Outlet />
+            <ProtecaoErro chave={local.pathname}>
+              <Outlet />
+            </ProtecaoErro>
           </div>
         </main>
       </div>
-      <AvisosWidget />
+      <ProtecaoErro compacto>
+        <AvisosWidget />
+      </ProtecaoErro>
       <TrocarSenha aberto={trocandoSenha} fechar={() => setTrocandoSenha(false)} />
     </div>
   );

@@ -43,7 +43,7 @@ function Numero({ n, rotulo, tom = 'ink' }: { n: number | string; rotulo: string
 
 /** Primeira tela de todo mundo: cada um vê só o que é dele. */
 export function Inicio() {
-  const { usuario, clientes, envios, oficina, movimentacoes, propostas, aprova, pode, veValores, config, avisosOk } = useEstado();
+  const { usuario, clientes, envios, oficina, movimentacoes, aprova, pode, veValores, config, avisosOk } = useEstado();
   const hoje = hojeIso();
   const ref = referenciaAtual();
   const nome = usuario?.chamar?.trim() || usuario?.nome.trim().split(/\s+/)[0] || '';
@@ -72,8 +72,6 @@ export function Inicio() {
   const terminando = frotas.filter(({ f }) => f.fim && f.fim >= hoje && f.fim <= somarDias(hoje, 30)).sort((a, b) => a.f.fim!.localeCompare(b.f.fim!));
   const valorMensal = frotas.reduce((s, { f }) => s + f.valor, 0);
 
-  // aprovações
-  const pendentes = movimentacoes.filter((m) => m.status === 'pendente').length + propostas.filter((p) => p.status === 'pendente').length;
 
   // mudanças nas máquinas (locação, troca, devolução, reajuste) dos últimos 7 dias — para o financeiro
   const veMudancas = aprova || veValores;
@@ -140,18 +138,6 @@ export function Inicio() {
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {aprova ? (
-          <Cartao titulo="Aprovações" link="/aprovacoes" destaque={pendentes > 0}>
-            <Numero n={pendentes} rotulo={pendentes === 1 ? 'alteração esperando você aprovar' : 'alterações esperando você aprovar'} tom={pendentes ? 'warn' : 'ok'} />
-          </Cartao>
-        ) : (
-          pendentes > 0 && (
-            <Cartao titulo="Minhas alterações" link="/aprovacoes">
-              <Numero n={pendentes} rotulo="aguardando aprovação do financeiro" />
-            </Cartao>
-          )
-        )}
-
         {veMudancas && mudancas.length > 0 && (
           <Cartao titulo="Máquinas: últimos 7 dias" link="/movimentacoes" rotuloLink="Ver tudo">
             <ul className="flex flex-col gap-1.5 text-[13.5px]">
