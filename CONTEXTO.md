@@ -315,3 +315,8 @@ O monitor IMAP (a cada 5 min) agora também guarda o cabeçalho de e-mails de ge
 nós) em `caixa_entrada` (migração 32): remetente, assunto, data, nº de anexos e o cliente (e-mail cadastrado ou mesmo
 domínio, se só um cliente usa). `GET /api/caixa-entrada`, `POST /api/caixa-entrada/ok` ({ids, desfazer}). Na Central
 do financeiro: cartão "E-mails na caixa das faturas" com "Ok, vi"; os novos somam no número do menu. Não guarda o corpo.
+
+## Correção: "mensagem nova" fantasma nas solicitações (13/nov)
+`listarSolicitacoes` devolve todas (o admin vê em "Todas"), mas `nao_lidas` agora só conta se o usuário é quem pediu ou
+o destinatário. O número do menu, o aviso do topo e a Central contam só não lidas de solicitação **aberta**; os links
+abrem direto a conversa (ou `/solicitacoes?caixa=todas`).

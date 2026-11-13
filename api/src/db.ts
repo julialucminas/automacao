@@ -856,6 +856,7 @@ export function repositorio(db: Banco) {
              (SELECT COUNT(*) FROM mensagens m WHERE m.solicitacao_id = s.id) AS total,
              (SELECT MAX(m.criada_em) FROM mensagens m WHERE m.solicitacao_id = s.id) AS ultima,
              (SELECT COUNT(*) FROM mensagens m WHERE m.solicitacao_id = s.id AND m.usuario_id != @u
+                AND (s.criada_por = @u OR s.para_usuario = @u)
                 AND m.criada_em > COALESCE((SELECT vista_em FROM leituras l WHERE l.solicitacao_id = s.id AND l.usuario_id = @u), '')) AS nao_lidas
            FROM solicitacoes s
            JOIN usuarios cu ON cu.id = s.criada_por

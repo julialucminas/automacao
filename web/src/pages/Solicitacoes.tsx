@@ -26,7 +26,10 @@ export function Solicitacoes() {
   const [params, setParams] = useSearchParams();
   const selecionada = params.get('id');
   const hoje = hojeIso();
-  const [caixa, setCaixa] = useState<Caixa>('para_mim');
+  const [caixa, setCaixa] = useState<Caixa>(() => {
+    const c = params.get('caixa');
+    return c === 'enviadas' || c === 'todas' ? c : 'para_mim';
+  });
   const [sit, setSit] = useState<Situacao>('abertas');
   const [aberta, setAberta] = useState<Solicitacao | null>(null);
   const [resposta, setResposta] = useState('');

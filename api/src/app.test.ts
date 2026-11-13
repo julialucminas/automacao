@@ -174,6 +174,10 @@ describe('solicitações', () => {
     await new Promise((r) => setTimeout(r, 5));
     await comAngeli('POST', `/api/solicitacoes/${s.id}/mensagens`, { texto: 'Ok, faço amanhã' });
     expect((await req('GET', '/api/solicitacoes')).json()[0].naoLidas).toBe(1); // Júlia vê a resposta como nova
+    // o Júnior não está na conversa: mesmo vendo a lista, nada conta como não lido para ele
+    const junior = await app.inject({ method: 'POST', url: '/api/sessao', payload: { email: 'junior@lucminas.com.br', senha: 'senha-junior' } });
+    const lJunior = (await app.inject({ method: 'GET', url: '/api/solicitacoes', headers: { cookie: String(junior.headers['set-cookie']).split(';')[0] } })).json();
+    expect(lJunior.every((x: { naoLidas: number }) => x.naoLidas === 0)).toBe(true);
 
     const concl = (await comAngeli('PATCH', `/api/solicitacoes/${s.id}`, { status: 'concluida', data: '2026-11-04' })).json();
     expect(concl).toMatchObject({ status: 'concluida', concluidaPorNome: 'Angelise', data: '2026-11-04' });

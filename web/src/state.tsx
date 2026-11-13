@@ -262,7 +262,8 @@ export function EstadoProvider({ children }: { children: ReactNode }) {
   const veValores = !!usuario?.veValores;
   const aprova = pode('aprovacoes', 2);
   const aguardandoAprovacao = movimentacoes.filter((m) => m.status === 'pendente').length + propostas.filter((p) => p.status === 'pendente').length;
-  const naoLidas = solicitacoes.reduce((n, x) => n + (x.naoLidas > 0 ? 1 : 0), 0);
+  // só conversa aberta em que eu estou (a de outras pessoas, que o admin vê em "Todas", não conta; concluída também não)
+  const naoLidas = solicitacoes.reduce((n, x) => n + (x.naoLidas > 0 && x.status === 'aberta' ? 1 : 0), 0);
 
   const valor = useMemo<Estado>(
     () => ({

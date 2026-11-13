@@ -88,7 +88,7 @@ export function CentralFinanceiro() {
   // serviços externos
   const aCobrar = externos.filter((s) => s.etapa === 'concluido');
   const aOrcar = externos.filter((s) => s.etapa === 'pedido' || s.etapa === 'orcamento');
-  const naoLidas = solicitacoes.filter((s) => s.naoLidas > 0 && !pendentesParaMim.some((p) => p.id === s.id));
+  const naoLidas = solicitacoes.filter((s) => s.naoLidas > 0 && s.status === 'aberta' && !pendentesParaMim.some((p) => p.id === s.id));
 
   // tudo o que está esperando por ela, na ordem do que pesa mais
   const pend: Pendencia[] = [];
@@ -183,7 +183,7 @@ export function CentralFinanceiro() {
           Mensagem nova em <b>{naoLidas.length}</b> solicitaç{naoLidas.length > 1 ? 'ões' : 'ão'}: {naoLidas.slice(0, 3).map((s) => s.titulo).join(', ')}
         </>
       ),
-      link: '/solicitacoes',
+      link: naoLidas.length === 1 ? `/solicitacoes?id=${naoLidas[0].id}` : '/solicitacoes',
       acao: 'Ler',
     });
   for (const v of vencendo.slice(0, 5))

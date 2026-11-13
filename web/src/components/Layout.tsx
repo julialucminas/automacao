@@ -47,7 +47,7 @@ export function useMenu(): ItemMenu[] {
   // financeiro (e quem vê valores): movimentações que ainda não viu
   const novas = aprova || veValores ? novasMov.length : 0;
   const meusPendentes = propostas.filter((p) => p.status === 'pendente').length + movimentacoes.filter((m) => m.status === 'pendente').length;
-  const badgeSolicitacoes = new Set([...pendentesParaMim.map((s) => s.id), ...solicitacoes.filter((s) => s.naoLidas > 0).map((s) => s.id)]).size;
+  const badgeSolicitacoes = new Set([...pendentesParaMim.map((s) => s.id), ...solicitacoes.filter((s) => s.naoLidas > 0 && s.status === 'aberta').map((s) => s.id)]).size;
   // quem não aprova acompanha as próprias alterações em "Minhas alterações"
   const propoe = pode('movimentacoes', 2) || pode('conferencia', 2) || pode('frotas', 2);
 
@@ -178,7 +178,8 @@ function Menu({ itens }: { itens: ItemMenu[] }) {
 }
 
 export function Layout() {
-  const { usuario, sair, aviso, fecharAviso, pendentesParaMim, naoLidas, envioAtivo, pode } = useEstado();
+  const { usuario, sair, aviso, fecharAviso, pendentesParaMim, naoLidas, solicitacoes, envioAtivo, pode } = useEstado();
+  const primeiraNaoLida = solicitacoes.find((s) => s.naoLidas > 0 && s.status === 'aberta');
   const local = useLocation();
   const itens = useMenu();
   const [trocandoSenha, setTrocandoSenha] = useState(false);
@@ -303,7 +304,7 @@ export function Layout() {
                   Mensagem nova em {naoLidas} solicitaç
                   {naoLidas > 1 ? 'ões' : 'ão'}.
                 </span>
-                <Link to="/solicitacoes" className="btn-secondary btn-sm">
+                <Link to={naoLidas === 1 && primeiraNaoLida ? `/solicitacoes?id=${primeiraNaoLida.id}` : '/solicitacoes?caixa=todas'} className="btn-secondary btn-sm">
                   Abrir
                 </Link>
               </div>
