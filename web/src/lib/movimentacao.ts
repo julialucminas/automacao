@@ -212,6 +212,7 @@ export function textoMensagem(m: Pick<Movimentacao, 'tipo' | 'frota' | 'clienteN
   if (d.emails?.length) l.push(`- E-mails para a fatura: ${d.emails.join(', ')}`);
   if (d.contatoNome || d.contatoTelefone) l.push(`- Contato: ${[d.contatoNome, d.contatoTelefone].filter(Boolean).join(' - ')}`);
   if (d.descricao) l.push(`- Equipamento: ${d.descricao}`);
+  if (d.adicionais) l.push(`- Adicionais: ${d.adicionais}`);
   if (d.observacoes) l.push(d.obsUrgente ? `- ⚠️ URGENTE: ${d.observacoes}` : `- Obs.: ${d.observacoes}`);
   l.push(...linhasNotas(d));
   return l.join('\n').replace(/\u00a0/g, ' ');

@@ -59,6 +59,8 @@ type Estado = {
 
   solicitacoes: Solicitacao[];
   recarregarSolicitacoes(): Promise<void>;
+  /** conclui/reabre/muda a data: atualiza na hora (lista, avisos e contadores) e confirma com o servidor */
+  alterarSolicitacao(id: string, mudanca: { status?: 'aberta' | 'concluida'; data?: string; nota?: string }): Promise<Solicitacao>;
   /** abertas, para o usuário logado, com data até hoje */
   pendentesParaMim: Solicitacao[];
   naoLidas: number;
@@ -126,6 +128,16 @@ export function EstadoProvider({ children }: { children: ReactNode }) {
       /* sem conexão: tenta de novo no próximo ciclo */
     }
   }, []);
+  const alterarSolicitacao = useCallback(
+    async (id: string, mudanca: { status?: 'aberta' | 'concluida'; data?: string; nota?: string }) => {
+      const s = await api.alterarSolicitacao(id, mudanca);
+      // troca na lista já com a resposta do servidor (não espera o próximo ciclo)
+      setSolicitacoes((l) => l.map((x) => (x.id === id ? { ...x, ...s, mensagens: undefined, naoLidas: 0 } : x)));
+      void recarregarSolicitacoes();
+      return s;
+    },
+    [recarregarSolicitacoes],
+  );
 
   const [alertasContratos, setAlertasContratos] = useState({ pendencias: 0, retornos: 0 });
   const recarregarAlertasContratos = useCallback(async () => {
@@ -163,10 +175,13 @@ export function EstadoProvider({ children }: { children: ReactNode }) {
       () => undefined,
     );
     const t = setInterval(tudo, 60_000);
+    // as solicitações são conversa entre vocês: confere mais vezes (só com a janela aberta)
+    const ts = setInterval(() => document.visibilityState === 'visible' && recarregarSolicitacoes(), 15_000);
     const foco = () => document.visibilityState === 'visible' && tudo();
     document.addEventListener('visibilitychange', foco);
     return () => {
       clearInterval(t);
+      clearInterval(ts);
       document.removeEventListener('visibilitychange', foco);
     };
   }, [usuario, recarregarSolicitacoes, recarregarOperacoes]);
@@ -316,6 +331,7 @@ export function EstadoProvider({ children }: { children: ReactNode }) {
 
       solicitacoes,
       recarregarSolicitacoes,
+      alterarSolicitacao,
       pendentesParaMim,
       naoLidas,
 
@@ -370,6 +386,7 @@ export function EstadoProvider({ children }: { children: ReactNode }) {
       envios,
       solicitacoes,
       recarregarSolicitacoes,
+      alterarSolicitacao,
       pendentesParaMim,
       naoLidas,
       lote,

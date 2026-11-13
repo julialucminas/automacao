@@ -178,6 +178,11 @@ describe('solicitações', () => {
     const concl = (await comAngeli('PATCH', `/api/solicitacoes/${s.id}`, { status: 'concluida', data: '2026-11-04' })).json();
     expect(concl).toMatchObject({ status: 'concluida', concluidaPorNome: 'Angelise', data: '2026-11-04' });
     expect(concl.mensagens.length).toBe(4);
+    // reabre e conclui de novo com a observação de quem fez: vira mensagem na conversa
+    await comAngeli('PATCH', `/api/solicitacoes/${s.id}`, { status: 'aberta' });
+    const comNota = (await comAngeli('PATCH', `/api/solicitacoes/${s.id}`, { status: 'concluida', nota: 'Fatura nº 77 enviada' })).json();
+    expect(comNota.mensagens.slice(-2).map((m: { texto: string }) => m.texto)).toEqual(['Fatura nº 77 enviada', '✔ Marcou como concluída.']);
+    expect((await req('GET', '/api/solicitacoes')).json()[0]).toMatchObject({ status: 'concluida', concluidaPorNome: 'Angelise' });
     expect((await req('GET', '/api/solicitacoes/inexistente')).statusCode).toBe(404);
   });
 });

@@ -383,6 +383,7 @@ export function criarApp(
       descricao: texto(b.descricao, 'descrição', 200),
       observacoes: texto(b.observacoes, 'observações', 2000),
       obsUrgente: b.obsUrgente === true,
+      adicionais: texto(b.adicionais, 'adicionais', 300),
       ...(tipo === 'locacao' ? { modalidade: lerModalidade(b.modalidade) } : {}),
     };
   };
@@ -2117,7 +2118,8 @@ export function criarApp(
     const b = (req.body ?? {}) as Record<string, unknown>;
     const status = b.status === undefined ? undefined : b.status === 'concluida' ? 'concluida' : b.status === 'aberta' ? 'aberta' : invalido('Situação inválida.');
     const data = lerDataIso(b.data, 'Data') ?? undefined;
-    repo.alterarSolicitacao(req.params.id, req.usuario.id, { status, data });
+    const nota = texto(b.nota, 'observação', 4000) || undefined;
+    repo.alterarSolicitacao(req.params.id, req.usuario.id, { status, data, nota });
     return repo.buscarSolicitacao(req.params.id, req.usuario.id);
   });
 

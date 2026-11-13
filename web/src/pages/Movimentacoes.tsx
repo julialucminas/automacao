@@ -76,6 +76,7 @@ export function detalhesMov(m: { tipo: TipoMov; frota: string; frotaNova?: strin
   if (d.emails.length) l.push(['E-mails', d.emails.join(', ')]);
   if (d.contatoNome || d.contatoTelefone) l.push(['Contato', [d.contatoNome, d.contatoTelefone].filter(Boolean).join(' · ')]);
   if (d.descricao) l.push(['Equipamento', d.descricao]);
+  if (d.adicionais) l.push([m.tipo === 'devolucao' ? 'Adicionais que voltaram' : 'Adicionais', d.adicionais]);
   if (d.observacoes) l.push(['Observações', d.observacoes]);
   return l;
 }
@@ -438,6 +439,11 @@ function FormMov({ tipo, frota, clienteId, fechar }: { tipo: TipoMov; frota?: st
   const [salvando, setSalvando] = useState(false);
   const [feita, setFeita] = useState<Movimentacao | null>(null);
   useEffect(() => setM((x) => ({ ...x, tipo })), [tipo]);
+  // adicionais que a ficha diz que estão com a máquina (para a devolução e a troca)
+  const [fichas, setFichas] = useState<Equipamento[]>([]);
+  useEffect(() => {
+    api.listarEquipamentos().then(setFichas, () => undefined);
+  }, []);
 
   const ativos = useMemo(() => clientes.filter((c) => c.ativo).sort((a, b) => a.nome.localeCompare(b.nome)), [clientes]);
   const clienteAtual = m.clienteId ? clientes.find((c) => c.id === m.clienteId) : null;
@@ -708,6 +714,12 @@ function FormMov({ tipo, frota, clienteId, fechar }: { tipo: TipoMov; frota?: st
           </div>
         </>
       )}
+      <CampoAdicionais
+        valor={m.adicionais ?? ''}
+        mudar={(v) => mudar({ adicionais: v })}
+        devolucao={m.tipo === 'devolucao'}
+        naFicha={fichas.find((f) => f.frota === numFrota)?.adicionais ?? ''}
+      />
       <div className="flex flex-col gap-1.5">
         <label htmlFor="mov-obs" className="label">
           Observações
@@ -729,6 +741,50 @@ function FormMov({ tipo, frota, clienteId, fechar }: { tipo: TipoMov; frota?: st
           {salvando ? 'Registrando…' : ehFinanceiro ? 'Registrar movimentação' : 'Enviar para aprovação'}
         </button>
       </div>
+    </div>
+  );
+}
+
+const SUGESTOES_ADICIONAIS = ['Prolongador de garfo', 'Bateria', 'Carregador', 'Bateria reserva', 'Posicionador de garfo'];
+
+/** Adicionais que vão (ou voltam) junto com a máquina: prolongador de garfo, bateria, carregador… */
+export function CampoAdicionais({ valor, mudar, devolucao, naFicha }: { valor: string; mudar: (v: string) => void; devolucao?: boolean; naFicha?: string }) {
+  const tem = (s: string) => valor.toLowerCase().split(/\s*,\s*/).includes(s.toLowerCase());
+  const alternar = (s: string) => {
+    const l = valor.split(/\s*,\s*/).filter(Boolean);
+    mudar((tem(s) ? l.filter((x) => x.toLowerCase() !== s.toLowerCase()) : [...l, s]).join(', '));
+  };
+  return (
+    <div className="flex flex-col gap-1.5">
+      <label htmlFor="mov-adicionais" className="label">
+        {devolucao ? 'Adicionais que voltaram junto' : 'Adicionais'} <span className="font-normal text-ink-3">(acessórios a mais: prolongador, bateria, carregador…)</span>
+      </label>
+      <input id="mov-adicionais" className="input" value={valor} onChange={(e) => mudar(e.target.value)} placeholder="Ex.: prolongador de garfo 1,80 m, carregador" />
+      <div className="flex flex-wrap gap-1.5">
+        {SUGESTOES_ADICIONAIS.map((s) => (
+          <button
+            key={s}
+            type="button"
+            aria-pressed={tem(s)}
+            onClick={() => alternar(s)}
+            className={`rounded-full border px-2.5 py-1 text-[12px] font-semibold ${tem(s) ? 'border-ink bg-ink text-white' : 'border-line-strong bg-white text-ink-2 hover:bg-canvas'}`}
+          >
+            {tem(s) ? '✓ ' : '+ '}
+            {s}
+          </button>
+        ))}
+      </div>
+      {naFicha && naFicha !== valor && (
+        <p className="text-[12.5px] text-ink-3">
+          Na ficha, esta máquina está com: <b className="text-ink-2">{naFicha}</b>{' '}
+          <button type="button" className="font-semibold text-info underline" onClick={() => mudar(naFicha)}>
+            usar
+          </button>
+        </p>
+      )}
+      <p className="text-[11.5px] text-ink-3">
+        {devolucao ? 'Na devolução, os adicionais saem da ficha da máquina.' : 'Vai para a ficha da máquina (campo “Adicionais”) quando a movimentação for registrada.'}
+      </p>
     </div>
   );
 }

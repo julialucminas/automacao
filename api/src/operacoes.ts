@@ -44,6 +44,8 @@ export type DadosMov = {
   modalidade?: '' | 'contrato' | 'esporadico';
   /** venda e compra: nota fiscal */
   nf?: string;
+  /** locação, troca e devolução: o que vai (ou volta) junto com a máquina — prolongador de garfo, bateria, carregador… */
+  adicionais?: string;
   /** observações acrescentadas depois de lançada (cada uma pode ser urgente) */
   notas?: NotaMov[];
   /** venda e compra: arquivo da NF-e (PDF/DANFE ou XML), guardado em <pastaDados>/nfe/<id da movimentação>.<ext> */
@@ -196,7 +198,7 @@ export type Fichas = {
   /** grava só os campos informados; null apaga o campo */
   salvar(frota: string, d: Record<string, ValorFicha>, usuarioId: number): void;
 };
-const CONTRATO_VAZIO = { contratoNumero: null, contratoInicio: null, contratoAssinado: null, contratoAssinadoEm: null, contratoArquivo: null, contratoValor: null, contratoReajuste: null, contratoVencimento: null, contratoObs: null };
+const CONTRATO_VAZIO = { contratoNumero: null, contratoInicio: null, contratoAssinado: null, contratoAssinadoEm: null, contratoArquivo: null, contratoValor: null, contratoReajuste: null, contratoVencimento: null, contratoObs: null, adicionais: null };
 const CAMPOS_CONTRATO = Object.keys(CONTRATO_VAZIO);
 
 export function operacoes(db: Banco, repo: Repositorio, fichas?: Fichas) {
@@ -327,7 +329,8 @@ export function operacoes(db: Banco, repo: Repositorio, fichas?: Fichas) {
       );
       // ficha: contrato novo (o que não veio na mensagem fica em branco, para não sobrar dado do contrato anterior)
       const f = ficha(m.frota);
-      if (f) gravarFicha(m.frota, { ...CONTRATO_VAZIO, contratoValor: d.valor, contratoVencimento: d.fim ?? null, ...(f.situacao === 'reservada' ? { situacao: null, situacaoMotivo: null } : {}) });
+      if (f || d.adicionais)
+        gravarFicha(m.frota, { ...CONTRATO_VAZIO, contratoValor: d.valor, contratoVencimento: d.fim ?? null, adicionais: d.adicionais || null, ...(f?.situacao === 'reservada' ? { situacao: null, situacaoMotivo: null } : {}) });
       return cliente.id;
     }
 
@@ -389,7 +392,9 @@ export function operacoes(db: Banco, repo: Repositorio, fichas?: Fichas) {
     const velha = ficha(m.frota);
     const contrato: Record<string, ValorFicha> = Object.fromEntries(CAMPOS_CONTRATO.map((k) => [k, velha?.[k] ?? null]));
     if (d.valor != null) contrato.contratoValor = d.valor;
-    if (velha || d.valor != null) gravarFicha(m.frotaNova, contrato);
+    // adicionais informados na troca valem para a máquina que entrou (senão, seguem os da que saiu)
+    if (d.adicionais) contrato.adicionais = d.adicionais;
+    if (velha || d.valor != null || d.adicionais) gravarFicha(m.frotaNova, contrato);
     if (velha) gravarFicha(m.frota, CONTRATO_VAZIO);
     return cliente.id;
   }
@@ -437,6 +442,7 @@ export function operacoes(db: Banco, repo: Repositorio, fichas?: Fichas) {
           ...(n.frete === 'cliente' && n.freteValor ? { freteValor: n.freteValor } : {}),
           ...(n.obsUrgente && n.observacoes ? { obsUrgente: true } : {}),
           ...(n.tipo === 'compra' && n.maquina ? { maquina: n.maquina } : {}),
+          ...(n.adicionais?.trim() ? { adicionais: n.adicionais.trim() } : {}),
         };
         let clienteId = n.clienteId ?? null;
         if (aprovarJa) clienteId = aplicar({ tipo: n.tipo, frota: n.frota, frotaNova: n.frotaNova ?? null, clienteId, clienteNome, dados }, usuarioId);

@@ -213,6 +213,8 @@ export type DadosMov = {
   obsUrgente?: boolean;
   /** venda e compra: nota fiscal */
   nf?: string;
+  /** locação, troca e devolução: o que vai (ou volta) junto com a máquina — prolongador de garfo, bateria, carregador… */
+  adicionais?: string;
   /** observações acrescentadas depois de lançada (cada uma pode ser urgente) */
   notas?: NotaMov[];
   /** venda e compra: arquivo da NF-e anexado (PDF/DANFE ou XML) */
@@ -317,6 +319,8 @@ export type DadosEquipamento = {
   capacidade?: number | null;
   torre?: string | null;
   acessorios?: string | null;
+  /** adicionais com a máquina nesta locação (prolongador, bateria, carregador…) */
+  adicionais?: string | null;
   situacao?: string | null;
   situacaoMotivo?: string | null;
   horimetro?: number | null;

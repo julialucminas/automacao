@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { ConcluirSolicitacao } from '../components/ConcluirSolicitacao';
 import { Link } from 'react-router-dom';
 import { useEstado } from '../state';
 import { emailsComProblema } from '../lib/avisos';
@@ -147,8 +148,8 @@ export function Inicio() {
             ) : (
               <ul className="flex flex-col gap-1.5 text-[14px]">
                 {pendentesParaMim.slice(0, 5).map((s) => (
-                  <li key={s.id}>
-                    <Link to={`/solicitacoes?id=${s.id}`} className="flex items-baseline justify-between gap-2 hover:underline">
+                  <li key={s.id} className="flex flex-wrap items-center gap-2">
+                    <Link to={`/solicitacoes?id=${s.id}`} className="flex min-w-0 flex-1 items-baseline justify-between gap-2 hover:underline">
                       <span className="truncate font-semibold">
                         {s.titulo}
                         {s.clienteNome && <span className="font-normal text-ink-3"> · {s.clienteNome}</span>}
@@ -157,6 +158,7 @@ export function Inicio() {
                         {s.data < hoje ? `atrasada (${dataCurta(s.data)})` : 'hoje'}
                       </span>
                     </Link>
+                    <ConcluirSolicitacao id={s.id} />
                   </li>
                 ))}
                 {pendentesParaMim.length > 5 && <li className="text-xs text-ink-3">e mais {pendentesParaMim.length - 5}</li>}

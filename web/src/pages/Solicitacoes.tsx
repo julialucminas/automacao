@@ -6,7 +6,8 @@ import type { Pessoa, Solicitacao } from '../types';
 import { dataBr, hojeIso } from '../lib/calendario';
 import { chaveEmpresa } from '../lib/normalizar';
 import { Chip, Modal, type Tom } from '../components/ui';
-import { IcEnviar, IcMais } from '../components/Icones';
+import { IcBusca, IcEnviar, IcMais } from '../components/Icones';
+import { ConcluirSolicitacao } from '../components/ConcluirSolicitacao';
 
 type Caixa = 'para_mim' | 'enviadas' | 'todas';
 type Situacao = 'abertas' | 'concluidas';
@@ -21,7 +22,7 @@ function situacao(s: Solicitacao, hoje: string): { rotulo: string; tom: Tom } {
 const hora = (iso: string) => new Date(iso).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
 
 export function Solicitacoes() {
-  const { usuario, solicitacoes, recarregarSolicitacoes, clientes, avisar } = useEstado();
+  const { usuario, solicitacoes, recarregarSolicitacoes, alterarSolicitacao, clientes, avisar } = useEstado();
   const [params, setParams] = useSearchParams();
   const selecionada = params.get('id');
   const hoje = hojeIso();
@@ -31,14 +32,20 @@ export function Solicitacoes() {
   const [resposta, setResposta] = useState('');
   const [enviando, setEnviando] = useState(false);
   const [nova, setNova] = useState(false);
+  const [busca, setBusca] = useState('');
   const fimConversa = useRef<HTMLDivElement>(null);
 
   const meuId = usuario?.id;
   const lista = solicitacoes
     .filter((s) => (caixa === 'para_mim' ? s.paraUsuario === meuId : caixa === 'enviadas' ? s.criadaPor === meuId : true))
     .filter((s) => (sit === 'abertas' ? s.status === 'aberta' : s.status === 'concluida'))
+    .filter((s) => {
+      const q = chaveEmpresa(busca);
+      return !q || [s.titulo, s.clienteNome, s.criadaPorNome, s.paraNome].some((t) => chaveEmpresa(t ?? '').includes(q));
+    })
     .sort((a, b) => (sit === 'abertas' ? a.data.localeCompare(b.data) : b.data.localeCompare(a.data)));
 
+  const atrasadasParaMim = solicitacoes.filter((s) => s.status === 'aberta' && s.paraUsuario === meuId && s.data < hoje).length;
   const conta = (c: Caixa) =>
     solicitacoes.filter((s) => s.status === 'aberta' && (c === 'para_mim' ? s.paraUsuario === meuId : c === 'enviadas' ? s.criadaPor === meuId : true)).length;
 
@@ -89,8 +96,7 @@ export function Solicitacoes() {
   const mudar = async (m: { status?: 'aberta' | 'concluida'; data?: string }) => {
     if (!aberta) return;
     try {
-      setAberta(await api.alterarSolicitacao(aberta.id, m));
-      recarregarSolicitacoes();
+      setAberta(await alterarSolicitacao(aberta.id, m));
       if (m.status === 'concluida') avisar('Solicitação concluída.');
     } catch (err) {
       avisar(err instanceof Error ? err.message : 'Não foi possível salvar.', 'bad');
@@ -132,7 +138,13 @@ export function Solicitacoes() {
             <div className="flex gap-1.5" role="group" aria-label="Situação">
               {botaoFiltro(sit === 'abertas', () => setSit('abertas'), 'Abertas')}
               {botaoFiltro(sit === 'concluidas', () => setSit('concluidas'), 'Concluídas')}
+              {atrasadasParaMim > 0 && <span className="ml-auto self-center text-[12.5px] font-semibold text-bad">{atrasadasParaMim} atrasada{atrasadasParaMim > 1 ? 's' : ''} para você</span>}
             </div>
+            <label className="flex h-9 items-center gap-2 rounded-[10px] border border-line-strong bg-white px-3 text-ink-3">
+              <IcBusca />
+              <span className="sr-only">Buscar solicitação</span>
+              <input type="search" value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar por assunto, cliente ou pessoa" className="w-full bg-transparent text-[13px] text-ink outline-none" />
+            </label>
           </div>
           {lista.length === 0 && <div className="px-4 py-6 text-[13px] text-ink-3">Nenhuma solicitação aqui.</div>}
           <ul>
@@ -140,12 +152,8 @@ export function Solicitacoes() {
               const st = situacao(s, hoje);
               const ativa = s.id === selecionada;
               return (
-                <li key={s.id}>
-                  <button
-                    type="button"
-                    onClick={() => selecionar(s.id)}
-                    className={`flex w-full flex-col gap-1 border-b border-line-soft px-4 py-3 text-left text-[13px] ${ativa ? 'bg-brand-tint shadow-[inset_4px_0_0_#FFC400]' : 'hover:bg-[#FAFAF7]'}`}
-                  >
+                <li key={s.id} className={`flex flex-wrap items-center gap-2 border-b border-line-soft pr-3 ${ativa ? 'bg-brand-tint shadow-[inset_4px_0_0_#FFC400]' : 'hover:bg-[#FAFAF7]'}`}>
+                  <button type="button" onClick={() => selecionar(s.id)} className="flex min-w-0 flex-1 flex-col gap-1 px-4 py-3 text-left text-[13px]">
                     <span className="flex items-center justify-between gap-2">
                       <span className={`truncate ${s.naoLidas ? 'font-bold' : 'font-semibold'}`}>{s.titulo}</span>
                       <span className="flex shrink-0 items-center gap-1.5">
@@ -160,8 +168,10 @@ export function Solicitacoes() {
                     <span className="text-xs text-ink-3">
                       {dataBr(s.data)}
                       {s.clienteNome && ` · ${s.clienteNome}`} · {s.criadaPor === meuId ? `para ${s.paraNome}` : `de ${s.criadaPorNome}`}
+                      {s.status === 'concluida' && s.concluidaPorNome && ` · concluída por ${s.concluidaPorNome}${s.concluidaEm ? ` em ${hora(s.concluidaEm)}` : ''}`}
                     </span>
                   </button>
+                  {s.status === 'aberta' && s.paraUsuario === meuId && <ConcluirSolicitacao id={s.id} aoConcluir={() => ativa && abrir(s.id)} />}
                 </li>
               );
             })}
@@ -177,13 +187,19 @@ export function Solicitacoes() {
                 <div className="min-w-0">
                   <h2 className="text-lg font-bold">{aberta.titulo}</h2>
                   <div className="text-[13px] text-ink-3">
-                    De {aberta.criadaPorNome} para {aberta.paraNome}
+                    De {aberta.criadaPorNome} para {aberta.paraNome} · criada em {hora(aberta.criadaEm)}
                     {aberta.clienteNome && (
                       <>
                         {' · '}cliente <b className="text-ink-2">{aberta.clienteNome}</b>
                       </>
                     )}
                   </div>
+                  {aberta.status === 'concluida' && aberta.concluidaPorNome && (
+                    <div className="mt-1 text-[13px] font-semibold text-ok">
+                      ✓ Concluída por {aberta.concluidaPorNome}
+                      {aberta.concluidaEm && ` em ${hora(aberta.concluidaEm)}`}
+                    </div>
+                  )}
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   <label className="flex items-center gap-1.5 text-[13px] text-ink-3">
@@ -192,9 +208,7 @@ export function Solicitacoes() {
                   </label>
                   <Chip tom={situacao(aberta, hoje).tom}>{situacao(aberta, hoje).rotulo}</Chip>
                   {aberta.status === 'aberta' ? (
-                    <button type="button" className="btn-primary btn-sm" onClick={() => mudar({ status: 'concluida' })}>
-                      Marcar como concluída
-                    </button>
+                    <ConcluirSolicitacao id={aberta.id} grande aoConcluir={() => abrir(aberta.id)} />
                   ) : (
                     <button type="button" className="btn-secondary btn-sm" onClick={() => mudar({ status: 'aberta' })}>
                       Reabrir

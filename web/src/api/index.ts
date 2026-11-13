@@ -93,7 +93,7 @@ export interface Api {
   abrirSolicitacao(id: string): Promise<Solicitacao>;
   criarSolicitacao(s: NovaSolicitacao): Promise<Solicitacao>;
   responderSolicitacao(id: string, texto: string): Promise<Solicitacao>;
-  alterarSolicitacao(id: string, mudanca: { status?: 'aberta' | 'concluida'; data?: string }): Promise<Solicitacao>;
+  alterarSolicitacao(id: string, mudanca: { status?: 'aberta' | 'concluida'; data?: string; nota?: string }): Promise<Solicitacao>;
 
   listarMovimentacoes(): Promise<Movimentacao[]>;
   /** "ciente": marca como vistas (sem ids, todas) */

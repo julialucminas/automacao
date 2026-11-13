@@ -193,6 +193,23 @@ describe('entrega da máquina', () => {
   });
 });
 
+describe('adicionais da locação', () => {
+  it('vão para a ficha na locação, passam para a frota nova na troca e saem na devolução', async () => {
+    const a = como('angelise');
+    const fichaDe = async (f: string) => (await a('GET', '/api/equipamentos')).json().find((e: { frota: string }) => e.frota === f);
+    const c = (await a('POST', '/api/clientes', { nome: 'Gama Adicionais', para: ['a@g.com.br'], cc: [], apelidos: [], cnpj: '', observacoes: '' })).json();
+    const loc = (await a('POST', '/api/movimentacoes', { tipo: 'locacao', frota: '41', clienteId: c.id, data: '2026-11-01', valor: 300000, modalidade: 'contrato', adicionais: ' Prolongador de garfo, Carregador ' })).json();
+    expect(loc.dados.adicionais).toBe('Prolongador de garfo, Carregador');
+    expect((await fichaDe('41')).adicionais).toBe('Prolongador de garfo, Carregador');
+    await a('POST', '/api/movimentacoes', { tipo: 'troca', frota: '41', frotaNova: '42', clienteId: c.id, data: '2026-11-05' });
+    expect((await fichaDe('42')).adicionais).toBe('Prolongador de garfo, Carregador');
+    expect((await fichaDe('41')).adicionais ?? null).toBeNull();
+    const dev = (await a('POST', '/api/movimentacoes', { tipo: 'devolucao', frota: '42', data: '2026-11-10', adicionais: 'Prolongador de garfo, Carregador' })).json();
+    expect(dev.dados.adicionais).toBe('Prolongador de garfo, Carregador');
+    expect((await fichaDe('42')).adicionais ?? null).toBeNull();
+  });
+});
+
 describe('pasta do cliente', () => {
   it('junta contratos (com tipo), documentos, NF-e e entregas; faturas só para financeiro', async () => {
     const a = como('angelise');

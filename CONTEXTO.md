@@ -284,3 +284,16 @@ Renovações: vencendo em 120 dias ou em andamento. Reajustes: próximos 60 dias
 proposto e valor novo; "Aplicar" leva ao reajuste em Movimentações quando a etapa é "aceito". Pendências abertas ficam
 em vermelho na lista, no contrato e na gaveta; o menu "Contratos" conta pendências + retornos vencidos
 (`GET /api/contratos/alertas`).
+O aviso "📎 arquivo não anexado" (e o cartão "Assinado sem arquivo") só vale para contrato marcado como assinado:
+quem ainda falta assinar já aparece como "Falta assinar".
+
+## Solicitações: concluir de qualquer lugar (13/nov)
+`ConcluirSolicitacao` (lista, Central do financeiro, Painel do dia e conversa) conclui com uma observação opcional,
+que o `PATCH /api/solicitacoes/:id` grava como mensagem (`nota`). O estado troca a solicitação na hora
+(`alterarSolicitacao` em state.tsx) e as solicitações são conferidas a cada 15 s com a janela aberta (antes, 60 s —
+quem pediu demorava a ver como concluída). Busca por assunto/cliente/pessoa e "concluída por X em …" na lista.
+
+## Adicionais da locação (13/nov)
+`dados.adicionais` na locação, troca e devolução (prolongador de garfo, bateria, carregador…; sugestões em botões) e
+campo `adicionais` na ficha. A locação grava na ficha; a troca passa para a frota nova; a devolução tira da ficha
+(`adicionais` faz parte de CONTRATO_VAZIO). Aparece na mensagem do grupo e no detalhe da movimentação.

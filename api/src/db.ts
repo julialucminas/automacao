@@ -908,10 +908,12 @@ export function repositorio(db: Banco) {
       db.prepare('INSERT INTO mensagens (solicitacao_id, usuario_id, texto, criada_em) VALUES (?, ?, ?, ?)').run(id, usuarioId, texto, t);
       this.marcarVista(id, usuarioId);
     },
-    alterarSolicitacao(id: string, usuarioId: number, mudanca: { status?: 'aberta' | 'concluida'; data?: string }) {
+    alterarSolicitacao(id: string, usuarioId: number, mudanca: { status?: 'aberta' | 'concluida'; data?: string; nota?: string }) {
       const atual = db.prepare('SELECT status, data FROM solicitacoes WHERE id = ?').get(id) as { status: string; data: string } | undefined;
       if (!atual) throw new NaoEncontrado('Solicitação não encontrada.');
       const t = agora();
+      // observação de quem concluiu/reabriu ("feito, fatura nº 123"): vira mensagem normal na conversa
+      if (mudanca.nota) db.prepare('INSERT INTO mensagens (solicitacao_id, usuario_id, texto, criada_em) VALUES (?, ?, ?, ?)').run(id, usuarioId, mudanca.nota, t);
       if (mudanca.status && mudanca.status !== atual.status) {
         db.prepare('UPDATE solicitacoes SET status = ?, concluida_em = ?, concluida_por = ? WHERE id = ?').run(
           mudanca.status,

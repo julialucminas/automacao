@@ -79,8 +79,10 @@ export function Contratos() {
   const q = chaveEmpresa(busca);
   const achou = (c: Cliente, maquinas: { numero: string }[], numero = '') =>
     !q || chaveEmpresa(c.nome).includes(q) || chaveEmpresa(numero).includes(q) || maquinas.some((m) => chaveEmpresa(m.numero).includes(q));
-  // contrato sem nenhum arquivo deste período (contrato, assinado ou renovação com o vencimento atual)
+  // marcado como assinado, mas sem nenhum arquivo deste período (contrato, assinado ou renovação com o vencimento atual).
+  // Quem ainda falta assinar já aparece como "Falta assinar": não repete o aviso.
   const semArquivo = (c: Contrato) =>
+    c.assinado &&
     !c.arquivoId &&
     !arquivos.some(
       (a) => a.clienteId === c.cliente.id && ['contrato', 'assinado', 'renovacao'].includes(a.tipo) && a.vencimento === c.vencimento && a.frotas.some((f) => c.maquinas.some((m) => m.numero === f)),
@@ -171,7 +173,7 @@ export function Contratos() {
         {cartao(`Vencem em ${DIAS_AVISO} dias`, porStatus('vencendo').length, soma(porStatus('vencendo')), 'vencendo', porStatus('vencendo').length ? 'text-warn-strong' : 'text-ink-3')}
         {cartao('Vigentes', porStatus('vigente').length, soma(porStatus('vigente')), 'vigente', 'text-ok')}
         {cartao('Reajuste atrasado', conta('reajuste'), soma(contratos.filter((c) => c.reajusteAtrasado)), 'reajuste', conta('reajuste') ? 'text-warn-strong' : 'text-ink-3')}
-        {cartao('Sem contrato anexado', conta('semArquivo'), soma(contratos.filter(semArquivo)), 'semArquivo', conta('semArquivo') ? 'text-warn-strong' : 'text-ink-3')}
+        {cartao('Assinado sem arquivo', conta('semArquivo'), soma(contratos.filter(semArquivo)), 'semArquivo', conta('semArquivo') ? 'text-warn-strong' : 'text-ink-3')}
         {cartao('Falta assinatura', conta('assinar'), soma(contratos.filter((c) => !c.assinado)), 'assinar', conta('assinar') ? 'text-bad' : 'text-ink-3')}
         {cartao('Máquinas sem contrato', conta('sem'), semContrato.reduce((s, x) => s + x.valor, 0), 'sem', conta('sem') ? 'text-warn-strong' : 'text-ink-3')}
       </section>
@@ -229,7 +231,7 @@ export function Contratos() {
                           ) : (
                             <span className="font-semibold text-bad">○ {c.assinaturaParcial ? 'Incompleta' : 'Falta assinar'}</span>
                           )}
-                          {semArquivo(c) && <span className="block text-[11.5px] font-semibold text-warn-strong">📎 contrato não anexado</span>}
+                          {semArquivo(c) && <span className="block text-[11.5px] font-semibold text-warn-strong">📎 arquivo não anexado</span>}
                         </span>
                         <span className={`max-lg:pl-5 ${c.reajusteAtrasado ? 'font-semibold text-warn-strong' : 'text-ink-2'}`}>
                           <span className="text-ink-3 lg:hidden">Reajuste </span>
@@ -268,7 +270,7 @@ export function Contratos() {
                           )}
                           {semArquivo(c) && (
                             <p className="mt-2.5 rounded-[10px] border border-warn-line bg-warn-soft px-3 py-2 text-[13px] font-semibold text-warn-strong">
-                              📎 O contrato deste período ainda não foi anexado. Anexe o assinado aqui embaixo ou, em “Editar”, junto com os dados.
+                              📎 Está marcado como assinado, mas o arquivo do contrato não foi anexado. Anexe aqui embaixo ou, em “Editar”, junto com os dados.
                             </p>
                           )}
                           <ArquivosDoContrato c={c} arquivos={arquivos} edita={edita} anexado={() => void recarregar()} />

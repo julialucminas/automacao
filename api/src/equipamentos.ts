@@ -64,6 +64,8 @@ export const CAMPOS_EQUIPAMENTO = {
   contratoValor: 'centavos',
   contratoReajuste: 'centavos',
   contratoObs: 'texto',
+  /** adicionais que estão com a máquina nesta locação (prolongador de garfo, bateria, carregador…). Sai na devolução. */
+  adicionais: 'texto',
   observacoes: 'texto',
   // periféricos: última troca (data e horímetro) e a próxima (por data ou por horímetro)
   ...periferico('motorPartida'),

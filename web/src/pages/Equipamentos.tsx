@@ -310,6 +310,9 @@ export function Ficha({
             <Item rotulo="Início">{linha.locacao?.inicio ? dataBr(linha.locacao.inicio) : null}</Item>
             <Item rotulo="Término">{linha.locacao?.fim ? dataBr(linha.locacao.fim) : null}</Item>
             {linha.locacao && linha.locacao.valor > 0 && <Item rotulo="Valor mensal">{formatarReais(linha.locacao.valor)}</Item>}
+            <Item rotulo="Adicionais" largo>
+              {f.adicionais ? <b>{f.adicionais}</b> : null}
+            </Item>
             <Item rotulo="Nº do contrato">{f.contratoNumero}</Item>
             <Item rotulo="Início do contrato">{f.contratoInicio ? dataBr(f.contratoInicio) : null}</Item>
             <Item rotulo="Assinatura">
@@ -545,6 +548,7 @@ const GRUPOS_FORM: { titulo: string; campos: Campo[] }[] = [
       { k: 'contratoValor', rotulo: 'Valor no contrato', tipo: 'dinheiro', valor: true },
       { k: 'contratoReajuste', rotulo: 'Reajuste pedido', tipo: 'dinheiro', valor: true },
       { k: 'contratoObs', rotulo: 'Observação' },
+      { k: 'adicionais', rotulo: 'Adicionais (prolongador de garfo, bateria, carregador…)' },
     ],
   },
   {
