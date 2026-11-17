@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { useEstado } from '../state';
 import { api } from '../api';
 import type { Equipamento, Faturamento, ServicoExterno } from '../types';
-import { resumirFaturas, situacaoFaturas } from '../lib/faturado';
+import { resumirFaturas, situacaoDaLocacao, situacaoFaturas } from '../lib/faturado';
 import { cuidaDoFaturamento, LancarFatura } from '../components/LancarFatura';
 import { dataBr, hojeIso, janelaConferencia, paraData, paraIso, proximasDatas, regraDoCliente } from '../lib/calendario';
 import { referenciaAtual, referenciaPorExtenso } from '../lib/email';
@@ -439,12 +439,12 @@ function FaturamentoDoMes({
 }) {
   const [lancando, setLancando] = useState<{ clienteId?: string } | null>(null);
   const sit = situacaoFaturas(clientes, envios, marcados, mes);
-  const linhas = clientes.flatMap((c) => c.frotas.map((f) => ({ clienteId: c.id, valor: f.valor })));
+  const linhas = clientes.flatMap((c) => c.frotas.map((f) => ({ clienteId: c.id, valor: f.valor, inicio: f.inicio })));
   const r = resumirFaturas(linhas, sit);
   if (!r.locacoes) return null;
   const pct = (n: number) => (r.locacoes ? (n / r.locacoes) * 100 : 0);
   const faltam = clientes
-    .filter((c) => c.frotas.length && sit.get(c.id)?.estado === 'pendente')
+    .filter((c) => c.frotas.some((f) => situacaoDaLocacao(sit.get(c.id), f.inicio)?.estado !== 'faturado' && situacaoDaLocacao(sit.get(c.id), f.inicio)?.estado !== 'devolvido'))
     .map((c) => {
       const regra = regraDoCliente(c);
       return { c, data: regra ? (proximasDatas(regra, 1, `${mes}-01`)[0] ?? null) : null, valor: c.frotas.reduce((s, f) => s + f.valor, 0) };

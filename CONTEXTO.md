@@ -339,3 +339,9 @@ relatório da OS). "Configurações" virou "Configurações do e-mail" (modelo d
 quem tem uma das duas e descarta as chaves que a pessoa não pode mudar (`email.*` = configuracoes; resto = configOperacao).
 Migração 33: configOperacao = nível que cada perfil tinha em configuracoes; Operações (Júnior) ganha clientes 2 e
 configOperacao 2.
+
+## Faturado no mês por máquina (17/nov)
+A fatura é por cliente, mas a máquina que começou no cliente (`frota.inicio`) DEPOIS da fatura mais recente do mês
+(envio ou lançada à mão — `SituacaoFatura.ultima`) fica "A faturar" com o aviso "chegou depois da fatura do cliente"
+(`situacaoDaLocacao` em lib/faturado.ts). Ex.: FT50 foi para a Esquipa dia 17 e a fatura da Esquipa saiu dia 5.
+"Lançar" a fatura dela (com data de hoje) resolve.

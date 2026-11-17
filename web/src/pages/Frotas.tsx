@@ -4,7 +4,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useEstado } from '../state';
 import type { Cliente, Equipamento, Faturamento, Frota } from '../types';
 import { cuidaDoFaturamento, LancarFatura } from '../components/LancarFatura';
-import { ROTULO_FATURA, resumirFaturas, situacaoFaturas, type EstadoFatura, type SituacaoFatura } from '../lib/faturado';
+import { ROTULO_FATURA, resumirFaturas, situacaoDaLocacao, situacaoFaturas, type EstadoFatura, type SituacaoFatura } from '../lib/faturado';
 import { BalaoUrgente, SeloHelbert } from '../components/Balao';
 import { AdicionaisDaLocacao, AvisoEEtiquetas, ChipAdicionais, ChipsEtiquetas, SeloDevolucao } from '../components/AvisoDevolucao';
 import { avisoDevolucao, etiquetasEmUso } from '../lib/etiquetas';
@@ -97,7 +97,8 @@ export function Frotas() {
     api.listarFaturamentos(`${mesFat}-01`, `${mesFat}-${String(ultimo).padStart(2, '0')}`).then(setFaturamentos, () => setFaturamentos([]));
   }, [mesFat, veFaturas, envios.length]);
   const situacao = useMemo(() => situacaoFaturas(clientes, envios, faturamentos, mesFat), [clientes, envios, faturamentos, mesFat]);
-  const estadoDe = (clienteId: string): EstadoFatura => situacao.get(clienteId)?.estado ?? 'pendente';
+  const sitDe = (l: { cliente: { id: string }; frota: { inicio?: string | null } }) => situacaoDaLocacao(situacao.get(l.cliente.id), l.frota.inicio);
+  const estadoDe = (l: { cliente: { id: string }; frota: { inicio?: string | null } }): EstadoFatura => sitDe(l)?.estado ?? 'pendente';
 
   const considerados = clientes.filter((c) => mostrarInativos || c.ativo);
   const linhas: Linha[] = useMemo(() => {
@@ -120,7 +121,7 @@ export function Frotas() {
     (f === 'oficina' && naOficina.has(l.frota.numero)) ||
     (f === 'terminando' && terminando(l.frota)) ||
     (f === 'devolucao' && !!avisoDevolucao(fichas.get(l.frota.numero)));
-  const passaFiltro = (l: Linha) => combina(filtro, l) && (!veFaturas || filtroFat === 'todas' || estadoDe(l.cliente.id) === filtroFat);
+  const passaFiltro = (l: Linha) => combina(filtro, l) && (!veFaturas || filtroFat === 'todas' || estadoDe(l) === filtroFat);
   const filtradas = linhas
     .filter((l) => !q || chaveEmpresa(l.frota.numero).includes(q) || chaveEmpresa(l.cliente.nome).includes(q) || chaveEmpresa(l.frota.descricao).includes(q))
     .filter(passaFiltro)
@@ -150,8 +151,8 @@ export function Frotas() {
   const semValor = linhas.filter((l) => !l.frota.valor).length;
   const conta = (f: Filtro) => (f === 'oficina' ? oficina.length : linhas.filter((l) => combina(f, l)).length);
   const ativas = linhas.filter((l) => l.cliente.ativo);
-  const resumoFat = resumirFaturas(ativas.map((l) => ({ clienteId: l.cliente.id, valor: l.frota.valor })), situacao);
-  const contaFat = (e: FiltroFat) => (e === 'todas' ? linhas.length : linhas.filter((l) => estadoDe(l.cliente.id) === e).length);
+  const resumoFat = resumirFaturas(ativas.map((l) => ({ clienteId: l.cliente.id, valor: l.frota.valor, inicio: l.frota.inicio })), situacao);
+  const contaFat = (e: FiltroFat) => (e === 'todas' ? linhas.length : linhas.filter((l) => estadoDe(l) === e).length);
 
   // visão por cliente
   const porCliente = useMemo(() => {
@@ -435,7 +436,7 @@ export function Frotas() {
                     </td>
                     {veFaturas && (
                       <td className="whitespace-nowrap px-3 py-2.5">
-                        <CelulaFatura s={situacao.get(l.cliente.id)} lancar={() => setLancando({ clienteId: l.cliente.id })} />
+                        <CelulaFatura s={sitDe(l)} lancar={() => setLancando({ clienteId: l.cliente.id })} />
                       </td>
                     )}
                   </tr>
@@ -1122,8 +1123,9 @@ function BolinhaFatura({ estado }: { estado: EstadoFatura }) {
 
 function CelulaFatura({ s, lancar }: { s: SituacaoFatura | undefined; lancar?: () => void }) {
   const e = s?.estado ?? 'pendente';
-  const detalhe =
-    e === 'pendente' ? '' : s?.numeros.length ? `nº ${s.numeros.join(', ')}${s.quando ? ` · ${dataCurta(s.quando)}` : ''}` : s?.quando ? `${s.manual ? 'marcado' : ''} ${dataCurta(s.quando)}`.trim() : '';
+  const detalhe = s?.entrouDepois
+    ? 'chegou depois da fatura do cliente'
+    : e === 'pendente' ? '' : s?.numeros.length ? `nº ${s.numeros.join(', ')}${s.quando ? ` · ${dataCurta(s.quando)}` : ''}` : s?.quando ? `${s.manual ? 'marcado' : ''} ${dataCurta(s.quando)}`.trim() : '';
   return (
     <span className="inline-flex items-center gap-1.5" title={detalhe ? `${ROTULO_FATURA[e]} · ${detalhe}` : ROTULO_FATURA[e]}>
       <BolinhaFatura estado={e} />

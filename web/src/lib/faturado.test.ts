@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Envio, Faturamento } from '../types';
-import { resumirFaturas, situacaoFaturas } from './faturado';
+import { resumirFaturas, situacaoDaLocacao, situacaoFaturas } from './faturado';
 
 const env = (clienteId: string, referencia: string, status: Envio['status'], numero = '1', enviadoEm = `${referencia}-05T12:00:00Z`) => ({ id: numero + clienteId, clienteId, referencia, status, numero, enviadoEm }) as Envio;
 
@@ -31,5 +31,17 @@ describe('faturado no mês', () => {
       s,
     );
     expect(r).toMatchObject({ locacoes: 4, faturadas: 2, devolvidas: 1, pendentes: 1, valorFaturado: 150, valorDevolvido: 30, valorPendente: 20, clientesPendentes: 1 });
+  });
+
+  it('máquina que chegou no cliente depois da fatura do mês fica a faturar', () => {
+    // Esquipa: fatura de novembro saiu dia 05; a FT50 começou dia 17
+    const s = situacaoFaturas([{ id: 'esq' }], [env('esq', '2026-11', 'lido', '20')], [], '2026-11');
+    expect(situacaoDaLocacao(s.get('esq'), '2026-03-10')?.estado).toBe('faturado'); // a antiga
+    expect(situacaoDaLocacao(s.get('esq'), '2026-11-17')).toMatchObject({ estado: 'pendente', entrouDepois: true }); // a nova
+    expect(situacaoDaLocacao(s.get('esq'), null)?.estado).toBe('faturado'); // sem data de início: segue o cliente
+    expect(resumirFaturas([{ clienteId: 'esq', valor: 100, inicio: '2026-03-10' }, { clienteId: 'esq', valor: 350, inicio: '2026-11-17' }], s)).toMatchObject({ faturadas: 1, pendentes: 1, valorPendente: 350 });
+    // lançou à mão a fatura da FT50 no dia 18: agora as duas estão faturadas
+    const s2 = situacaoFaturas([{ id: 'esq' }], [env('esq', '2026-11', 'lido', '20')], [{ clienteId: 'esq', data: '2026-11-18', marcadoEm: '', marcadoPor: '', origem: 'manual' }], '2026-11');
+    expect(situacaoDaLocacao(s2.get('esq'), '2026-11-17')?.estado).toBe('faturado');
   });
 });
