@@ -4,8 +4,8 @@ import { Component, type ErrorInfo, type ReactNode } from 'react';
  * Se uma parte da tela quebrar, mostra o erro (para mandar print) em vez de deixar a tela em branco.
  * `chave` muda quando troca de página: aí tenta de novo sozinho.
  */
-export class ProtecaoErro extends Component<{ children: ReactNode; chave?: string; compacto?: boolean }, { erro: Error | null; chave?: string }> {
-  state: { erro: Error | null; chave?: string } = { erro: null, chave: this.props.chave };
+export class ProtecaoErro extends Component<{ children: ReactNode; chave?: string; compacto?: boolean }, { erro: Error | null; chave?: string; onde?: string }> {
+  state: { erro: Error | null; chave?: string; onde?: string } = { erro: null, chave: this.props.chave };
   static getDerivedStateFromError(erro: Error) {
     return { erro };
   }
@@ -14,6 +14,10 @@ export class ProtecaoErro extends Component<{ children: ReactNode; chave?: strin
   }
   componentDidCatch(erro: Error, info: ErrorInfo) {
     console.error('Tela quebrou:', erro, info.componentStack);
+    // onde quebrou: os 3 primeiros componentes da pilha e a 1ª linha do código (vai no print para a Júlia)
+    const comps = (info.componentStack ?? '').split('\n').map((l) => l.trim().replace(/^at /, '').split(' (')[0]).filter(Boolean).slice(0, 3).join(' › ');
+    const linha = (erro.stack ?? '').split('\n').find((l) => /at /.test(l))?.trim().replace(/\(?https?:\/\/[^/]+\//, '(') ?? '';
+    this.setState({ onde: [comps, linha].filter(Boolean).join(' | ') });
   }
   render() {
     const { erro } = this.state;
@@ -22,6 +26,7 @@ export class ProtecaoErro extends Component<{ children: ReactNode; chave?: strin
       return (
         <div className="fixed bottom-4 right-4 z-40 max-w-[320px] rounded-xl border border-bad/30 bg-white p-3 text-[13px] shadow-lg">
           <b className="text-bad">Os avisos deram erro.</b> <span className="text-ink-3">{erro.message}</span>{' '}
+          {this.state.onde && <span className="block break-all text-[11px] text-ink-3">{this.state.onde}</span>}
           <button type="button" className="font-semibold text-info underline" onClick={() => this.setState({ erro: null })}>
             Tentar de novo
           </button>
@@ -30,7 +35,10 @@ export class ProtecaoErro extends Component<{ children: ReactNode; chave?: strin
     return (
       <div role="alert" className="flex flex-col gap-3 rounded-xl border border-bad/30 bg-bad-soft p-5 text-[14px]">
         <b className="text-bad-strong">Esta tela deu um erro.</b>
-        <code className="whitespace-pre-wrap break-words rounded bg-white p-2 text-[12px] text-ink-2">{erro.message}</code>
+        <code className="whitespace-pre-wrap break-words rounded bg-white p-2 text-[12px] text-ink-2">
+          {erro.message}
+          {this.state.onde && `\n${this.state.onde}`}
+        </code>
         <p className="text-ink-2">Mande um print desta mensagem para a Júlia. Enquanto isso, dá para usar o menu normalmente.</p>
         <div className="flex gap-2">
           <button type="button" className="btn-secondary btn-sm" onClick={() => this.setState({ erro: null })}>

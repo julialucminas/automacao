@@ -201,7 +201,9 @@ export function Conversa({ s, meuId, escreve, mudou, concluir }: { s: Solicitaca
   const [texto, setTexto] = useState('');
   const [enviando, setEnviando] = useState(false);
   const fim = useRef<HTMLDivElement>(null);
-  useEffect(() => fim.current?.scrollIntoView({ block: 'end' }), [s.mensagens?.length]);
+  useEffect(() => {
+    fim.current?.scrollIntoView({ block: 'end' });
+  }, [s.mensagens?.length]);
   const enviar = async (e: FormEvent) => {
     e.preventDefault();
     if (!texto.trim()) return;
