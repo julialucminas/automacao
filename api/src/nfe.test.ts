@@ -314,3 +314,38 @@ describe('configurações separadas', () => {
     expect((await j('POST', '/api/clientes', { nome: 'Cliente do Júnior', para: ['x@y.com.br'], cc: [], apelidos: [], cnpj: '', observacoes: '' })).statusCode).toBe(201);
   });
 });
+
+describe('completar cadastro (sistema de locação)', () => {
+  it('preenche só o que está vazio, aponta CNPJ diferente e nunca mexe nos e-mails', async () => {
+    const j = como('junior');
+    const a = (await j('POST', '/api/clientes', { nome: 'ORTHOCRIN', para: ['fin@orthocrin.com'], cc: ['cc@orthocrin.com'], cnpj: '' })).json();
+    const b = (await j('POST', '/api/clientes', { nome: 'ESQUIPA', para: ['nf@esquipa.com'], cnpj: '11.111.111/0001-11', contato: 'Elvys', telefone: '' })).json();
+    const r = await j('POST', '/api/clientes/completar-cadastro', {
+      itens: [
+        { id: a.id, cnpj: '17.245.986/0001-62', telefone: '31-3333', cadastro: { razaoSocial: 'ORTHOCRIN IND E COM LTDA', cidade: 'SANTA LUZIA', uf: 'MG', codigoLocacao: '03082', para: 'x@x.com' } },
+        { id: b.id, cnpj: '47.962.676/0001-20', contato: 'Mylena', telefone: '31-9999', cadastro: { cidade: 'CONTAGEM', conferir: 'confira a filial' } },
+      ],
+    });
+    expect(r.statusCode).toBe(200);
+    expect(r.json().atualizados).toBe(2);
+    expect(r.json().cnpjDiferente).toEqual([expect.objectContaining({ nome: 'ESQUIPA', atual: '11.111.111/0001-11', planilha: '47.962.676/0001-20' })]);
+    const l = (await j('GET', '/api/clientes')).json() as Array<Record<string, any>>;
+    const oa = l.find((c) => c.id === a.id)!;
+    const ob = l.find((c) => c.id === b.id)!;
+    expect(oa).toMatchObject({ cnpj: '17.245.986/0001-62', telefone: '31-3333', para: ['fin@orthocrin.com'], cc: ['cc@orthocrin.com'] });
+    expect(oa.cadastro).toEqual({ razaoSocial: 'ORTHOCRIN IND E COM LTDA', cidade: 'SANTA LUZIA', uf: 'MG', codigoLocacao: '03082' });
+    expect(ob).toMatchObject({ cnpj: '11.111.111/0001-11', contato: 'Elvys', telefone: '31-9999', para: ['nf@esquipa.com'] });
+    expect(ob.cadastro).toEqual({ cidade: 'CONTAGEM', conferir: 'confira a filial' });
+
+    // de novo: nada muda, e não troca o que já foi preenchido
+    const r2 = await j('POST', '/api/clientes/completar-cadastro', { itens: [{ id: a.id, cadastro: { cidade: 'BH' } }] });
+    expect(r2.json().atualizados).toBe(0);
+
+    // editar o cliente sem mandar cadastro mantém o cadastro
+    await app.inject({ method: 'PUT', url: `/api/clientes/${a.id}`, payload: { nome: 'ORTHOCRIN', para: ['fin@orthocrin.com'], cnpj: oa.cnpj }, headers: { cookie: cookies.junior } });
+    expect(((await j('GET', '/api/clientes')).json() as Array<Record<string, any>>).find((c) => c.id === a.id)!.cadastro.cidade).toBe('SANTA LUZIA');
+
+    // técnico não pode
+    expect((await como('tecnico')('POST', '/api/clientes/completar-cadastro', { itens: [{ id: a.id, cadastro: {} }] })).statusCode).toBe(403);
+  });
+});

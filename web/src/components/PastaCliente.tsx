@@ -7,6 +7,7 @@ import { dataHora, referenciaPorExtenso } from '../lib/email';
 import { NOMES_TIPO } from '../lib/movimentacao';
 import { lerBase64 } from './NfeAnexo';
 import { Gaveta } from './ui';
+import { enderecoDe } from '../lib/cadastroLocacao';
 import { IcBusca } from './Icones';
 
 export const ROTULO_DOC: Record<TipoDocContrato, string> = {
@@ -77,6 +78,7 @@ export function PastaCliente({ cliente, fechar }: { cliente: Cliente; fechar: ()
         <p className="text-ink-3">Abrindo a pasta…</p>
       ) : (
         <div className="flex flex-col gap-3">
+          <DadosDoCliente c={cliente} />
           <Subpasta titulo="Contratos" n={[...porContrato.values()].reduce((s, l) => s + l.length, 0)} aberta>
             {[...porContrato.entries()].map(([k, l]) => (
               <div key={k} className="flex flex-col gap-1">
@@ -247,5 +249,38 @@ function Arquivo({ href, nome, etiqueta, detalhe, apagar }: { href: string; nome
         </button>
       )}
     </li>
+  );
+}
+
+/** Dados cadastrais no topo da pasta (só o que estiver preenchido). */
+function DadosDoCliente({ c }: { c: Cliente }) {
+  const k = c.cadastro ?? {};
+  const linhas: [string, string][] = (
+    [
+      ['Razão social', k.razaoSocial ?? ''],
+      ['CNPJ', c.cnpj],
+      ['Inscrição estadual', k.inscricaoEstadual ?? ''],
+      ['Endereço', enderecoDe(k)],
+      ['Cobrança', k.enderecoCobranca ?? ''],
+      ['Contato', [c.contato, k.funcao].filter(Boolean).join(' · ')],
+      ['Telefone', [c.telefone, k.celular].filter((x, i, l) => x && l.indexOf(x) === i).join(' · ')],
+      ['Atividade', k.atividade ?? ''],
+      ['Cód. sistema de locação', k.codigoLocacao ?? ''],
+    ] as [string, string][]
+  ).filter(([, v]) => v);
+  if (!linhas.length && !k.conferir) return null;
+  return (
+    <section aria-label="Dados cadastrais" className="rounded-xl border border-line bg-white px-4 py-3 text-[13px]">
+      <div className="mb-1.5 text-[13.5px] font-bold">Dados cadastrais</div>
+      {k.conferir && <div className="mb-2 rounded-lg bg-warn-soft px-3 py-2 text-[12.5px] text-warn-strong">Conferir: {k.conferir}</div>}
+      <dl className="grid grid-cols-[150px_1fr] gap-x-3 gap-y-1">
+        {linhas.map(([r, v]) => (
+          <div key={r} className="contents">
+            <dt className="text-ink-3">{r}</dt>
+            <dd className="[overflow-wrap:anywhere]">{v}</dd>
+          </div>
+        ))}
+      </dl>
+    </section>
   );
 }

@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom';
 import { useState } from 'react';
-import type { Cliente, ClienteInput, Frota } from '../types';
+import { CAMPOS_CADASTRO, type CadastroCliente, type Cliente, type ClienteInput, type Frota } from '../types';
+import { ROTULO_CADASTRO } from '../lib/cadastroLocacao';
 import { formatarReais, lerReais, reaisParaCampo } from '../lib/dinheiro';
 import { dataBr, dataCurta, dataValida, descreverRegra, proximasDatas, regraDoCliente } from '../lib/calendario';
 import { emailValido } from '../lib/normalizar';
@@ -26,11 +27,13 @@ export type Rascunho = {
   telefone: string;
   prazoPagamento: string;
   semBoleto: boolean;
+  /** dados cadastrais (razão social, endereço, IE…) */
+  cadastro: CadastroCliente;
   /** frotas com o valor como texto do campo, para permitir digitar à vontade; extra = dados da locação (vêm das movimentações) */
   frotas: { numero: string; valor: string; descricao: string; extra?: Pick<Frota, 'inicio' | 'fim' | 'contrato' | 'gas' | 'frete' | 'freteValor' | 'modalidade'>; freteTxt?: string }[];
 };
 
-export const rascunhoVazio = (nome = ''): Rascunho => ({ nome, apelidos: '', cnpj: '', para: [], cc: [], observacoes: '', regra: 'dia', dia: '', inicio: '', periodo: '', contato: '', telefone: '', prazoPagamento: '', semBoleto: false, frotas: [] });
+export const rascunhoVazio = (nome = ''): Rascunho => ({ nome, apelidos: '', cnpj: '', para: [], cc: [], observacoes: '', regra: 'dia', dia: '', inicio: '', periodo: '', contato: '', telefone: '', prazoPagamento: '', semBoleto: false, cadastro: {}, frotas: [] });
 
 export const rascunhoDe = (c: Cliente): Rascunho => ({
   id: c.id,
@@ -49,6 +52,7 @@ export const rascunhoDe = (c: Cliente): Rascunho => ({
   telefone: c.telefone ?? '',
   prazoPagamento: c.prazoPagamento ?? '',
   semBoleto: !!c.semBoleto,
+  cadastro: { ...(c.cadastro ?? {}) },
   frotas: c.frotas.map((f) => ({
     numero: f.numero,
     valor: f.valor ? reaisParaCampo(f.valor) : '',
@@ -227,6 +231,7 @@ function Formulario({ inicial, fechar, aoSalvar }: { inicial: Rascunho; fechar: 
       telefone: d.telefone.trim(),
       prazoPagamento: d.prazoPagamento.trim(),
       semBoleto: d.semBoleto,
+      cadastro: Object.fromEntries(CAMPOS_CADASTRO.map((k) => [k, (d.cadastro[k] ?? '').trim()]).filter(([, v]) => v)),
     };
     setSalvando(true);
     try {
@@ -300,6 +305,8 @@ function Formulario({ inicial, fechar, aoSalvar }: { inicial: Rascunho; fechar: 
           </span>
         </label>
       </div>
+
+      <DadosCadastrais d={d} setD={setD} />
 
       <Faturamento d={d} setD={setD} />
 
@@ -653,5 +660,52 @@ function FrotaCartao({
         Pronto
       </button>
     </div>
+  );
+}
+
+/** Razão social, endereço, IE… (boa parte veio do sistema de locação). Fechado por padrão para não alongar o formulário. */
+function DadosCadastrais({ d, setD }: { d: Rascunho; setD: (r: Rascunho) => void }) {
+  const preenchidos = CAMPOS_CADASTRO.filter((k) => k !== 'conferir' && d.cadastro[k]).length;
+  const mudar = (k: keyof CadastroCliente, v: string) => setD({ ...d, cadastro: { ...d.cadastro, [k]: v } });
+  const campo = (k: keyof CadastroCliente, classe = '') => (
+    <div key={k} className={`flex flex-col gap-1.5 ${classe}`}>
+      <label htmlFor={`cad-${k}`} className="label">
+        {ROTULO_CADASTRO[k]}
+      </label>
+      <input id={`cad-${k}`} className="input" value={d.cadastro[k] ?? ''} onChange={(e) => mudar(k, e.target.value)} />
+    </div>
+  );
+  return (
+    <details className="rounded-xl border border-line px-4 py-3" open={!!d.cadastro.conferir}>
+      <summary className="cursor-pointer text-[13.5px] font-semibold">
+        Dados cadastrais <span className="font-normal text-ink-3">(razão social, endereço, IE{preenchidos ? ` · ${preenchidos} preenchido${preenchidos > 1 ? 's' : ''}` : ''})</span>
+      </summary>
+      <div className="mt-3 grid gap-3 sm:grid-cols-6">
+        {d.cadastro.conferir !== undefined && d.cadastro.conferir !== '' && (
+          <div className="flex flex-col gap-1.5 sm:col-span-6">
+            <label htmlFor="cad-conferir" className="label text-warn-strong">
+              Conferir <span className="font-normal text-ink-3">(apague o texto quando estiver conferido)</span>
+            </label>
+            <textarea id="cad-conferir" rows={2} className="input resize-y py-2 text-[13px]" value={d.cadastro.conferir} onChange={(e) => mudar('conferir', e.target.value)} />
+          </div>
+        )}
+        {campo('razaoSocial', 'sm:col-span-4')}
+        {campo('inscricaoEstadual', 'sm:col-span-2')}
+        {campo('nomeFantasia', 'sm:col-span-4')}
+        {campo('codigoLocacao', 'sm:col-span-2')}
+        {campo('endereco', 'sm:col-span-4')}
+        {campo('numero', 'sm:col-span-2')}
+        {campo('complemento', 'sm:col-span-2')}
+        {campo('bairro', 'sm:col-span-2')}
+        {campo('cep', 'sm:col-span-2')}
+        {campo('cidade', 'sm:col-span-4')}
+        {campo('uf', 'sm:col-span-2')}
+        {campo('enderecoCobranca', 'sm:col-span-6')}
+        {campo('celular', 'sm:col-span-2')}
+        {campo('funcao', 'sm:col-span-2')}
+        {campo('atividade', 'sm:col-span-2')}
+        {campo('condPagamento', 'sm:col-span-6')}
+      </div>
+    </details>
   );
 }

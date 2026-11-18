@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { api } from './api';
+import { api, type ItemCompletarCadastro, type ResultadoCompletarCadastro } from './api';
 import type { EmailRecebido, Cliente, ClienteInput, ConfigEmail, Envio, FrotaOficina, ItemLote, Lote, Movimentacao, Proposta, Solicitacao, Usuario, AvisoOk } from './types';
 import { hojeIso } from './lib/calendario';
 import { encontrarCliente, statusDoItem } from './lib/pareamento';
@@ -52,6 +52,7 @@ type Estado = {
 
   salvarCliente(input: ClienteInput): Promise<Cliente>;
   importarClientes(inputs: ClienteInput[], progresso?: (feitos: number) => void): Promise<{ ok: number; falhas: string[] }>;
+  completarCadastros(itens: ItemCompletarCadastro[]): Promise<ResultadoCompletarCadastro>;
   definirAtivo(id: string, ativo: boolean): Promise<void>;
 
   envios: Envio[];
@@ -328,6 +329,13 @@ export function EstadoProvider({ children }: { children: ReactNode }) {
         setClientes(lista);
         reconciliarLote(lista);
         return salvo;
+      },
+      async completarCadastros(itens) {
+        const r = await api.completarCadastros(itens);
+        const lista = await api.listarClientes();
+        setClientes(lista);
+        reconciliarLote(lista);
+        return r;
       },
       async importarClientes(inputs, progresso) {
         let feitos = 0;

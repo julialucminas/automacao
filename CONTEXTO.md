@@ -345,3 +345,10 @@ A fatura é por cliente, mas a máquina que começou no cliente (`frota.inicio`)
 (envio ou lançada à mão — `SituacaoFatura.ultima`) fica "A faturar" com o aviso "chegou depois da fatura do cliente"
 (`situacaoDaLocacao` em lib/faturado.ts). Ex.: FT50 foi para a Esquipa dia 17 e a fatura da Esquipa saiu dia 5.
 "Lançar" a fatura dela (com data de hoje) resolve.
+
+## Dados cadastrais e "Completar cadastro (sistema de locação)" (18/nov)
+- Migração 34: `clientes.cadastro` (JSON) com razão social, fantasia, IE, endereço, cobrança, celular, função, atividade, cond. pagamento, código no sistema de locação e `conferir`.
+- Cadastro de clientes → botão "Completar cadastro (sistema de locação)": lê a planilha conferida (.xlsx, coluna "Nome no sistema"), casa por nome/apelido, mostra prévia e chama `POST /api/clientes/completar-cadastro`.
+- O servidor só preenche o que está vazio (CNPJ, contato e telefone inclusive); CNPJ diferente volta em `cnpjDiferente` e não é trocado. Para/Cc nunca são lidos nem alterados.
+- Etiqueta "Conferir cadastro" enquanto `cadastro.conferir` tiver texto (apagar no formulário depois de conferir). Pasta do cliente mostra os dados no topo; edição em "Dados cadastrais" no formulário.
+- Os dados dos clientes NÃO ficam no repositório: a planilha é enviada pela tela.

@@ -17,6 +17,13 @@ export type Frota = {
   modalidade?: '' | 'contrato' | 'esporadico';
 };
 
+export const CAMPOS_CADASTRO = [
+  'razaoSocial', 'nomeFantasia', 'inscricaoEstadual', 'endereco', 'numero', 'complemento', 'bairro', 'cidade', 'uf', 'cep',
+  'enderecoCobranca', 'celular', 'funcao', 'atividade', 'condPagamento', 'codigoLocacao', 'conferir',
+] as const;
+/** Dados cadastrais do cliente (boa parte vem do sistema de locação). Campo vazio = ausente. */
+export type CadastroCliente = Partial<Record<(typeof CAMPOS_CADASTRO)[number], string>>;
+
 export type Cliente = {
   id: string;
   /** 'dia' = todo mês no diaEmissao; 'periodo' = a cada periodoDias a partir de inicioLocacao */
@@ -31,6 +38,7 @@ export type Cliente = {
   prazoPagamento?: string;
   /** paga por outro meio (PIX, depósito…): a fatura vai sem boleto */
   semBoleto?: boolean;
+  cadastro?: CadastroCliente;
   /** Nome como aparece no arquivo da fatura (MAIÚSCULO). */
   nome: string;
   /** Outros nomes que podem aparecer nos arquivos. */

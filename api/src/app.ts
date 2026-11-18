@@ -1,6 +1,6 @@
 import Fastify, { type FastifyReply, type FastifyRequest } from 'fastify';
 import cookie from '@fastify/cookie';
-import { Conflito, NaoEncontrado, repositorio, type Banco, type ClienteInput, type Frota, type Usuario } from './db.js';
+import { CAMPOS_CADASTRO, Conflito, NaoEncontrado, repositorio, type CadastroCliente, type Banco, type ClienteInput, type Frota, type Usuario } from './db.js';
 import { CONFIG_PADRAO, Conflito2, operacoes, type NfArquivo, type NovaMov, type TipoMov } from './operacoes.js';
 import { monitorCaixa } from './monitor.js';
 import { agendarCopias, listarCopias } from './backup.js';
@@ -176,7 +176,20 @@ export function lerCliente(corpo: unknown, id?: string): ClienteInput {
     telefone: b.telefone === undefined ? undefined : texto(b.telefone, 'telefone', 40),
     prazoPagamento: b.prazoPagamento === undefined ? undefined : texto(b.prazoPagamento, 'prazo de pagamento', 100),
     semBoleto: b.semBoleto === undefined ? undefined : b.semBoleto === true,
+    cadastro: b.cadastro === undefined ? undefined : lerCadastro(b.cadastro),
   };
+}
+
+/** Dados cadastrais: só os campos conhecidos, texto curto. */
+export function lerCadastro(v: unknown): CadastroCliente {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) throw new Invalido('Dados cadastrais inválidos.');
+  const o = v as Record<string, unknown>;
+  const c: CadastroCliente = {};
+  for (const k of CAMPOS_CADASTRO) {
+    const t = texto(o[k], k, k === 'conferir' ? 600 : 250);
+    if (t) c[k] = t;
+  }
+  return c;
 }
 
 // ---------- limite de tentativas de login (por IP) ----------
@@ -309,6 +322,25 @@ export function criarApp(
   app.put<{ Params: { id: string } }>('/api/clientes/:id', { preHandler: exigir(2, 'clientes') }, async (req) =>
     repo.salvarCliente(lerCliente(req.body, req.params.id), req.usuario.id),
   );
+
+  // completar cadastro com a planilha do sistema de locação (a prévia é feita na tela; aqui só preenche o que está vazio)
+  app.post('/api/clientes/completar-cadastro', { preHandler: exigir(2, 'clientes') }, async (req) => {
+    const b = (req.body ?? {}) as Record<string, unknown>;
+    if (!Array.isArray(b.itens) || !b.itens.length || b.itens.length > 500) throw new Invalido('Nenhum cliente para completar.');
+    const itens = b.itens.map((x) => {
+      const o = (x ?? {}) as Record<string, unknown>;
+      const id = texto(o.id, 'id', 60);
+      if (!id) throw new Invalido('Cliente sem identificação.');
+      return {
+        id,
+        cadastro: lerCadastro(o.cadastro ?? {}),
+        cnpj: texto(o.cnpj, 'cnpj', 30),
+        contato: texto(o.contato, 'contato', 120),
+        telefone: texto(o.telefone, 'telefone', 40),
+      };
+    });
+    return repo.completarCadastros(itens, req.usuario.id);
+  });
 
   app.patch<{ Params: { id: string } }>('/api/clientes/:id', { preHandler: exigir(2, 'clientes') }, async (req) => {
     const b = (req.body ?? {}) as Record<string, unknown>;

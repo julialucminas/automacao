@@ -12,6 +12,7 @@ import type {
   ExecucaoOS,
   LocalOS,
   ResultadoRelatorio,
+  CadastroCliente,
   Cliente,
   ClienteInput,
   ConfigEmail,
@@ -71,6 +72,8 @@ export type EnvioPedido = {
   dataFaturamento?: string | null;
 };
 
+export type ItemCompletarCadastro = { id: string; cadastro: CadastroCliente; cnpj?: string; contato?: string; telefone?: string };
+export type ResultadoCompletarCadastro = { atualizados: number; cnpjDiferente: { id: string; nome: string; atual: string; planilha: string }[] };
 export type ResultadoTeste = { ok: boolean; para: string; copiaEmEnviados: boolean; detalhe: string };
 export type SituacaoEnvio = { configurado: boolean; conta: string | null; ultimaVerificacao?: string | null };
 
@@ -84,6 +87,8 @@ export interface Api {
   salvarCliente(input: ClienteInput): Promise<Cliente>;
   definirAtivo(id: string, ativo: boolean): Promise<void>;
   adicionarApelido(id: string, apelido: string): Promise<Cliente>;
+  /** Completa o cadastro (só o que está vazio; nunca mexe em e-mails). */
+  completarCadastros(itens: ItemCompletarCadastro[]): Promise<ResultadoCompletarCadastro>;
 
   listarFaturamentos(de: string, ate: string): Promise<Faturamento[]>;
   marcarFaturado(clienteId: string, data: string): Promise<void>;

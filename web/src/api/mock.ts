@@ -1,4 +1,5 @@
 import type { Api } from './index';
+import { completarCliente } from '../lib/cadastroLocacao';
 import type { Cliente, Conferencia, Envio, FrotaOficina, Faturamento, Solicitacao, Usuario } from '../types';
 import { REMETENTE } from '../lib/email';
 import { PERFIS_PADRAO } from '../lib/acesso';
@@ -235,6 +236,22 @@ export const mockApi: Api = {
     const b = carregar();
     salvar({ ...b, clientes: b.clientes.map((c) => (c.id === cid ? { ...c, ativo } : c)) });
   },
+  async completarCadastros(itens) {
+    const b = carregar();
+    let atualizados = 0;
+    const cnpjDiferente: { id: string; nome: string; atual: string; planilha: string }[] = [];
+    const clientes = b.clientes.map((c) => {
+      const it = itens.find((x) => x.id === c.id);
+      if (!it) return c;
+      const r = completarCliente(c, it);
+      if (r.cnpjDiferente) cnpjDiferente.push({ id: c.id, nome: c.nome, atual: c.cnpj, planilha: it.cnpj ?? '' });
+      if (r.mudou) atualizados++;
+      return r.mudou ? r.cliente : c;
+    });
+    salvar({ ...b, clientes });
+    return { atualizados, cnpjDiferente };
+  },
+
   async adicionarApelido(cid, apelido) {
     const b = carregar();
     const c = b.clientes.find((x) => x.id === cid);

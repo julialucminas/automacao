@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { CAMPOS_CADASTRO } from '../types';
+import { ROTULO_CADASTRO } from '../lib/cadastroLocacao';
 import { useEstado } from '../state';
 import { api } from '../api';
 import type { Cliente, ClienteInput, Proposta } from '../types';
@@ -39,7 +41,12 @@ const CAMPOS: Campo[] = [
 
 /** Só os campos que mudam, com antes e depois. */
 export function diferencas(atual: Cliente | null, nova: ClienteInput): { rotulo: string; antes: string; depois: string }[] {
-  return CAMPOS.map((c) => ({ rotulo: c.rotulo, antes: atual ? c.ler(atual) : '', depois: c.ler(nova) })).filter((d) => d.antes !== d.depois);
+  const base = CAMPOS.map((c) => ({ rotulo: c.rotulo, antes: atual ? c.ler(atual) : '', depois: c.ler(nova) }));
+  // dados cadastrais só contam quando a alteração os traz (importação de e-mails, por exemplo, não traz)
+  const cad = nova.cadastro
+    ? CAMPOS_CADASTRO.map((k) => ({ rotulo: ROTULO_CADASTRO[k], antes: atual?.cadastro?.[k] ?? '', depois: nova.cadastro?.[k] ?? '' }))
+    : [];
+  return [...base, ...cad].filter((d) => d.antes !== d.depois);
 }
 
 function Decisao({ aprovar, recusar }: { aprovar: () => Promise<void>; recusar: (motivo: string) => Promise<void> }) {

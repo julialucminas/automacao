@@ -11,15 +11,17 @@ import { PastaCliente } from '../components/PastaCliente';
 import { Chip } from '../components/ui';
 import { IcBusca, IcMais } from '../components/Icones';
 import { baixarModelo, exportarClientes, useImportacao } from '../components/ImportarClientes';
+import { useCadastroLocacao } from '../components/ImportarCadastroLocacao';
 import { apagarExemplos, temExemplos } from '../api/mock';
 import { MODO_DEMO } from '../api';
 
-type Etiqueta = 'sem_email' | 'sem_frota' | 'sem_data';
+type Etiqueta = 'sem_email' | 'sem_frota' | 'sem_data' | 'conferir';
 
 const ETIQUETAS: Record<Etiqueta, { rotulo: string; cor: string }> = {
   sem_email: { rotulo: 'Sem e-mail', cor: 'bg-bad-soft text-bad-strong' },
   sem_frota: { rotulo: 'Sem frota', cor: 'bg-warn-soft text-warn-strong' },
   sem_data: { rotulo: 'Sem data de fatura', cor: 'bg-info-soft text-info' },
+  conferir: { rotulo: 'Conferir cadastro', cor: 'bg-warn-soft text-warn-strong' },
 };
 
 /** Pendências do cadastro, calculadas na hora: somem sozinhas quando a informação é preenchida. */
@@ -28,6 +30,7 @@ export function etiquetasDe(c: Cliente): Etiqueta[] {
   if (!c.para.length) l.push('sem_email');
   if (!c.frotas.length) l.push('sem_frota');
   if (!regraDoCliente(c)) l.push('sem_data');
+  if (c.cadastro?.conferir) l.push('conferir');
   return l;
 }
 
@@ -43,6 +46,7 @@ export function Clientes() {
   const [etiqueta, setEtiqueta] = useState<Etiqueta | 'todos' | 'completos'>('todos');
   const [editando, setEditando] = useState<Rascunho | null>(null);
   const importacao = useImportacao();
+  const cadLocacao = useCadastroLocacao();
 
   const lista = useMemo(() => {
     const q = semAcento(busca).toUpperCase().trim();
@@ -56,6 +60,7 @@ export function Clientes() {
       return (
         chaveEmpresa(c.nome).includes(qk) ||
         c.apelidos.some((a) => chaveEmpresa(a).includes(qk)) ||
+        chaveEmpresa(c.cadastro?.razaoSocial ?? '').includes(qk) ||
         [...c.para, ...c.cc].some((e) => e.toUpperCase().includes(q)) ||
         c.cnpj.replace(/\D/g, '').includes(q.replace(/\D/g, '') || '§')
       );
@@ -97,6 +102,7 @@ export function Clientes() {
             />
           </label>
           {ehFinanceiro && importacao.botao}
+          {ehFinanceiro && cadLocacao.botao}
           {ehFinanceiro && (
             <button type="button" className="btn-primary" onClick={() => setEditando(rascunhoVazio())}>
               <IcMais /> Novo cliente
@@ -105,7 +111,9 @@ export function Clientes() {
         </div>
       </div>
 
-      {importacao.aberta ? (
+      {cadLocacao.aberta ? (
+        cadLocacao.previa
+      ) : importacao.aberta ? (
         importacao.previa
       ) : (
         <>
@@ -139,6 +147,7 @@ export function Clientes() {
                 ['sem_email', ETIQUETAS.sem_email.rotulo],
                 ['sem_frota', ETIQUETAS.sem_frota.rotulo],
                 ['sem_data', ETIQUETAS.sem_data.rotulo],
+                ['conferir', ETIQUETAS.conferir.rotulo],
                 ['completos', 'Completos'],
               ] as const
             ).map(([id, rotulo]) => {
@@ -193,6 +202,7 @@ export function Clientes() {
                       </div>
                       {c.apelidos.length > 0 && <div className="text-xs text-ink-3">Também aparece como: {c.apelidos.join(', ')}</div>}
                       {c.cnpj && <div className="font-mono text-xs text-ink-3">{c.cnpj}</div>}
+                      {c.cadastro?.cidade && <div className="text-xs text-ink-3">{[c.cadastro.cidade, c.cadastro.uf].filter(Boolean).join('/')}</div>}
                     </div>
                     <div className="flex min-w-0 flex-col gap-0.5 [overflow-wrap:anywhere] text-ink-2">
                       {c.para.map((e) => (

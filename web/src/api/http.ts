@@ -83,6 +83,7 @@ export const httpApi: Api = {
   definirAtivo: async (id, ativo) => {
     await chamar('PATCH', `/api/clientes/${id}`, { ativo });
   },
+  completarCadastros: (itens) => chamar('POST', '/api/clientes/completar-cadastro', { itens }),
   adicionarApelido: (id, apelido) => chamar('POST', `/api/clientes/${id}/apelidos`, { apelido }),
 
   listarFaturamentos: (de, ate) => chamar('GET', `/api/faturamentos?de=${de}&ate=${ate}`),

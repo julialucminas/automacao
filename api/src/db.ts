@@ -33,6 +33,8 @@ export type Cliente = {
   prazoPagamento: string;
   /** paga por outro meio (PIX, depósito…): a fatura vai sem boleto */
   semBoleto: boolean;
+  /** dados cadastrais (razão social, endereço, IE…), em boa parte vindos do sistema de locação */
+  cadastro: CadastroCliente;
   nome: string;
   apelidos: string[];
   cnpj: string;
@@ -44,8 +46,15 @@ export type Cliente = {
   atualizadoEm: string;
 };
 
+export const CAMPOS_CADASTRO = [
+  'razaoSocial', 'nomeFantasia', 'inscricaoEstadual', 'endereco', 'numero', 'complemento', 'bairro', 'cidade', 'uf', 'cep',
+  'enderecoCobranca', 'celular', 'funcao', 'atividade', 'condPagamento', 'codigoLocacao', 'conferir',
+] as const;
+export type CadastroCliente = Partial<Record<(typeof CAMPOS_CADASTRO)[number], string>>;
+
 /** diaEmissao/frotas ausentes = manter como está (ou vazio, se for cliente novo). */
-export type ClienteInput = Omit<Cliente, 'id' | 'ativo' | 'criadoEm' | 'atualizadoEm' | 'diaEmissao' | 'frotas' | 'regra' | 'inicioLocacao' | 'periodoDias' | 'contato' | 'telefone' | 'prazoPagamento' | 'semBoleto'> & {
+export type ClienteInput = Omit<Cliente, 'id' | 'ativo' | 'criadoEm' | 'atualizadoEm' | 'diaEmissao' | 'frotas' | 'regra' | 'inicioLocacao' | 'periodoDias' | 'contato' | 'telefone' | 'prazoPagamento' | 'semBoleto' | 'cadastro'> & {
+  cadastro?: CadastroCliente;
   id?: string;
   diaEmissao?: number | null;
   frotas?: Frota[];
@@ -555,6 +564,8 @@ const MIGRACOES = [
   // Configurações continua editando as duas; Operações (Júnior) passa a editar a da operação e o cadastro de clientes
   `UPDATE perfis SET permissoes = json_set(permissoes, '$.configOperacao', COALESCE(json_extract(permissoes, '$.configuracoes'), 0));
    UPDATE perfis SET permissoes = json_set(permissoes, '$.configOperacao', 2, '$.clientes', 2) WHERE id = 'operacoes';`,
+  // 34: dados cadastrais do cliente (razão social, IE, endereço, código no sistema de locação…), em JSON
+  `ALTER TABLE clientes ADD COLUMN cadastro TEXT NOT NULL DEFAULT '{}';`,
 ];
 
 export function abrirBanco(caminho: string) {
@@ -590,6 +601,7 @@ type LinhaCliente = {
   telefone: string;
   prazo_pagamento: string;
   sem_boleto: number;
+  cadastro: string | null;
   nome: string;
   apelidos: string;
   cnpj: string;
@@ -601,6 +613,17 @@ type LinhaCliente = {
   atualizado_em: string;
 };
 
+function lerCadastroJson(t: string | null): CadastroCliente {
+  try {
+    const o = JSON.parse(t || '{}') as Record<string, unknown>;
+    const c: CadastroCliente = {};
+    for (const k of CAMPOS_CADASTRO) if (typeof o[k] === 'string' && o[k]) c[k] = o[k] as string;
+    return c;
+  } catch {
+    return {};
+  }
+}
+
 const deLinhaCliente = (r: LinhaCliente): Cliente => ({
   id: r.id,
   regra: r.regra === 'periodo' ? 'periodo' : 'dia',
@@ -611,6 +634,7 @@ const deLinhaCliente = (r: LinhaCliente): Cliente => ({
   telefone: r.telefone ?? '',
   prazoPagamento: r.prazo_pagamento ?? '',
   semBoleto: !!r.sem_boleto,
+  cadastro: lerCadastroJson(r.cadastro),
   frotas: JSON.parse(r.frotas),
   nome: r.nome,
   apelidos: lista(r.apelidos),
@@ -740,7 +764,7 @@ export function repositorio(db: Banco) {
           const antes = buscarCliente(input.id);
           db.prepare(
             `UPDATE clientes SET nome = ?, apelidos = ?, cnpj = ?, para = ?, cc = ?, observacoes = ?, dia_emissao = ?, frotas = ?,
-               regra = ?, inicio_locacao = ?, periodo_dias = ?, contato = ?, telefone = ?, prazo_pagamento = ?, sem_boleto = ?, atualizado_em = ?, atualizado_por = ?
+               regra = ?, inicio_locacao = ?, periodo_dias = ?, contato = ?, telefone = ?, prazo_pagamento = ?, sem_boleto = ?, cadastro = ?, atualizado_em = ?, atualizado_por = ?
              WHERE id = ?`,
           ).run(
             input.nome,
@@ -758,6 +782,7 @@ export function repositorio(db: Banco) {
             input.telefone ?? antes.telefone,
             input.prazoPagamento ?? antes.prazoPagamento,
             (input.semBoleto ?? antes.semBoleto) ? 1 : 0,
+            json(input.cadastro ?? antes.cadastro),
             t,
             usuarioId,
             input.id,
@@ -769,8 +794,8 @@ export function repositorio(db: Banco) {
         const id = randomUUID();
         db.prepare(
           `INSERT INTO clientes (id, nome, apelidos, cnpj, para, cc, observacoes, dia_emissao, frotas, regra, inicio_locacao, periodo_dias,
-             contato, telefone, prazo_pagamento, sem_boleto, criado_em, atualizado_em, atualizado_por)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+             contato, telefone, prazo_pagamento, sem_boleto, cadastro, criado_em, atualizado_em, atualizado_por)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         ).run(
           id,
           input.nome,
@@ -788,6 +813,7 @@ export function repositorio(db: Banco) {
           input.telefone ?? '',
           input.prazoPagamento ?? '',
           input.semBoleto ? 1 : 0,
+          json(input.cadastro ?? {}),
           t,
           t,
           usuarioId,
@@ -796,6 +822,45 @@ export function repositorio(db: Banco) {
         registrar(id, usuarioId, acao ?? 'criou', null, criado);
         return criado;
       })();
+    },
+    /**
+     * Completa o cadastro com dados de outra fonte (planilha do sistema de locação).
+     * Só preenche o que está vazio: nunca troca um dado já cadastrado e nunca mexe em e-mails (para/cc).
+     * CNPJ já preenchido e diferente volta em `cnpjDiferente`, para a pessoa conferir.
+     */
+    completarCadastros(
+      itens: { id: string; cadastro: CadastroCliente; cnpj?: string; contato?: string; telefone?: string }[],
+      usuarioId: number,
+    ) {
+      const cnpjDiferente: { id: string; nome: string; atual: string; planilha: string }[] = [];
+      let atualizados = 0;
+      const so = (x: string) => x.replace(/\D/g, '');
+      db.transaction(() => {
+        for (const it of itens) {
+          const antes = buscarCliente(it.id);
+          const cad: CadastroCliente = { ...antes.cadastro };
+          for (const k of CAMPOS_CADASTRO) {
+            const v = (it.cadastro[k] ?? '').trim();
+            if (v && !cad[k]) cad[k] = v;
+          }
+          const cnpjNovo = (it.cnpj ?? '').trim();
+          let cnpj = antes.cnpj;
+          if (cnpjNovo) {
+            if (!antes.cnpj.trim()) cnpj = cnpjNovo;
+            else if (so(antes.cnpj) !== so(cnpjNovo)) cnpjDiferente.push({ id: it.id, nome: antes.nome, atual: antes.cnpj, planilha: cnpjNovo });
+          }
+          const contato = antes.contato.trim() ? antes.contato : (it.contato ?? '').trim();
+          const telefone = antes.telefone.trim() ? antes.telefone : (it.telefone ?? '').trim();
+          const mudou = json(cad) !== json(antes.cadastro) || cnpj !== antes.cnpj || contato !== antes.contato || telefone !== antes.telefone;
+          if (!mudou) continue;
+          db.prepare('UPDATE clientes SET cadastro = ?, cnpj = ?, contato = ?, telefone = ?, atualizado_em = ?, atualizado_por = ? WHERE id = ?').run(
+            json(cad), cnpj, contato, telefone, agora(), usuarioId, it.id,
+          );
+          registrar(it.id, usuarioId, 'completou o cadastro (sistema de locação)', antes, buscarCliente(it.id));
+          atualizados++;
+        }
+      })();
+      return { atualizados, cnpjDiferente };
     },
     definirAtivo(id: string, ativo: boolean, usuarioId: number) {
       buscarCliente(id);
