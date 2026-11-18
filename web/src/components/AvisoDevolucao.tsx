@@ -4,7 +4,7 @@ import { api } from '../api';
 import { useEstado } from '../state';
 import type { Equipamento } from '../types';
 import { dataBr, hojeIso } from '../lib/calendario';
-import { avisoDevolucao, ETIQUETAS_SUGERIDAS, juntarEtiquetas, lerEtiquetas } from '../lib/etiquetas';
+import { avisoDevolucao, ETIQUETAS_SUGERIDAS, juntarEtiquetas, lerEtiquetas, liberacaoFaturar } from '../lib/etiquetas';
 
 /** Selo "devolução avisada" (lista de locações, equipamentos). */
 export function SeloDevolucao({ ficha }: { ficha: Equipamento | null | undefined }) {
@@ -266,5 +266,108 @@ export function AdicionaisDaLocacao({ frota, ficha, salvo }: { frota: string; fi
         </>
       )}
     </section>
+  );
+}
+
+/** Selo "pode faturar" (lista de locações). */
+export function SeloPodeFaturar({ ficha }: { ficha: Equipamento | null | undefined }) {
+  const l = liberacaoFaturar(ficha);
+  if (!l) return null;
+  return (
+    <span
+      title={`Liberada para faturar${l.por ? ` por ${l.por}` : ''}${l.em ? ` em ${dataBr(l.em)}` : ''}${l.obs ? ` · ${l.obs}` : ''}`}
+      className="inline-flex items-center gap-1 whitespace-nowrap rounded-full bg-ok-soft px-2 py-0.5 font-sans text-[11px] font-bold text-ok"
+    >
+      ✓ pode faturar
+    </span>
+  );
+}
+
+/**
+ * "Pode faturar": Júnior, Júlia ou a Angelise liberam a locação para faturar.
+ * Some sozinho quando sai fatura do cliente (envio do mês ou lançada à mão), na devolução e na troca.
+ */
+export function PodeFaturar({ frota, ficha, salvo }: { frota: string; ficha: Equipamento | null | undefined; salvo: (e: Equipamento) => void }) {
+  const { pode, avisar } = useEstado();
+  const edita = pode('frotas', 2);
+  const lib = liberacaoFaturar(ficha);
+  const [editando, setEditando] = useState(false);
+  const [obs, setObs] = useState('');
+  const [salvando, setSalvando] = useState(false);
+
+  const salvar = async (dados: Partial<Equipamento>, msg: string) => {
+    setSalvando(true);
+    try {
+      salvo(await api.salvarEquipamento(frota, dados));
+      avisar(msg);
+      setEditando(false);
+    } catch (e) {
+      avisar(e instanceof Error ? e.message : 'Não foi possível salvar.', 'bad');
+    } finally {
+      setSalvando(false);
+    }
+  };
+  const liberar = () => void salvar({ podeFaturar: 'sim', podeFaturarEm: lib?.em ?? hojeIso(), podeFaturarObs: obs.trim() || null }, `FT${frota}: liberada para faturar.`);
+  const tirar = () => void salvar({ podeFaturar: null, podeFaturarEm: null, podeFaturarObs: null }, `FT${frota}: liberação retirada.`);
+
+  if (editando)
+    return (
+      <div className="flex flex-col gap-2.5 rounded-xl border border-line bg-[#F8F7F3] p-3.5">
+        <div className="text-[13.5px] font-bold">Liberar a FT{frota} para faturar</div>
+        <label className="flex flex-col gap-1 text-[12.5px] font-semibold text-ink-2">
+          Observação para a Angelise <span className="font-normal text-ink-3">(opcional)</span>
+          <textarea rows={2} className="input resize-y py-2 text-[13px] font-normal" value={obs} onChange={(e) => setObs(e.target.value)} placeholder="Ex.: medição aprovada; faturar proporcional desde 17/11" />
+        </label>
+        <div className="flex justify-end gap-2">
+          <button type="button" className="btn-secondary btn-sm" onClick={() => setEditando(false)}>
+            Cancelar
+          </button>
+          <button type="button" className="btn-primary btn-sm" disabled={salvando} onClick={liberar}>
+            {salvando ? 'Salvando…' : lib ? 'Salvar' : '✓ Pode faturar'}
+          </button>
+        </div>
+      </div>
+    );
+  if (lib)
+    return (
+      <div className="flex flex-col gap-2 rounded-xl border border-ok/30 bg-ok-soft px-3.5 py-3 text-[13.5px]">
+        <div className="font-bold text-ok">✓ Pode faturar</div>
+        <div className="text-ink-2">
+          Liberada{lib.por && <> por <b>{lib.por}</b></>}
+          {lib.em && <> em {dataBr(lib.em)}</>}
+          {lib.obs && <span className="block whitespace-pre-wrap">{lib.obs}</span>}
+        </div>
+        {edita && (
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              className="btn-secondary btn-sm"
+              onClick={() => {
+                setObs(lib.obs);
+                setEditando(true);
+              }}
+            >
+              Editar observação
+            </button>
+            <button type="button" className="btn-secondary btn-sm" disabled={salvando} onClick={tirar}>
+              Ainda não pode
+            </button>
+          </div>
+        )}
+        <p className="text-[11.5px] text-ink-3">Sai sozinho quando a fatura do cliente for enviada (ou lançada à mão).</p>
+      </div>
+    );
+  if (!edita) return null;
+  return (
+    <button
+      type="button"
+      className="btn-secondary btn-sm self-start"
+      onClick={() => {
+        setObs('');
+        setEditando(true);
+      }}
+    >
+      ✓ Pode faturar
+    </button>
   );
 }

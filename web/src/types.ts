@@ -347,6 +347,11 @@ export type DadosEquipamento = {
   devolucaoAvisadaEm?: string | null;
   devolucaoPrevista?: string | null;
   devolucaoObs?: string | null;
+  /** liberada para faturar ('sim'), desde quando, quem liberou (o servidor preenche) e observação; sai quando sai fatura do cliente */
+  podeFaturar?: string | null;
+  podeFaturarEm?: string | null;
+  podeFaturarPor?: string | null;
+  podeFaturarObs?: string | null;
   /** etiquetas livres, separadas por vírgula */
   etiquetas?: string | null;
   situacao?: string | null;

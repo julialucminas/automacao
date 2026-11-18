@@ -349,3 +349,31 @@ describe('completar cadastro (sistema de locação)', () => {
     expect((await como('tecnico')('POST', '/api/clientes/completar-cadastro', { itens: [{ id: a.id, cadastro: {} }] })).statusCode).toBe(403);
   });
 });
+
+describe('pode faturar', () => {
+  it('quem libera fica registrado e a liberação sai quando sai fatura do cliente', async () => {
+    const a = como('angelise');
+    const j = como('junior');
+    const c = (await a('POST', '/api/clientes', { nome: 'ESQUIPA', para: ['a@e.com.br'], cc: [], apelidos: [], cnpj: '', observacoes: '' })).json();
+    await a('POST', '/api/movimentacoes', { tipo: 'locacao', frota: '61', clienteId: c.id, data: '2026-10-01', valor: 300000, modalidade: 'contrato' });
+    await a('POST', '/api/movimentacoes', { tipo: 'locacao', frota: '62', clienteId: c.id, data: '2026-11-17', valor: 350000, modalidade: 'contrato' });
+    const put = (frota: string, dados: object, quem = 'junior') => app.inject({ method: 'PUT', url: `/api/equipamentos/${frota}`, payload: { dados }, headers: { cookie: cookies[quem] } });
+    const r = await put('61', { podeFaturar: 'sim', podeFaturarEm: '2026-11-18', podeFaturarObs: 'medição ok', podeFaturarPor: 'outra pessoa' });
+    expect(r.json()).toMatchObject({ podeFaturar: 'sim', podeFaturarPor: 'Júnior', podeFaturarObs: 'medição ok' });
+    await put('62', { podeFaturar: 'sim', podeFaturarEm: '2026-11-25' }, 'angelise');
+    // fatura do dia 20: a liberação do dia 18 foi usada; a do dia 25 continua
+    expect((await a('POST', '/api/faturamentos', { clienteId: c.id, data: '2026-11-20' })).statusCode).toBeLessThan(300);
+    const fichas = (await a('GET', '/api/equipamentos')).json() as Array<Record<string, unknown>>;
+    const f61 = fichas.find((e) => e.frota === '61')!;
+    const f62 = fichas.find((e) => e.frota === '62')!;
+    expect(f61.podeFaturar ?? null).toBeNull();
+    expect(f61.podeFaturarPor ?? null).toBeNull();
+    expect(f62).toMatchObject({ podeFaturar: 'sim', podeFaturarPor: 'Angelise' });
+    // desmarcar limpa quem liberou
+    expect((await put('62', { podeFaturar: null, podeFaturarEm: null, podeFaturarObs: null })).json().podeFaturarPor ?? null).toBeNull();
+    // devolução também tira
+    await put('61', { podeFaturar: 'sim', podeFaturarEm: '2026-11-21' });
+    await a('POST', '/api/movimentacoes', { tipo: 'devolucao', frota: '61', data: '2026-11-22' });
+    expect(((await a('GET', '/api/equipamentos')).json() as Array<Record<string, unknown>>).find((e) => e.frota === '61')!.podeFaturar ?? null).toBeNull();
+  });
+});

@@ -190,6 +190,8 @@ export function servicoEnvio(db: Banco, repo: Repositorio, pastaDados: string, c
         gravar(e, p.corpo, usuarioId);
         repo.registrarLog(p.cliente.id, usuarioId, r.ok ? `enviou a fatura ${p.numero} para ${[...e.para, ...e.cc].join(', ')}` : `tentou enviar a fatura ${p.numero} (falhou)`, null, null, 'cliente');
         if (r.ok && p.dataFaturamento) repo.marcarFaturado(p.cliente.id, p.dataFaturamento, usuarioId, 'envio');
+        // fatura saiu: o que estava liberado para faturar até hoje já foi
+        if (r.ok) repo.baixarLiberacoesFaturar(p.cliente.id, new Date(Date.now() - 3 * 3_600_000).toISOString().slice(0, 10));
       })();
       // os PDFs ficam guardados no servidor (prova do que foi enviado e permite reenviar)
       try {

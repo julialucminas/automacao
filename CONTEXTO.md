@@ -352,3 +352,9 @@ A fatura é por cliente, mas a máquina que começou no cliente (`frota.inicio`)
 - O servidor só preenche o que está vazio (CNPJ, contato e telefone inclusive); CNPJ diferente volta em `cnpjDiferente` e não é trocado. Para/Cc nunca são lidos nem alterados.
 - Etiqueta "Conferir cadastro" enquanto `cadastro.conferir` tiver texto (apagar no formulário depois de conferir). Pasta do cliente mostra os dados no topo; edição em "Dados cadastrais" no formulário.
 - Os dados dos clientes NÃO ficam no repositório: a planilha é enviada pela tela.
+
+## "Pode faturar" (18/nov)
+- Ficha da máquina: `podeFaturar` ('sim'), `podeFaturarEm`, `podeFaturarPor` (o servidor grava o nome de quem está logado), `podeFaturarObs`.
+- Marca em Relação das locações (gaveta da máquina): Júnior, Júlia ou Angelise (quem edita frotas). Selo verde na lista + filtro "✓ Pode faturar" (`/frotas?f=podeFaturar`).
+- Central do financeiro: quadro "Liberadas para faturar".
+- Sai sozinho: `baixarLiberacoesFaturar` roda em `marcarFaturado` (calendário, fatura lançada à mão, envio com data) e em todo envio que saiu (data de hoje); só baixa liberações com data até a da fatura. Devolução, venda e troca também limpam.

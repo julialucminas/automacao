@@ -13,6 +13,7 @@ import { contratosVencendo, STATUS_MOV, TOM_TIPO } from './Movimentacoes';
 import { Chip, type Tom } from '../components/ui';
 import { BotaoOk } from '../components/BotaoOk';
 import { CaixaEntrada } from '../components/CaixaEntrada';
+import { liberacaoFaturar } from '../lib/etiquetas';
 import { chaveContrato, chaveEnvio, emailsComProblema, urgenciasEmAberto } from '../lib/avisos';
 import { IcAlerta, IcCheck, IcDinheiro, IcEmail, IcEmpilhadeira, IcEnviar, IcNota, IcPredio, IcPrancheta } from '../components/Icones';
 
@@ -275,6 +276,7 @@ export function CentralFinanceiro() {
         />
       </section>
 
+      <LiberadasParaFaturar eqs={eqs} clientes={ativos} veValores={veValores} />
       {(pode('envio') || pode('historico')) && <CaixaEntrada />}
       {cuidaDoFaturamento(usuario?.perfil) && <FaturamentoDoMes clientes={ativos} envios={envios} marcados={marcados} mes={ref} veValores={veValores} hoje={hoje} />}
 
@@ -418,6 +420,48 @@ function Indicador({ valor, rotulo, sub, link, tom = 'ink' }: { valor: string; r
       <span className="text-[13px] text-ink-2">{rotulo}</span>
       {sub && <span className="text-xs text-ink-3">{sub}</span>}
     </Link>
+  );
+}
+
+/** Máquinas que o Júnior, a Júlia ou a própria Angelise liberaram para faturar. Somem quando sai a fatura do cliente. */
+function LiberadasParaFaturar({ eqs, clientes, veValores }: { eqs: Equipamento[]; clientes: ReturnType<typeof useEstado>['clientes']; veValores: boolean }) {
+  const lista = clientes
+    .flatMap((c) => c.frotas.map((f) => ({ c, f, lib: liberacaoFaturar(eqs.find((e) => e.frota === f.numero)) })))
+    .filter((x) => x.lib)
+    .sort((a, b) => a.c.nome.localeCompare(b.c.nome) || (a.lib!.em ?? '').localeCompare(b.lib!.em ?? ''));
+  if (!lista.length) return null;
+  return (
+    <section aria-label="Liberadas para faturar" className="rounded-xl border-2 border-ok/40 bg-white">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-5 py-3">
+        <h2 className="flex items-center gap-2 text-[15px] font-bold">
+          <span aria-hidden>✓</span> Liberadas para faturar
+          <span className="rounded-full bg-ok px-2.5 text-[13px] text-white">{lista.length}</span>
+        </h2>
+        <div className="flex flex-wrap gap-2">
+          <Link to="/frotas?f=podeFaturar" className="btn-secondary btn-sm">
+            Ver na relação
+          </Link>
+          <Link to="/envio" className="btn-primary btn-sm">
+            Ir para o envio
+          </Link>
+        </div>
+      </div>
+      <ul>
+        {lista.map(({ c, f, lib }) => (
+          <li key={`${c.id}|${f.numero}`} className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 border-b border-line-soft px-5 py-2.5 text-[13.5px] last:border-0">
+            <b>{c.nome}</b>
+            <span className="font-mono font-semibold">FT{f.numero}</span>
+            {veValores && f.valor > 0 && <span className="text-ink-2">{formatarReais(f.valor)}</span>}
+            <span className="text-xs text-ink-3">
+              liberada{lib!.por ? ` por ${lib!.por}` : ''}
+              {lib!.em ? ` em ${dataBr(lib!.em)}` : ''}
+            </span>
+            {lib!.obs && <span className="basis-full whitespace-pre-wrap text-[12.5px] text-ink-2">{lib!.obs}</span>}
+          </li>
+        ))}
+      </ul>
+      <p className="border-t border-line-soft px-5 py-2 text-[11.5px] text-ink-3">Sai daqui sozinho quando a fatura do cliente é enviada ou lançada à mão.</p>
+    </section>
   );
 }
 

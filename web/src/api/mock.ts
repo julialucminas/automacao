@@ -288,6 +288,7 @@ export const mockApi: Api = {
   async salvarEquipamento(frota, dados) {
     const atual = EQUIP_DEMO.get(frota) ?? { frota, atualizadoEm: '', atualizadoPor: '' };
     const novo = { ...atual, ...dados, atualizadoEm: new Date().toISOString(), atualizadoPor: 'Demonstração' };
+    if ('podeFaturar' in dados) novo.podeFaturarPor = dados.podeFaturar === 'sim' ? 'Demonstração' : null;
     EQUIP_DEMO.set(frota, novo);
     return novo;
   },

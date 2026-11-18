@@ -16,3 +16,10 @@ export function avisoDevolucao(f: Equipamento | null | undefined): AvisoDevoluca
   if (!f || f.devolucaoAvisada !== 'sim') return null;
   return { avisadaEm: f.devolucaoAvisadaEm ?? null, prevista: f.devolucaoPrevista ?? null, obs: f.devolucaoObs ?? '' };
 }
+
+export type LiberacaoFaturar = { em: string | null; por: string; obs: string };
+/** A máquina foi liberada para faturar? (sai sozinha quando sai fatura do cliente, na devolução e na troca) */
+export function liberacaoFaturar(f: Equipamento | null | undefined): LiberacaoFaturar | null {
+  if (!f || f.podeFaturar !== 'sim') return null;
+  return { em: f.podeFaturarEm ?? null, por: f.podeFaturarPor ?? '', obs: f.podeFaturarObs ?? '' };
+}

@@ -6,8 +6,8 @@ import type { Cliente, Equipamento, Faturamento, Frota } from '../types';
 import { cuidaDoFaturamento, LancarFatura } from '../components/LancarFatura';
 import { ROTULO_FATURA, resumirFaturas, situacaoDaLocacao, situacaoFaturas, type EstadoFatura, type SituacaoFatura } from '../lib/faturado';
 import { BalaoUrgente, SeloHelbert } from '../components/Balao';
-import { AdicionaisDaLocacao, AvisoEEtiquetas, ChipAdicionais, ChipsEtiquetas, SeloDevolucao } from '../components/AvisoDevolucao';
-import { avisoDevolucao, etiquetasEmUso } from '../lib/etiquetas';
+import { AdicionaisDaLocacao, AvisoEEtiquetas, ChipAdicionais, ChipsEtiquetas, PodeFaturar, SeloDevolucao, SeloPodeFaturar } from '../components/AvisoDevolucao';
+import { avisoDevolucao, etiquetasEmUso, liberacaoFaturar } from '../lib/etiquetas';
 import { BotaoOk } from '../components/BotaoOk';
 import { urgenciasEmAberto, type Urgencia } from '../lib/avisos';
 import { formatarReais, lerReais, reaisParaCampo } from '../lib/dinheiro';
@@ -25,7 +25,7 @@ import { gerarPdfLocacoes, montarRelatorio, type ModeloRelatorio } from '../lib/
 type Linha = { frota: Frota; cliente: Cliente; proxima: string | null; duplicada: boolean };
 type Ordem = 'frota' | 'cliente' | 'valor' | 'proxima' | 'fim';
 type Visao = 'frotas' | 'clientes';
-type Filtro = 'todas' | 'contrato' | 'esporadico' | 'semEtiqueta' | 'oficina' | 'terminando' | 'devolucao';
+type Filtro = 'todas' | 'contrato' | 'esporadico' | 'semEtiqueta' | 'oficina' | 'terminando' | 'devolucao' | 'podeFaturar';
 type FiltroFat = 'todas' | EstadoFatura;
 
 /** Ordena "F-2" antes de "F-10" (números dentro do texto comparados como números). */
@@ -64,7 +64,7 @@ export function Frotas() {
   useBuscaDaUrl(setBusca);
   const [ordem, setOrdem] = useState<Ordem>('frota');
   const [visao, setVisao] = useState<Visao>('frotas');
-  const [filtro, setFiltro] = useState<Filtro>('todas');
+  const [filtro, setFiltro] = useState<Filtro>(() => (new URLSearchParams(window.location.hash.split('?')[1] ?? '').get('f') === 'podeFaturar' ? 'podeFaturar' : 'todas'));
   const [mostrarInativos, setMostrarInativos] = useState(false);
   const [editando, setEditando] = useState<Rascunho | null>(null);
   /** detalhe aberto: frota (com ou sem cliente) */
@@ -86,7 +86,7 @@ export function Frotas() {
     return f === 'pendente' || f === 'faturado' || f === 'devolvido' ? f : 'todas';
   });
   useEffect(() => {
-    if (urlParams.has('fat')) setUrlParams({}, { replace: true });
+    if (urlParams.has('fat') || urlParams.has('f')) setUrlParams({}, { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- só ao abrir
   }, []);
   const [faturamentos, setFaturamentos] = useState<Faturamento[]>([]);
@@ -120,7 +120,8 @@ export function Frotas() {
     (f === 'semEtiqueta' && !l.frota.modalidade) ||
     (f === 'oficina' && naOficina.has(l.frota.numero)) ||
     (f === 'terminando' && terminando(l.frota)) ||
-    (f === 'devolucao' && !!avisoDevolucao(fichas.get(l.frota.numero)));
+    (f === 'devolucao' && !!avisoDevolucao(fichas.get(l.frota.numero))) ||
+    (f === 'podeFaturar' && !!liberacaoFaturar(fichas.get(l.frota.numero)));
   const passaFiltro = (l: Linha) => combina(filtro, l) && (!veFaturas || filtroFat === 'todas' || estadoDe(l) === filtroFat);
   const filtradas = linhas
     .filter((l) => !q || chaveEmpresa(l.frota.numero).includes(q) || chaveEmpresa(l.cliente.nome).includes(q) || chaveEmpresa(l.frota.descricao).includes(q))
@@ -286,6 +287,7 @@ export function Frotas() {
               ['contrato', 'Contrato'],
               ['esporadico', 'Esporádico'],
               ['terminando', 'Terminando (30 dias)'],
+              ['podeFaturar', '✓ Pode faturar'],
               ['devolucao', '↩ Devolução avisada'],
               ['oficina', 'Na oficina'],
               ['semEtiqueta', 'Sem etiqueta'],
@@ -411,6 +413,7 @@ export function Frotas() {
                         {f.numero}
                         <SeloModalidade m={f.modalidade} />
                         <SeloHelbert ativo={helbert.has(f.numero) ? 'sim' : ''} />
+                        <SeloPodeFaturar ficha={fichas.get(f.numero)} />
                         <SeloDevolucao ficha={fichas.get(f.numero)} />
                         <ChipsEtiquetas ficha={fichas.get(f.numero)} />
                         <ChipAdicionais ficha={fichas.get(f.numero)} />
@@ -490,6 +493,7 @@ export function Frotas() {
                       <b className="font-mono">{l.frota.numero}</b>
                       <SeloModalidade m={l.frota.modalidade} />
                       <SeloHelbert ativo={helbert.has(l.frota.numero) ? 'sim' : ''} />
+                      <SeloPodeFaturar ficha={fichas.get(l.frota.numero)} />
                       <SeloDevolucao ficha={fichas.get(l.frota.numero)} />
                       {urgentes.get(l.frota.numero)?.map((u) => <BalaoUrgente key={u.chave} texto={u.texto} />)}
                       {naOficina.has(l.frota.numero) && <SeloOficina />}
@@ -612,6 +616,7 @@ function DetalheLocacao({
           <SeloHelbert ativo={ehHelbert ? 'sim' : ''} />
           {oficina && <SeloOficina />}
         </div>
+        {c && <PodeFaturar frota={frota} ficha={ficha} salvo={fichaSalva} />}
         {c && <AdicionaisDaLocacao frota={frota} ficha={ficha} salvo={fichaSalva} />}
         {c && <AvisoEEtiquetas frota={frota} ficha={ficha} emUso={emUso} salvo={fichaSalva} />}
         {urgentes.map((u) => (

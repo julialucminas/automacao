@@ -1510,6 +1510,9 @@ export function criarApp(
     const frota = lerFrotaParam(req.params.frota);
     const dados = lerDados((req.body as Record<string, unknown> | undefined)?.dados);
     if (!req.acesso.veValores) for (const k of CAMPOS_VALOR) delete dados[k];
+    // "pode faturar": quem liberou é quem está logado (não vem da tela)
+    if (dados.podeFaturar === 'sim') dados.podeFaturarPor = req.usuario.nome;
+    else if ('podeFaturar' in dados) dados.podeFaturarPor = null;
     const r = equip.salvar(frota, dados, req.usuario.id);
     if (r.mudou.length) repo.registrarLog('', req.usuario.id, `${r.novo ? 'criou' : 'editou'} a ficha da FT${frota}: ${r.mudou.join(', ')}`, null, null, 'equipamento');
     return semValoresEquip(req, r.equipamento);

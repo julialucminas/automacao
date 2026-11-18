@@ -662,6 +662,22 @@ export function repositorio(db: Banco) {
     return deLinhaCliente(r);
   };
 
+  /**
+   * Saiu fatura do cliente em `data`: as máquinas dele marcadas "pode faturar" até essa data deixam de estar marcadas.
+   * (Liberação feita depois da fatura continua valendo para a próxima.)
+   */
+  const baixarLiberacoesFaturar = (clienteId: string, data: string) => {
+    const r = db
+      .prepare(
+        `UPDATE equipamentos SET dados = json_remove(dados, '$.podeFaturar', '$.podeFaturarEm', '$.podeFaturarPor', '$.podeFaturarObs')
+         WHERE json_extract(dados, '$.podeFaturar') = 'sim'
+           AND COALESCE(json_extract(dados, '$.podeFaturarEm'), '') <= ?
+           AND frota IN (SELECT json_extract(f.value, '$.numero') FROM clientes c, json_each(c.frotas) f WHERE c.id = ?)`,
+      )
+      .run(data.slice(0, 10), clienteId);
+    return r.changes;
+  };
+
   return {
     // ---------- usuários e sessões ----------
     registrarLog: registrar,
@@ -893,8 +909,10 @@ export function repositorio(db: Banco) {
           .all(de, ate) as { cliente_id: string; data: string; marcado_em: string; origem: string; nome: string }[]
       ).map((r) => ({ clienteId: r.cliente_id, data: r.data, marcadoEm: r.marcado_em, marcadoPor: r.nome, origem: r.origem === 'envio' ? 'envio' : 'manual' }));
     },
+    baixarLiberacoesFaturar,
     marcarFaturado(clienteId: string, data: string, usuarioId: number, origem: 'manual' | 'envio' = 'manual') {
       buscarCliente(clienteId);
+      baixarLiberacoesFaturar(clienteId, data);
       db.prepare(
         `INSERT INTO faturamentos (cliente_id, data, marcado_em, usuario_id, origem) VALUES (?, ?, ?, ?, ?)
          ON CONFLICT (cliente_id, data) DO NOTHING`,

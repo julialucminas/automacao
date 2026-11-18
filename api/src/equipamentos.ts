@@ -71,6 +71,11 @@ export const CAMPOS_EQUIPAMENTO = {
   devolucaoAvisadaEm: 'data',
   devolucaoPrevista: 'data',
   devolucaoObs: 'texto',
+  /** liberada para faturar: 'sim' ou vazio, desde quando, quem liberou e observação. Sai sozinha quando sai fatura do cliente. */
+  podeFaturar: 'texto',
+  podeFaturarEm: 'data',
+  podeFaturarPor: 'texto',
+  podeFaturarObs: 'texto',
   /** etiquetas livres da máquina, separadas por vírgula (ex.: "Negociando, Pagamento atrasado") */
   etiquetas: 'texto',
   observacoes: 'texto',
