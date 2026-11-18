@@ -355,6 +355,21 @@ export function criarApp(
     return repo.adicionarApelido(req.params.id, apelido, req.usuario.id);
   });
 
+  // ---------- relação de faturamento: correções do valor a cobrar ----------
+  const lerMes = (v: unknown) => {
+    if (typeof v !== 'string' || !/^\d{4}-(0[1-9]|1[0-2])$/.test(v)) throw new Invalido('Mês inválido.');
+    return v;
+  };
+  app.get<{ Querystring: { mes?: string } }>('/api/faturamento-ajustes', { preHandler: exigir(1, 'envio') }, async (req) => repo.listarAjustesFaturamento(lerMes(req.query.mes)));
+  app.put('/api/faturamento-ajustes', { preHandler: exigir(2, 'envio') }, async (req) => {
+    const b = (req.body ?? {}) as Record<string, unknown>;
+    const chave = texto(b.chave, 'chave', 200);
+    if (!chave) throw new Invalido('Linha não informada.');
+    const valor = b.valor === null || b.valor === undefined ? null : Number(b.valor);
+    if (valor !== null && (!Number.isInteger(valor) || valor < 0 || valor > 100_000_000)) throw new Invalido('Valor inválido.');
+    return { ajuste: repo.salvarAjusteFaturamento(lerMes(b.mes), chave, valor, texto(b.obs, 'obs', 500), req.usuario.id) };
+  });
+
   // ---------- faturamentos (calendário) ----------
   app.get<{ Querystring: { de?: string; ate?: string } }>('/api/faturamentos', { preHandler: exigirLogin }, async (req) => {
     const de = lerDataIso(req.query.de, 'Data inicial');

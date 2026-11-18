@@ -11,6 +11,7 @@ import { ABAS, GRUPOS, type Aba, type Grupo } from '../lib/acesso';
 import { IcCasa, IcDinheiro, IcEmpilhadeira, IcEscudo, IcFechar, IcMenu, IcPrancheta, IcPredio, IcSair, IcSeta } from './Icones';
 import { MODO_DEMO } from '../api';
 import { TrocarSenha } from './TrocarSenha';
+import { cuidaDoFaturamento } from './LancarFatura';
 import { BuscaGeral } from './BuscaGeral';
 import { useVersaoNova } from '../lib/versao';
 
@@ -76,6 +77,8 @@ export function useMenu(): ItemMenu[] {
     if (a.id === 'frotas') itens.push({ aba: 'frotas', rotulo: 'Equipamentos', rota: '/equipamentos', grupo: 'frota', badge: 0, alerta: false });
     itens.push({ aba: a.id, rotulo: a.id === 'calendario' && !pode('envio') ? 'Calendário de locações' : a.rotulo, rota: a.rota, grupo: a.grupo, badge: n, alerta });
     // os formulários das OS: quem abre e encerra OS monta os modelos
+    // relação de faturamento (o que cobrar no mês, inclusive o que já voltou), logo depois do Envio do mês
+    if (a.id === 'envio' && cuidaDoFaturamento(usuario?.perfil)) itens.push({ aba: 'envio', rotulo: 'Faturamento do mês', rota: '/faturamento', grupo: a.grupo, badge: 0, alerta: false });
     if (a.id === 'ordens' && pode('ordens', 2) && pode('manutencao', 2)) itens.push({ aba: 'ordens', rotulo: 'Modelos de OS', rota: '/modelos-os', grupo: a.grupo, badge: 0, alerta: false });
   }
   // "Histórico de avisos" fica logo depois do Histórico de envios (para quem vê os dois)

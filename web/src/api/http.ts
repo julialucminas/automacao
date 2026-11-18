@@ -87,6 +87,8 @@ export const httpApi: Api = {
   adicionarApelido: (id, apelido) => chamar('POST', `/api/clientes/${id}/apelidos`, { apelido }),
 
   listarFaturamentos: (de, ate) => chamar('GET', `/api/faturamentos?de=${de}&ate=${ate}`),
+  listarAjustesFaturamento: (mes) => chamar('GET', `/api/faturamento-ajustes?mes=${mes}`),
+  salvarAjusteFaturamento: (mes, chave, valor, obs) => chamar('PUT', '/api/faturamento-ajustes', { mes, chave, valor, obs }),
   marcarFaturado: async (clienteId, data) => {
     await chamar('POST', '/api/faturamentos', { clienteId, data });
   },

@@ -1,4 +1,6 @@
 import { HashRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { Faturamento } from './pages/Faturamento';
+import { cuidaDoFaturamento } from './components/LancarFatura';
 import { EstadoProvider, useEstado } from './state';
 import { Layout } from './components/Layout';
 import { Login } from './pages/Login';
@@ -57,6 +59,8 @@ function RotasLogado() {
   const menu = useMenu();
   const central = usaCentralFinanceiro(pode, aprova);
   // quem só consulta (o dono) abre direto no app do celular
+  // relação de faturamento: quem cuida do faturamento (você e o financeiro) e envia faturas
+  const faturamento = cuidaDoFaturamento(usuario?.perfil) && pode('envio', 2);
   const soConsulta = !(['envio', 'manutencao', 'movimentacoes', 'clientes', 'frotas', 'conferencia', 'usuarios'] as const).some((a) => pode(a, 2));
   // técnico de campo (faz OS, não cuida do painel) abre direto nas OS dele
   const tecnico = pode('ordens', 2) && !pode('manutencao', 2);
@@ -72,6 +76,7 @@ function RotasLogado() {
         {/* aprovações (quem aprova) ou "Minhas alterações" (quem propõe) */}
         <Route path="/aprovacoes" element={<Aprovacoes />} />
         {central && <Route path="/financeiro" element={<CentralFinanceiro />} />}
+        {faturamento && <Route path="/faturamento" element={<Faturamento />} />}
         <Route path="*" element={menu.length ? <Navigate to={primeira} replace /> : <SemAcesso />} />
       </Route>
     </Routes>

@@ -1,6 +1,6 @@
 import type { Api } from './index';
 import { completarCliente } from '../lib/cadastroLocacao';
-import type { Cliente, Conferencia, Envio, FrotaOficina, Faturamento, Solicitacao, Usuario } from '../types';
+import type { AjusteFaturamento, Cliente, Conferencia, Envio, FrotaOficina, Faturamento, Solicitacao, Usuario } from '../types';
 import { REMETENTE } from '../lib/email';
 import { PERFIS_PADRAO } from '../lib/acesso';
 import type { AvisoOk, Equipamento, ModeloOS, ServicoExterno, Ordem, PecaHistorico, Pendencia, PerfilAcesso, UsuarioAdmin } from '../types';
@@ -153,6 +153,7 @@ let MODELOS_DEMO: ModeloOS[] = [
   },
 ];
 let OS_DEMO: Ordem[] = [];
+const AJUSTES_DEMO = new Map<string, AjusteFaturamento>();
 const CHECK_DEMO = ['Garfos e correntes', 'Freio de serviço', 'Freio de estacionamento', 'Buzina', 'Luzes e giroflex', 'Alarme de ré', 'Vazamentos (óleo, água, gás)', 'Pneus'];
 const mudarOS = (oid: string, m: (o: Ordem) => Ordem) => {
   OS_DEMO = OS_DEMO.map((o) => (o.id === oid ? { ...m(o), atualizadaEm: new Date().toISOString() } : o));
@@ -261,6 +262,19 @@ export const mockApi: Api = {
     return novo;
   },
 
+  async listarAjustesFaturamento(mes) {
+    return [...AJUSTES_DEMO.values()].filter((a) => a.mes === mes);
+  },
+  async salvarAjusteFaturamento(mes, chave, valor, obs) {
+    const k = `${mes}|${chave}`;
+    if (valor === null && !obs) {
+      AJUSTES_DEMO.delete(k);
+      return { ajuste: null };
+    }
+    const ajuste = { mes, chave, valor, obs, atualizadoEm: new Date().toISOString(), atualizadoPor: 'Demonstração' };
+    AJUSTES_DEMO.set(k, ajuste);
+    return { ajuste };
+  },
   async listarFaturamentos(de, ate) {
     await espera(80);
     return (carregar().faturamentos ?? []).filter((f) => f.data >= de && f.data <= ate);

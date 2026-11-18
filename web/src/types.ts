@@ -69,6 +69,8 @@ export type ClienteInput = Omit<Cliente, 'id' | 'atualizadoEm' | 'ativo' | 'diaE
 };
 
 /** Faturamento marcado no calendário (cliente + data prevista). */
+/** Correção no valor sugerido de uma linha da relação de faturamento (centavos; null = vale a sugestão). */
+export type AjusteFaturamento = { mes: string; chave: string; valor: number | null; obs: string; atualizadoEm: string; atualizadoPor: string };
 export type Faturamento = { clienteId: string; data: string; marcadoEm: string; marcadoPor: string; origem: 'manual' | 'envio' };
 
 /** Um arquivo lido da pasta ou do zip. */

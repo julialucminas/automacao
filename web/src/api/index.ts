@@ -19,6 +19,7 @@ import type {
   Conferencia,
   FrotaOficina,
   Envio,
+  AjusteFaturamento,
   Faturamento,
   ItemLog,
   FotoMensal,
@@ -91,6 +92,9 @@ export interface Api {
   completarCadastros(itens: ItemCompletarCadastro[]): Promise<ResultadoCompletarCadastro>;
 
   listarFaturamentos(de: string, ate: string): Promise<Faturamento[]>;
+  /** correções do valor a cobrar na relação de faturamento */
+  listarAjustesFaturamento(mes: string): Promise<AjusteFaturamento[]>;
+  salvarAjusteFaturamento(mes: string, chave: string, valor: number | null, obs: string): Promise<{ ajuste: AjusteFaturamento | null }>;
   marcarFaturado(clienteId: string, data: string): Promise<void>;
   desmarcarFaturado(clienteId: string, data: string): Promise<void>;
 

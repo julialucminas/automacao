@@ -358,3 +358,10 @@ A fatura é por cliente, mas a máquina que começou no cliente (`frota.inicio`)
 - Marca em Relação das locações (gaveta da máquina): Júnior, Júlia ou Angelise (quem edita frotas). Selo verde na lista + filtro "✓ Pode faturar" (`/frotas?f=podeFaturar`).
 - Central do financeiro: quadro "Liberadas para faturar".
 - Sai sozinho: `baixarLiberacoesFaturar` roda em `marcarFaturado` (calendário, fatura lançada à mão, envio com data) e em todo envio que saiu (data de hoje); só baixa liberações com data até a da fatura. Devolução, venda e troca também limpam.
+
+## Faturamento do mês (18/nov) — etapa 1
+- Nova tela `/faturamento` (grupo Financeiro, só admin e financeiro com envio 2): uma linha por locação que existiu no mês, agrupada por cliente, inclusive devolvidas/vendidas no mês. A Relação das locações continua mostrando onde cada máquina está agora.
+- Cálculo em `web/src/lib/relacaoFaturamento.ts` (testado): mês comercial de 30 dias (último dia = 30; mês inteiro = cheio); devolução cobra até o dia informado; troca com valor novo e reajuste no meio do mês viram trechos; início vem das movimentações (atravessa trocas); sem movimentação = desde o dia 1.
+- Situação: locação no cliente = situacaoDaLocacao do mês; devolvida/vendida = "A faturar" até sair fatura do cliente com data ≥ devolução (envio ou lançada; busca até 2 meses depois).
+- Correção do valor pela Angelise: tabela `faturamento_ajustes` (migração 35), `GET/PUT /api/faturamento-ajustes` (envio 1/2); valor null e sem obs = volta à sugestão. Chave da linha: `cliente|primeira frota|início no mês|tipo`.
+- Etapa 2 (combinar com a Angelise): tirar as colunas de faturamento da Relação das locações.

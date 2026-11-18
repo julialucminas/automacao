@@ -438,8 +438,8 @@ function LiberadasParaFaturar({ eqs, clientes, veValores }: { eqs: Equipamento[]
           <span className="rounded-full bg-ok px-2.5 text-[13px] text-white">{lista.length}</span>
         </h2>
         <div className="flex flex-wrap gap-2">
-          <Link to="/frotas?f=podeFaturar" className="btn-secondary btn-sm">
-            Ver na relação
+          <Link to="/faturamento?f=podeFaturar" className="btn-secondary btn-sm">
+            Ver no Faturamento do mês
           </Link>
           <Link to="/envio" className="btn-primary btn-sm">
             Ir para o envio
@@ -510,6 +510,9 @@ function FaturamentoDoMes({
           </button>
           <Link to="/frotas?fat=pendente" className="text-[13px] font-semibold underline underline-offset-2">
             Ver na Relação das locações
+          </Link>
+          <Link to="/faturamento" className="btn-primary btn-sm">
+            Abrir Faturamento do mês
           </Link>
         </span>
       </div>

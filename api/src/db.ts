@@ -68,6 +68,8 @@ export type ClienteInput = Omit<Cliente, 'id' | 'ativo' | 'criadoEm' | 'atualiza
 };
 
 export type Faturamento = { clienteId: string; data: string; marcadoEm: string; marcadoPor: string; origem: 'manual' | 'envio' };
+/** Correção da Angelise no valor sugerido de uma linha da relação de faturamento (centavos; null = vale a sugestão). */
+export type AjusteFaturamento = { mes: string; chave: string; valor: number | null; obs: string; atualizadoEm: string; atualizadoPor: string };
 
 export type Envio = {
   id: string;
@@ -566,6 +568,16 @@ const MIGRACOES = [
    UPDATE perfis SET permissoes = json_set(permissoes, '$.configOperacao', 2, '$.clientes', 2) WHERE id = 'operacoes';`,
   // 34: dados cadastrais do cliente (razão social, IE, endereço, código no sistema de locação…), em JSON
   `ALTER TABLE clientes ADD COLUMN cadastro TEXT NOT NULL DEFAULT '{}';`,
+  // 35: correções do valor a cobrar na relação de faturamento (por mês e linha)
+  `CREATE TABLE faturamento_ajustes (
+     mes TEXT NOT NULL,
+     chave TEXT NOT NULL,
+     valor INTEGER,
+     obs TEXT NOT NULL DEFAULT '',
+     atualizado_em TEXT NOT NULL,
+     atualizado_por INTEGER REFERENCES usuarios(id),
+     PRIMARY KEY (mes, chave)
+   );`,
 ];
 
 export function abrirBanco(caminho: string) {
@@ -910,6 +922,30 @@ export function repositorio(db: Banco) {
       ).map((r) => ({ clienteId: r.cliente_id, data: r.data, marcadoEm: r.marcado_em, marcadoPor: r.nome, origem: r.origem === 'envio' ? 'envio' : 'manual' }));
     },
     baixarLiberacoesFaturar,
+
+    // ---------- relação de faturamento: correções ----------
+    listarAjustesFaturamento(mes: string): AjusteFaturamento[] {
+      return (
+        db
+          .prepare(
+            `SELECT a.mes, a.chave, a.valor, a.obs, a.atualizado_em, COALESCE(u.nome, '') AS nome
+             FROM faturamento_ajustes a LEFT JOIN usuarios u ON u.id = a.atualizado_por WHERE a.mes = ?`,
+          )
+          .all(mes) as { mes: string; chave: string; valor: number | null; obs: string; atualizado_em: string; nome: string }[]
+      ).map((r) => ({ mes: r.mes, chave: r.chave, valor: r.valor, obs: r.obs, atualizadoEm: r.atualizado_em, atualizadoPor: r.nome }));
+    },
+    /** valor null e sem observação = volta para a sugestão (apaga a correção) */
+    salvarAjusteFaturamento(mes: string, chave: string, valor: number | null, obs: string, usuarioId: number) {
+      if (valor === null && !obs) {
+        db.prepare('DELETE FROM faturamento_ajustes WHERE mes = ? AND chave = ?').run(mes, chave);
+        return null;
+      }
+      db.prepare(
+        `INSERT INTO faturamento_ajustes (mes, chave, valor, obs, atualizado_em, atualizado_por) VALUES (?, ?, ?, ?, ?, ?)
+         ON CONFLICT (mes, chave) DO UPDATE SET valor = excluded.valor, obs = excluded.obs, atualizado_em = excluded.atualizado_em, atualizado_por = excluded.atualizado_por`,
+      ).run(mes, chave, valor, obs, agora(), usuarioId);
+      return this.listarAjustesFaturamento(mes).find((a) => a.chave === chave) ?? null;
+    },
     marcarFaturado(clienteId: string, data: string, usuarioId: number, origem: 'manual' | 'envio' = 'manual') {
       buscarCliente(clienteId);
       baixarLiberacoesFaturar(clienteId, data);

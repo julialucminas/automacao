@@ -377,3 +377,18 @@ describe('pode faturar', () => {
     expect(((await a('GET', '/api/equipamentos')).json() as Array<Record<string, unknown>>).find((e) => e.frota === '61')!.podeFaturar ?? null).toBeNull();
   });
 });
+
+describe('relação de faturamento: correções', () => {
+  it('salva, devolve com quem corrigiu, apaga ao voltar para a sugestão; operação não corrige', async () => {
+    const a = como('angelise');
+    const r = await a('PUT', '/api/faturamento-ajustes', { mes: '2026-11', chave: 'c1|30|2026-11-01|devolvida', valor: 125000, obs: 'cobrar até dia 12 combinado' });
+    expect(r.statusCode).toBe(200);
+    expect(r.json().ajuste).toMatchObject({ valor: 125000, obs: 'cobrar até dia 12 combinado', atualizadoPor: 'Angelise' });
+    expect((await a('GET', '/api/faturamento-ajustes?mes=2026-11')).json()).toHaveLength(1);
+    expect((await a('GET', '/api/faturamento-ajustes?mes=2026-12')).json()).toHaveLength(0);
+    expect((await a('PUT', '/api/faturamento-ajustes', { mes: '2026-11', chave: 'c1|30|2026-11-01|devolvida', valor: null, obs: '' })).json().ajuste).toBeNull();
+    expect((await a('GET', '/api/faturamento-ajustes?mes=2026-11')).json()).toHaveLength(0);
+    expect((await a('PUT', '/api/faturamento-ajustes', { mes: '2026-13', chave: 'x', valor: 1 })).statusCode).toBe(400);
+    expect((await como('junior')('PUT', '/api/faturamento-ajustes', { mes: '2026-11', chave: 'x', valor: 1 })).statusCode).toBe(403);
+  });
+});
