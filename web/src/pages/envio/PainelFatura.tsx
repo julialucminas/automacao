@@ -7,6 +7,7 @@ import { dataHora, montarEmail, REMETENTE } from '../../lib/email';
 import { Chip } from '../../components/ui';
 import { IcClipe, IcExterno, IcMais } from '../../components/Icones';
 import { VincularCliente } from './VincularCliente';
+import { AdicionarEmail } from './AdicionarEmail';
 
 export function abrirPdf(blob: Blob) {
   const url = URL.createObjectURL(blob);
@@ -126,9 +127,10 @@ export function PainelFatura({
       )}
       {st === 'sem_email' && cliente && (
         <div className="rounded-[10px] bg-warn-soft px-3.5 py-3 text-[13px] text-warn-strong">
-          <b>{cliente.nome}</b> está cadastrado, mas sem e-mail. Cadastre pelo menos um e-mail na aba Clientes para esta fatura poder ser enviada.
+          <b>{cliente.nome}</b> está cadastrado, mas sem e-mail. Cadastre pelo menos um e-mail aqui embaixo para esta fatura poder ser enviada.
         </div>
       )}
+      {st === 'sem_email' && cliente && <AdicionarEmail key={cliente.id} cliente={cliente} item={item} abertoDeInicio />}
       {st === 'sem_cadastro' && <VincularCliente key={chaveItem(item)} item={item} cadastrarNovo={cadastrarNovo} />}
 
       {email && cliente && (
@@ -183,6 +185,7 @@ export function PainelFatura({
               ))}
             </div>
           </div>
+          <AdicionarEmail key={cliente.id} cliente={cliente} item={item} />
 
           {item.fatura && (item.boleto || st !== 'sem_boleto') && (
             <div className="flex flex-wrap items-center justify-between gap-2 rounded-[10px] border border-dashed border-line-strong px-3.5 py-2.5 text-[13px]">
